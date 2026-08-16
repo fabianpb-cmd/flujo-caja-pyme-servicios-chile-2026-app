@@ -3,13 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Concerns\GuardsSensitiveAttributes;
 use Illuminate\Database\Eloquent\Model;
 
 class MonthlyClosure extends Model
 {
     use BelongsToCompany;
+    use GuardsSensitiveAttributes;
 
-    protected $guarded = [];
+    protected $guarded = ['company_id', 'status', 'opening_balance', 'closing_balance', 'cash_in', 'cash_out', 'accounts_receivable', 'accounts_payable', 'closed_at'];
 
     protected function casts(): array
     {

@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Afp extends Model
 {
+    use HasFunctionalCode;
+
     protected $guarded = [];
 
     protected function casts(): array

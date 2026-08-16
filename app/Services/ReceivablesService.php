@@ -15,15 +15,21 @@ class ReceivablesService
 
     public function amountsWithVat(int $companyId, string|float|int $netAmount, CarbonInterface|string $date): array
     {
-        $vatRate = (float) $this->legalParameters->value($companyId, 'IVA', $date);
+        $vatRate = $this->vatRate($companyId, $date);
         $net = round((float) $netAmount, 2);
         $vat = round($net * $vatRate, 2);
 
         return [
             'net_amount' => $net,
+            'vat_rate' => $vatRate,
             'vat_amount' => $vat,
             'gross_amount' => round($net + $vat, 2),
         ];
+    }
+
+    public function vatRate(int $companyId, CarbonInterface|string $date): float
+    {
+        return (float) $this->legalParameters->value($companyId, 'IVA', $date);
     }
 
     public function collectedAmount(SalesDocument $document, CarbonInterface|string|null $asOf = null): float

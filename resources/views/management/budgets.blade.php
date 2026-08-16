@@ -1,10 +1,5 @@
 @extends('layouts.app')
 
-@php
-    $fmtMoney = fn ($value) => '$'.number_format((float) $value, 0, ',', '.');
-    $fmtPct = fn ($value) => is_null($value) ? '—' : number_format(((float) $value) * 100, 1, ',', '.').'%';
-@endphp
-
 @section('content')
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
@@ -29,9 +24,9 @@
             <div class="card kpi-card h-100">
                 <div class="card-body">
                     <div class="text-muted small">{{ $label }}</div>
-                    <div class="small">Presupuesto {{ $fmtMoney($budget) }}</div>
-                    <div class="small">Real {{ $fmtMoney($real) }}</div>
-                    <div class="fw-semibold {{ $diff >= 0 ? 'text-success' : 'text-danger' }}">Dif. {{ $fmtMoney($diff) }} · {{ $fmtPct($pct) }}</div>
+                    <div class="small">Presupuesto {{ \App\Support\UiFormatter::formatMoney($budget) }}</div>
+                    <div class="small">Real {{ \App\Support\UiFormatter::formatMoney($real) }}</div>
+                    <div class="fw-semibold {{ $diff >= 0 ? 'text-success' : 'text-danger' }}">Dif. {{ \App\Support\UiFormatter::formatMoney($diff) }} · {{ is_null($pct) ? '—' : \App\Support\UiFormatter::formatPercent($pct) }}</div>
                 </div>
             </div>
         </div>
@@ -55,14 +50,14 @@
         <tbody>
         @forelse ($budgetRows as $row)
             <tr>
-                <td>{{ \Illuminate\Support\Carbon::parse($row['period_date'])->format('m-Y') }}</td>
+                <td>{{ \App\Support\UiFormatter::formatDate($row['period_date']) }}</td>
                 <td>{{ data_get($row, 'project.code') ?: 'Empresa' }}</td>
-                <td class="text-end">{{ $fmtMoney($row['revenue_budget']) }}</td>
-                <td class="text-end">{{ $fmtMoney($row['revenue_real']) }}</td>
-                <td class="text-end {{ $row['revenue_difference'] >= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['revenue_difference']) }}</td>
-                <td class="text-end {{ ($row['personnel_real'] - $row['personnel_budget']) <= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['personnel_real'] - $row['personnel_budget']) }}</td>
-                <td class="text-end {{ ($row['other_real'] - $row['other_direct_budget']) <= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['other_real'] - $row['other_direct_budget']) }}</td>
-                <td class="text-end {{ ($row['legal_real'] - $row['legal_budget']) <= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['legal_real'] - $row['legal_budget']) }}</td>
+                <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['revenue_budget']) }}</td>
+                <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['revenue_real']) }}</td>
+                <td class="text-end amount-cell {{ $row['revenue_difference'] >= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['revenue_difference']) }}</td>
+                <td class="text-end amount-cell {{ ($row['personnel_real'] - $row['personnel_budget']) <= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['personnel_real'] - $row['personnel_budget']) }}</td>
+                <td class="text-end amount-cell {{ ($row['other_real'] - $row['other_direct_budget']) <= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['other_real'] - $row['other_direct_budget']) }}</td>
+                <td class="text-end amount-cell {{ ($row['legal_real'] - $row['legal_budget']) <= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['legal_real'] - $row['legal_budget']) }}</td>
             </tr>
         @empty
             <tr><td colspan="8" class="text-center text-muted py-5">Sin presupuestos cargados.</td></tr>

@@ -3,14 +3,16 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Concerns\GuardsSensitiveAttributes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Budget extends Model
 {
     use BelongsToCompany;
+    use GuardsSensitiveAttributes;
 
-    protected $guarded = [];
+    protected $guarded = ['company_id'];
 
     protected function casts(): array
     {

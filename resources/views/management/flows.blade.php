@@ -1,9 +1,5 @@
 @extends('layouts.app')
 
-@php
-    $fmtMoney = fn ($value) => '$'.number_format((float) $value, 0, ',', '.');
-@endphp
-
 @section('content')
 <div class="page-header">
     <div>
@@ -46,17 +42,17 @@
                 @foreach ($monthly as $row)
                     <tr>
                         <td>{{ \Illuminate\Support\Carbon::parse($row['period'])->format('M Y') }}</td>
-                        <td class="text-end">{{ $fmtMoney($row['opening_real']) }}</td>
-                        <td class="text-end text-success">{{ $fmtMoney($row['income_real']) }}</td>
-                        <td class="text-end text-primary">{{ $fmtMoney($row['income_projected']) }}</td>
-                        <td class="text-end text-danger">{{ $fmtMoney($row['other_real'] + $row['personnel_real'] + $row['legal_real']) }}</td>
-                        <td class="text-end text-secondary">{{ $fmtMoney($row['other_projected'] + $row['personnel_projected'] + $row['legal_projected']) }}</td>
-                        <td class="text-end {{ $row['net_real'] >= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['net_real']) }}</td>
-                        <td class="text-end {{ $row['net_projected'] >= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['net_projected']) }}</td>
-                        <td class="text-end fw-semibold">{{ $fmtMoney($row['closing_real']) }}</td>
-                        <td class="text-end fw-semibold">{{ $fmtMoney($row['closing_projected']) }}</td>
-                        <td class="text-end">{{ $fmtMoney($row['accounts_receivable']) }}</td>
-                        <td class="text-end">{{ $fmtMoney($row['accounts_payable']) }}</td>
+                        <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['opening_real']) }}</td>
+                        <td class="text-end text-success amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['income_real']) }}</td>
+                        <td class="text-end text-primary amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['income_projected']) }}</td>
+                        <td class="text-end text-danger amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['other_real'] + $row['personnel_real'] + $row['legal_real']) }}</td>
+                        <td class="text-end text-secondary amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['other_projected'] + $row['personnel_projected'] + $row['legal_projected']) }}</td>
+                        <td class="text-end amount-cell {{ $row['net_real'] >= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['net_real']) }}</td>
+                        <td class="text-end amount-cell {{ $row['net_projected'] >= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['net_projected']) }}</td>
+                        <td class="text-end fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['closing_real']) }}</td>
+                        <td class="text-end fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['closing_projected']) }}</td>
+                        <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['accounts_receivable']) }}</td>
+                        <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['accounts_payable']) }}</td>
                     </tr>
                 @endforeach
                 </tbody>
@@ -87,14 +83,14 @@
                 @foreach ($weekly as $row)
                     <tr>
                         <td>{{ \Illuminate\Support\Carbon::parse($row['start'])->format('d-m') }} → {{ \Illuminate\Support\Carbon::parse($row['end'])->format('d-m') }}</td>
-                        <td class="text-end text-success">{{ $fmtMoney($row['income_real']) }}</td>
-                        <td class="text-end text-primary">{{ $fmtMoney($row['income_projected']) }}</td>
-                        <td class="text-end text-danger">{{ $fmtMoney($row['other_real'] + $row['personnel_real'] + $row['legal_real']) }}</td>
-                        <td class="text-end text-secondary">{{ $fmtMoney($row['other_projected'] + $row['personnel_projected'] + $row['legal_projected']) }}</td>
-                        <td class="text-end {{ $row['net_real'] >= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['net_real']) }}</td>
-                        <td class="text-end {{ $row['net_projected'] >= 0 ? 'text-success' : 'text-danger' }}">{{ $fmtMoney($row['net_projected']) }}</td>
-                        <td class="text-end fw-semibold">{{ $fmtMoney($row['closing_real']) }}</td>
-                        <td class="text-end fw-semibold">{{ $fmtMoney($row['closing_projected']) }}</td>
+                        <td class="text-end text-success amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['income_real']) }}</td>
+                        <td class="text-end text-primary amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['income_projected']) }}</td>
+                        <td class="text-end text-danger amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['other_real'] + $row['personnel_real'] + $row['legal_real']) }}</td>
+                        <td class="text-end text-secondary amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['other_projected'] + $row['personnel_projected'] + $row['legal_projected']) }}</td>
+                        <td class="text-end amount-cell {{ $row['net_real'] >= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['net_real']) }}</td>
+                        <td class="text-end amount-cell {{ $row['net_projected'] >= 0 ? 'text-success' : 'text-danger' }}">{{ \App\Support\UiFormatter::formatMoney($row['net_projected']) }}</td>
+                        <td class="text-end fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['closing_real']) }}</td>
+                        <td class="text-end fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['closing_projected']) }}</td>
                     </tr>
                 @endforeach
                 </tbody>

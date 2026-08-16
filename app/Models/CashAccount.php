@@ -3,14 +3,18 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Concerns\GuardsSensitiveAttributes;
+use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CashAccount extends Model
 {
     use BelongsToCompany;
+    use GuardsSensitiveAttributes;
+    use HasFunctionalCode;
 
-    protected $guarded = [];
+    protected $guarded = ['company_id', 'code'];
 
     protected function casts(): array
     {

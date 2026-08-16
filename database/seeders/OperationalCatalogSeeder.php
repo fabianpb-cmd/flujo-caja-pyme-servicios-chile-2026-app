@@ -4,11 +4,15 @@ namespace Database\Seeders;
 
 use App\Models\Company;
 use App\Models\CompanySetting;
+use App\Models\Currency;
+use App\Models\ExchangeRate;
+use App\Models\IncomeTaxBracket;
 use App\Models\LegalParameter;
 use App\Models\PaymentTerm;
 use App\Models\Scenario;
 use App\Models\TaxRegime;
 use App\Models\UfValue;
+use App\Models\UtmValue;
 use App\Services\CatalogService;
 use Illuminate\Database\Seeder;
 
@@ -30,6 +34,7 @@ class OperationalCatalogSeeder extends Seeder
     {
         $defaults = [
             'currency' => ['CLP', 'string', true],
+            'base_currency_code' => ['CLP', 'string', true],
             'model_start_date' => ['2026-07-01', 'date', false],
             'analysis_month' => ['2026-07-01', 'date', false],
             'opening_balance' => ['0', 'decimal', false],
@@ -42,6 +47,9 @@ class OperationalCatalogSeeder extends Seeder
             'active_scenario' => ['BASE', 'string', false],
             'tax_regime_code' => ['PRO_PYME_GENERAL', 'string', false],
             'ppm_active' => ['1', 'boolean', false],
+            'ppm_rate' => ['0.001250', 'decimal', false],
+            'additional_accident_rate' => ['0.000000', 'decimal', false],
+            'gratification_method' => ['MANUAL', 'string', false],
             'vacation_provision_rate' => ['0.0833', 'decimal', false],
             'occupational_insurance_entity_code' => ['ACHS', 'string', false],
         ];
@@ -74,32 +82,40 @@ class OperationalCatalogSeeder extends Seeder
     private function seedLegalParameters(int $companyId): void
     {
         $rows = [
-            ['IVA', 'IVA', '2026-01-01', null, 0.190000, '%', '01_Config'],
-            ['RETENCION_HONORARIOS', 'Retención honorarios', '2026-01-01', '2026-12-31', 0.152500, '%', '01_Config + 02_Parametros_Legales'],
-            ['RETENCION_HONORARIOS', 'Retención honorarios', '2027-01-01', '2027-12-31', 0.160000, '%', '02_Parametros_Legales'],
-            ['AFP_TRABAJADOR', 'Cotización AFP trabajador', '2026-01-01', null, 0.100000, '%', '01_Config'],
-            ['SALUD_MINIMA', 'Salud trabajador mínima', '2026-01-01', null, 0.070000, '%', '01_Config'],
-            ['AFC_TRABAJADOR_INDEFINIDO', 'AFC trabajador contrato indefinido', '2026-01-01', null, 0.006000, '%', '01_Config'],
-            ['AFC_EMPLEADOR_INDEFINIDO', 'AFC empleador contrato indefinido', '2026-01-01', null, 0.024000, '%', '01_Config'],
-            ['AFC_EMPLEADOR_PLAZO_FIJO', 'AFC empleador plazo fijo/obra', '2026-01-01', null, 0.030000, '%', '01_Config'],
-            ['LEY_16744_BASICA', 'Ley 16.744 cotización básica', '2026-01-01', null, 0.009000, '%', '01_Config'],
-            ['LEY_16744_ADICIONAL', 'Ley 16.744 tasa adicional empresa', '2026-01-01', null, 0.000000, '%', '01_Config'],
-            ['SANNA_RATE', 'Seguro SANNA', '2026-01-01', null, 0.000300, '%', '01_Config'],
-            ['PPM_RATE', 'PPM activo', '2026-01-01', null, 0.001250, '%', '01_Config'],
-            ['IDPC_PRO_PYME_RATE', 'IDPC Pro Pyme referencial', '2026-01-01', null, 0.125000, '%', '01_Config'],
-            ['TOPE_IMPONIBLE_UF', 'Tope imponible previsional UF', '2026-01-01', '2026-12-31', 90.000000, 'UF', '01_Config'],
-            ['TOPE_AFC_UF', 'Tope imponible AFC UF', '2026-01-01', '2026-12-31', 135.200000, 'UF', '01_Config'],
-            ['PROVISION_VACACIONES', 'Provisión mensual vacaciones', '2026-01-01', null, 0.083300, '%', '01_Config'],
-            ['COTIZACION_EMPLEADOR', 'Cotización empleador', '2026-01-01', '2026-03-31', 0.010000, '%', '02_Parametros_Legales'],
-            ['SIS_RATE', 'SIS separado', '2026-01-01', '2026-03-31', 0.015400, '%', '02_Parametros_Legales'],
-            ['COTIZACION_EMPLEADOR', 'Cotización empleador', '2026-04-01', '2026-07-31', 0.010000, '%', '02_Parametros_Legales'],
-            ['SIS_RATE', 'SIS separado', '2026-04-01', '2026-07-31', 0.016200, '%', '02_Parametros_Legales'],
-            ['COTIZACION_EMPLEADOR', 'Cotización empleador', '2026-08-01', '2027-07-31', 0.035000, '%', '02_Parametros_Legales'],
-            ['SIS_RATE', 'SIS / cotización empleador', '2026-08-01', '2027-07-31', 0.000000, '%', '02_Parametros_Legales'],
-            ['IMPUESTO_SEGUNDA_CATEGORIA_RATE', 'Impuesto segunda categoría', '2026-01-01', null, 0.000000, '%', 'Database baseline'],
+            ['IVA', 'IVA', 'TRIBUTARIO', '2026-01-01', null, 0.190000, 'PERCENT', 'SII', 'https://www.sii.cl', '01_Config'],
+            ['RETENCION_HONORARIOS', 'Retención honorarios', 'TRIBUTARIO', '2026-01-01', '2026-12-31', 0.152500, 'PERCENT', 'SII', 'https://www.sii.cl', '01_Config + 02_Parametros_Legales'],
+            ['RETENCION_HONORARIOS', 'Retención honorarios', 'TRIBUTARIO', '2027-01-01', '2027-12-31', 0.160000, 'PERCENT', 'SII', 'https://www.sii.cl', '02_Parametros_Legales'],
+            ['RETENCION_HONORARIOS', 'Retención honorarios', 'TRIBUTARIO', '2028-01-01', '2028-12-31', 0.170000, 'PERCENT', 'SII', 'https://www.sii.cl', 'Baseline 2028'],
+            ['AFP_TRABAJADOR', 'Cotización AFP trabajador', 'PREVISIONAL', '2026-01-01', null, 0.100000, 'PERCENT', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', '01_Config'],
+            ['SALUD_MINIMA', 'Salud trabajador mínima', 'PREVISIONAL', '2026-01-01', null, 0.070000, 'PERCENT', 'Superintendencia de Salud', 'https://www.supersalud.gob.cl', '01_Config'],
+            ['AFC_TRABAJADOR_INDEFINIDO', 'AFC trabajador contrato indefinido', 'PREVISIONAL', '2026-01-01', null, 0.006000, 'PERCENT', 'AFC Chile', 'https://www.afc.cl', '01_Config'],
+            ['AFC_EMPLEADOR_INDEFINIDO', 'AFC empleador contrato indefinido', 'PREVISIONAL', '2026-01-01', null, 0.024000, 'PERCENT', 'AFC Chile', 'https://www.afc.cl', '01_Config'],
+            ['AFC_EMPLEADOR_PLAZO_FIJO', 'AFC empleador plazo fijo/obra', 'PREVISIONAL', '2026-01-01', null, 0.030000, 'PERCENT', 'AFC Chile', 'https://www.afc.cl', '01_Config'],
+            ['LEY_16744_BASICA', 'Ley 16.744 cotización básica', 'LABORAL', '2026-01-01', null, 0.009000, 'PERCENT', 'SUSESO', 'https://www.suseso.cl', '01_Config'],
+            ['LEY_16744_ADICIONAL', 'Ley 16.744 tasa adicional empresa', 'LABORAL', '2026-01-01', null, 0.000000, 'PERCENT', 'Empresa', null, 'Compatibilidad histórica'],
+            ['SANNA_RATE', 'Seguro SANNA', 'LABORAL', '2026-01-01', null, 0.000300, 'PERCENT', 'SUSESO', 'https://www.suseso.cl', '01_Config'],
+            ['IDPC_PRO_PYME_RATE', 'IDPC Pro Pyme referencial', 'TRIBUTARIO', '2026-01-01', null, 0.125000, 'PERCENT', 'SII', 'https://www.sii.cl', '01_Config'],
+            ['TOPE_IMPONIBLE_UF', 'Tope imponible previsional UF', 'PREVISIONAL', '2026-01-01', '2026-01-31', 90.000000, 'UF', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', 'Enero 2026'],
+            ['TOPE_IMPONIBLE_UF', 'Tope imponible previsional UF', 'PREVISIONAL', '2026-02-01', '2026-12-31', 90.000000, 'UF', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', 'Febrero 2026 en adelante'],
+            ['TOPE_AFC_UF', 'Tope imponible AFC UF', 'PREVISIONAL', '2026-01-01', '2026-01-31', 135.200000, 'UF', 'AFC Chile', 'https://www.afc.cl', 'Enero 2026'],
+            ['TOPE_AFC_UF', 'Tope imponible AFC UF', 'PREVISIONAL', '2026-02-01', '2026-12-31', 135.200000, 'UF', 'AFC Chile', 'https://www.afc.cl', 'Febrero 2026 en adelante'],
+            ['PROVISION_VACACIONES', 'Provisión mensual vacaciones referencial', 'LABORAL', '2026-01-01', null, 0.083300, 'PERCENT', 'Histórico Excel', null, 'Solo referencia histórica, no base legal actual del cálculo'],
+            ['COTIZACION_EMPLEADOR', 'Cotización empleador', 'PREVISIONAL', '2026-01-01', '2026-03-31', 0.010000, 'PERCENT', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', '02_Parametros_Legales'],
+            ['SIS_RATE', 'SIS separado', 'PREVISIONAL', '2026-01-01', '2026-03-31', 0.015400, 'PERCENT', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', '02_Parametros_Legales'],
+            ['COTIZACION_EMPLEADOR', 'Cotización empleador', 'PREVISIONAL', '2026-04-01', '2026-07-31', 0.010000, 'PERCENT', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', '02_Parametros_Legales'],
+            ['SIS_RATE', 'SIS separado', 'PREVISIONAL', '2026-04-01', '2026-07-31', 0.016200, 'PERCENT', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', '02_Parametros_Legales'],
+            ['COTIZACION_EMPLEADOR', 'Cotización empleador', 'PREVISIONAL', '2026-08-01', '2027-07-31', 0.035000, 'PERCENT', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', '02_Parametros_Legales'],
+            ['SIS_RATE', 'SIS / cotización empleador', 'PREVISIONAL', '2026-08-01', '2027-07-31', 0.000000, 'PERCENT', 'Superintendencia de Pensiones', 'https://www.spensiones.cl', '02_Parametros_Legales'],
+            ['MINIMUM_MONTHLY_INCOME_STANDARD', 'Ingreso mínimo mensual general', 'LABORAL', '2026-01-01', null, 0.000000, 'CLP', 'Pendiente carga oficial', null, 'Preparado para futura automatización'],
+            ['MINIMUM_MONTHLY_INCOME_SPECIAL', 'Ingreso mínimo mensual especial', 'LABORAL', '2026-01-01', null, 0.000000, 'CLP', 'Pendiente carga oficial', null, 'Preparado para futura automatización'],
+            ['MINIMUM_MONTHLY_INCOME_NON_REMUNERATIONAL', 'Ingreso mínimo no remuneracional', 'LABORAL', '2026-01-01', null, 0.000000, 'CLP', 'Pendiente carga oficial', null, 'Preparado para futura automatización'],
+            ['MAX_WEEKLY_HOURS', 'Jornada máxima semanal', 'LABORAL', '2026-01-01', null, 44.000000, 'HOURS', 'Dirección del Trabajo', 'https://www.dt.gob.cl', 'Preparado para validaciones futuras'],
+            ['VACATION_DAYS_PER_YEAR', 'Días feriado anual', 'LABORAL', '2026-01-01', null, 15.000000, 'DAYS', 'Dirección del Trabajo', 'https://www.dt.gob.cl', 'Base legal de devengo'],
+            ['GRATIFICATION_ART50_RATE', 'Gratificación art. 50', 'LABORAL', '2026-01-01', null, 0.250000, 'PERCENT', 'Dirección del Trabajo', 'https://www.dt.gob.cl', 'Solo referencia; no automatizar sin método empresa'],
+            ['GRATIFICATION_ART50_IMM_CAP', 'Tope IMM gratificación art. 50', 'LABORAL', '2026-01-01', null, 4.750000, 'NUMBER', 'Dirección del Trabajo', 'https://www.dt.gob.cl', 'Solo referencia'],
         ];
 
-        foreach ($rows as [$code, $name, $from, $to, $value, $unit, $source]) {
+        foreach ($rows as [$code, $name, $category, $from, $to, $value, $unit, $sourceName, $sourceUrl, $notes]) {
             $exists = LegalParameter::query()
                 ->where('company_id', $companyId)
                 ->where('parameter_code', $code)
@@ -111,12 +127,16 @@ class OperationalCatalogSeeder extends Seeder
                     'company_id' => $companyId,
                     'parameter_code' => $code,
                     'parameter_name' => $name,
+                    'category' => $category,
                     'valid_from' => $from,
                     'valid_to' => $to,
                     'value' => $value,
                     'unit' => $unit,
-                    'source' => $source,
-                    'notes' => 'Seeder baseline administrativo.',
+                    'source' => $sourceName,
+                    'source_name' => $sourceName,
+                    'source_url' => $sourceUrl,
+                    'notes' => $notes,
+                    'active' => true,
                 ]);
             }
         }
@@ -124,19 +144,76 @@ class OperationalCatalogSeeder extends Seeder
 
     private function seedUfFallback(int $companyId): void
     {
-        $exists = UfValue::query()
-            ->where('company_id', $companyId)
-            ->whereDate('value_date', '2026-07-31')
-            ->exists();
+        foreach ([
+            ['2026-07-31', 40844.7900, 'https://www.sii.cl/valores_y_fechas/uf/uf2026.htm', 'UF oficial SII para cálculos de remuneraciones julio 2026.'],
+            ['2026-08-01', 40844.7900, 'https://www.sii.cl/valores_y_fechas/uf/uf2026.htm', 'UF oficial SII para cálculos de remuneraciones agosto 2026.'],
+        ] as [$date, $value, $source, $notes]) {
+            $exists = UfValue::query()
+                ->where('company_id', $companyId)
+                ->whereDate('value_date', $date)
+                ->exists();
 
-        if (! $exists) {
-            UfValue::query()->create([
-                'company_id' => $companyId,
-                'value_date' => '2026-07-31',
-                'value' => 41000.0000,
-                'source' => '01_Config',
-                'notes' => 'Fallback inicial; completar histórico real según período.',
-            ]);
+            if (! $exists) {
+                UfValue::query()->create([
+                    'company_id' => $companyId,
+                    'value_date' => $date,
+                    'value' => $value,
+                    'source' => $source,
+                    'source_name' => 'Servicio de Impuestos Internos',
+                    'source_url' => $source,
+                    'notes' => $notes,
+                    'active' => true,
+                ]);
+            }
+        }
+
+        foreach ([
+            [2026, 7, 66634.00, 'https://www.sii.cl/valores_y_fechas/utm/utm2026.htm'],
+            [2026, 8, 66800.00, 'https://www.sii.cl/valores_y_fechas/utm/utm2026.htm'],
+        ] as [$year, $month, $value, $source]) {
+            UtmValue::query()->firstOrCreate(
+                ['company_id' => $companyId, 'period_year' => $year, 'period_month' => $month],
+                [
+                    'value' => $value,
+                    'source' => $source,
+                    'source_name' => 'Servicio de Impuestos Internos',
+                    'source_url' => $source,
+                    'notes' => 'Seeder baseline administrativo.',
+                    'active' => true,
+                ]
+            );
+        }
+
+        foreach ([
+            ['USD', '2026-07-31', 952.340000, 'https://si3.bcentral.cl/Indicadoressiete/secure/Serie.aspx?gcode=F073.TCO.PRE.Z.D'],
+            ['USD', '2026-08-01', 956.120000, 'https://si3.bcentral.cl/Indicadoressiete/secure/Serie.aspx?gcode=F073.TCO.PRE.Z.D'],
+            ['EUR', '2026-07-31', 1038.550000, 'https://si3.bcentral.cl/Indicadoressiete/secure/Serie.aspx?gcode=F072.CLP.EUR.N.O.D'],
+            ['EUR', '2026-08-01', 1041.220000, 'https://si3.bcentral.cl/Indicadoressiete/secure/Serie.aspx?gcode=F072.CLP.EUR.N.O.D'],
+        ] as [$currencyCode, $date, $value, $source]) {
+            $currencyId = Currency::query()->where('company_id', $companyId)->where('code', $currencyCode)->value('id');
+            if (! $currencyId) {
+                continue;
+            }
+
+            $exists = ExchangeRate::query()
+                ->where('company_id', $companyId)
+                ->where('currency_id', $currencyId)
+                ->whereDate('rate_date', $date)
+                ->exists();
+
+            if (! $exists) {
+                ExchangeRate::query()->create([
+                    'company_id' => $companyId,
+                    'currency_id' => $currencyId,
+                    'rate_date' => $date,
+                    'value_clp' => $value,
+                    'source' => $source,
+                    'source_name' => 'Banco Central de Chile',
+                    'source_url' => $source,
+                    'notes' => 'Seeder baseline administrativo.',
+                    'active' => true,
+                ]);
+            }
         }
     }
 

@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFunctionalCode;
+use App\Models\Concerns\GuardsSensitiveAttributes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Company extends Model
 {
-    protected $guarded = [];
+    use GuardsSensitiveAttributes;
+    use HasFunctionalCode;
+
+    protected $guarded = ['code', 'status'];
 
     public function settings(): HasMany
     {

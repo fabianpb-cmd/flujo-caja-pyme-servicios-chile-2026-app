@@ -17,6 +17,7 @@ class AfpRate extends Model
             'employee_commission_rate' => 'decimal:6',
             'employer_commission_rate' => 'decimal:6',
             'insurance_rate' => 'decimal:6',
+            'active' => 'boolean',
         ];
     }
 

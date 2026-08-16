@@ -9,6 +9,7 @@ use App\Models\MonthlyClosure;
 use App\Models\PayrollRecord;
 use App\Models\SalesDocument;
 use App\Models\User;
+use App\Support\MassAssignment;
 use DomainException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -42,7 +43,7 @@ class CashMovementService
             $this->rejectClosedPeriod($data);
             $this->validateAgainstDocument($data);
 
-            $movement = CashMovement::query()->create($data);
+            $movement = MassAssignment::create(CashMovement::class, $data);
 
             $this->refreshSourceDocument($movement);
             $this->audit->record('cash_movement.created', $movement, $user);

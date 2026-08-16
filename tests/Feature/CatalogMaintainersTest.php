@@ -33,8 +33,12 @@ class CatalogMaintainersTest extends TestCase
     {
         [$company, $admin] = $this->companyWithAdmin();
 
+        $form = $this->actingAs($admin)->get(route('operational.create', 'project-managers'));
+        $form->assertOk();
+        $form->assertDontSee('name="code"', false);
+        $form->assertSee('Se generará automáticamente', false);
+
         $create = $this->actingAs($admin)->post(route('operational.store', 'project-managers'), [
-            'code' => 'RESP-001',
             'name' => 'Responsable QA',
             'description' => 'Catálogo inicial',
             'active' => 1,
@@ -42,10 +46,11 @@ class CatalogMaintainersTest extends TestCase
         ]);
 
         $create->assertRedirect(route('operational.index', 'project-managers'));
-        $manager = ProjectManager::query()->where('company_id', $company->id)->where('code', 'RESP-001')->firstOrFail();
+        $manager = ProjectManager::query()->where('company_id', $company->id)->where('name', 'Responsable QA')->firstOrFail();
+        $this->assertMatchesRegularExpression('/^RES-\\d{6,}$/', $manager->code);
 
         $update = $this->actingAs($admin)->put(route('operational.update', ['project-managers', $manager->id]), [
-            'code' => 'RESP-001',
+            'code' => 'RESP-HACK',
             'name' => 'Responsable QA Editado',
             'description' => 'Actualizado',
             'active' => 1,
@@ -53,6 +58,7 @@ class CatalogMaintainersTest extends TestCase
         ]);
 
         $update->assertRedirect(route('operational.show', ['project-managers', $manager->id]));
+        $this->assertSame($manager->code, $manager->refresh()->code);
         $this->assertDatabaseHas('project_managers', [
             'id' => $manager->id,
             'name' => 'Responsable QA Editado',
@@ -68,8 +74,12 @@ class CatalogMaintainersTest extends TestCase
     {
         [$company, $admin] = $this->companyWithAdmin();
 
+        $form = $this->actingAs($admin)->get(route('operational.create', 'payment-terms'));
+        $form->assertOk();
+        $form->assertDontSee('name="code"', false);
+        $form->assertSee('Se generará automáticamente', false);
+
         $create = $this->actingAs($admin)->post(route('operational.store', 'payment-terms'), [
-            'code' => '90_DIAS',
             'name' => '90 días',
             'days' => 90,
             'payment_method_id' => $this->paymentMethodId($company->id, 'TRANSFERENCIA'),
@@ -78,10 +88,11 @@ class CatalogMaintainersTest extends TestCase
         ]);
 
         $create->assertRedirect(route('operational.index', 'payment-terms'));
-        $term = PaymentTerm::query()->where('company_id', $company->id)->where('code', '90_DIAS')->firstOrFail();
+        $term = PaymentTerm::query()->where('company_id', $company->id)->where('name', '90 días')->firstOrFail();
+        $this->assertMatchesRegularExpression('/^PZO-\\d{6,}$/', $term->code);
 
         $update = $this->actingAs($admin)->put(route('operational.update', ['payment-terms', $term->id]), [
-            'code' => '90_DIAS',
+            'code' => 'PZO-HACK',
             'name' => '90 días corridos',
             'days' => 90,
             'payment_method_id' => $this->paymentMethodId($company->id, 'TRANSFERENCIA'),
@@ -90,6 +101,7 @@ class CatalogMaintainersTest extends TestCase
         ]);
 
         $update->assertRedirect(route('operational.show', ['payment-terms', $term->id]));
+        $this->assertSame($term->code, $term->refresh()->code);
         $this->assertDatabaseHas('payment_terms', ['id' => $term->id, 'name' => '90 días corridos', 'days' => 90]);
     }
 
@@ -360,16 +372,6 @@ class CatalogMaintainersTest extends TestCase
     {
         [$company] = $this->companyWithAdmin();
 
-        LegalParameter::query()->create([
-            'company_id' => $company->id,
-            'parameter_code' => 'RETENCION_HONORARIOS',
-            'parameter_name' => 'Retención honorarios',
-            'valid_from' => '2026-01-01',
-            'valid_to' => null,
-            'value' => 0.152500,
-            'unit' => '%',
-        ]);
-
         $person = Person::query()->create([
             'company_id' => $company->id,
             'code' => 'PER-FK',
@@ -475,34 +477,76 @@ class CatalogMaintainersTest extends TestCase
     {
         [, $admin] = $this->companyWithAdmin();
 
-        $response = $this->actingAs($admin)->get(route('receivables.index'));
+        $cases = [
+            route('operational.index', 'clients') => route('operational.index', 'clients'),
+            route('operational.index', 'projects') => route('operational.index', 'projects'),
+            route('operational.index', 'people') => route('operational.index', 'people'),
+            route('operational.index', 'time-entries') => route('operational.index', 'time-entries'),
+            route('sales-documents.index') => route('sales-documents.index'),
+            route('receivables.index') => route('receivables.index'),
+            route('expense-documents.index') => route('expense-documents.index'),
+            route('payables.index') => route('payables.index'),
+            route('operational.index', 'cash-accounts') => route('operational.index', 'cash-accounts'),
+            route('operational.index', 'cash-movements') => route('operational.index', 'cash-movements'),
+            route('management.obligations') => route('management.obligations'),
+        ];
 
-        $response->assertOk();
-        $response->assertSee('Cuentas por cobrar', false);
-        $content = $response->getContent();
+        foreach ($cases as $pageUrl => $activeHref) {
+            $response = $this->actingAs($admin)->get($pageUrl);
+            $response->assertOk();
+            $content = $response->getContent();
 
-        preg_match_all(
-            '/class="[^"]*sidebar-link-active[^"]*"[^>]*href="'.preg_quote(route('receivables.index'), '/').'"/',
-            $content,
-            $receivableMatches
-        );
-        preg_match_all(
-            '/class="[^"]*sidebar-link-active[^"]*"[^>]*href="'.preg_quote(route('sales-documents.index'), '/').'"/',
-            $content,
-            $salesMatches
-        );
+            preg_match(
+                '/<aside class="app-sidebar d-none d-md-flex">(.*?)<\\/aside>/s',
+                $content,
+                $desktopSidebar
+            );
 
-        $this->assertSame(
-            2,
-            count($receivableMatches[0])
-        );
-        $this->assertSame(0, count($salesMatches[0]));
+            $this->assertNotEmpty($desktopSidebar, 'Desktop sidebar not found for '.$pageUrl);
+
+            preg_match_all(
+                '/class="[^"]*\\bis-active\\b[^"]*"[^>]*href="[^"]*"/',
+                $desktopSidebar[1],
+                $activeMatches
+            );
+
+            preg_match_all(
+                '/class="[^"]*\\bis-active\\b[^"]*"[^>]*href="'.preg_quote($activeHref, '/').'"/',
+                $desktopSidebar[1],
+                $currentMatches
+            );
+
+            $this->assertSame(1, count($activeMatches[0]), 'Expected exactly one active item for '.$pageUrl);
+            $this->assertSame(1, count($currentMatches[0]), 'Expected active href mismatch for '.$pageUrl);
+        }
     }
 
     private function companyWithAdmin(): array
     {
         $company = Company::query()->create(['code' => 'CMP-CAT', 'name' => 'Empresa Catálogo', 'status' => 'active']);
         app(CatalogService::class)->seedDefaultsForCompany($company->id);
+
+        foreach ([
+            ['IVA', 0.19],
+            ['RETENCION_HONORARIOS', 0.1525],
+            ['PROVISION_VACACIONES', 0.0833],
+            ['PPM_RATE', 0.01],
+            ['COTIZACION_EMPLEADOR', 0.01],
+            ['SIS_RATE', 0.0154],
+            ['AFC_RATE', 0.006],
+            ['IMPUESTO_SEGUNDA_CATEGORIA_RATE', 0.0],
+        ] as [$code, $value]) {
+            LegalParameter::query()->updateOrCreate([
+                'company_id' => $company->id,
+                'parameter_code' => $code,
+                'valid_from' => '2026-01-01',
+            ], [
+                'parameter_name' => $code,
+                'valid_to' => '2027-12-31',
+                'value' => $value,
+                'unit' => '%',
+            ]);
+        }
 
         $admin = User::query()->create([
             'company_id' => $company->id,

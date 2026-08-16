@@ -28,6 +28,11 @@
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li class="dropdown-header">{{ $user->email }}</li>
+                    <li>
+                        <a class="dropdown-item" href="{{ route('account.security') }}">
+                            <i class="bi bi-shield-lock me-2"></i>Mi cuenta · Seguridad
+                        </a>
+                    </li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <form method="POST" action="{{ route('logout') }}">

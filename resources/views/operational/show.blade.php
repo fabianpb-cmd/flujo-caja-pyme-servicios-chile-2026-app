@@ -2,24 +2,7 @@
 
 @section('content')
 @php
-    $displayValue = function ($item, $field, $definition) {
-        $type = $definition['type'] ?? 'text';
-        if ($type === 'relation') {
-            $relation = $definition['relation_name'] ?? str($field)->beforeLast('_id')->camel()->toString();
-            $related = method_exists($item, $relation)
-                ? data_get($item, $relation)
-                : (($item->{$field} ?? null) ? $definition['model']::query()->find($item->{$field}) : null);
-
-            return data_get($related, $definition['display']) ?? '—';
-        }
-        if ($type === 'checkbox') {
-            return $item->{$field} ? 'Sí' : 'No';
-        }
-        if ($item->{$field} instanceof \Carbon\CarbonInterface) {
-            return $item->{$field}->format('d-m-Y');
-        }
-        return $item->{$field} !== null && $item->{$field} !== '' ? $item->{$field} : '—';
-    };
+    $fields = $config['fields'];
     $isCatalog = (bool) ($config['catalog'] ?? false);
 @endphp
 <div class="page-header">
@@ -34,18 +17,102 @@
 </div>
 
 <div class="app-panel p-4">
-    <dl class="row mb-0">
-        @foreach ($config['fields'] as $field => $definition)
+@if ($resource === 'payroll-records' && ! empty($payrollHourlyCost))
+        <div class="app-panel p-3 mb-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <div class="section-title mb-0">Costo HH del período</div>
+                @if (! empty($payrollCalculationBreakdown))
+                    <x-calculation-breakdown
+                        id="payroll-show-breakdown"
+                        title="Cálculo de remuneración"
+                        subtitle="Snapshot histórico del período"
+                        :breakdown="$payrollCalculationBreakdown"
+                        trigger-class="btn btn-sm btn-outline-secondary"
+                    />
+                @endif
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Costo empresa</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($payrollHourlyCost['company_cost']) }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Horas período</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatHours($payrollHourlyCost['worked_hours']) }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Costo HH real</div>
+                    <div class="fw-semibold">{{ $payrollHourlyCost['real_hourly_cost'] !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyCost['real_hourly_cost']) : '—' }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Costo HH ref.</div>
+                    <div class="fw-semibold">{{ $payrollHourlyCost['reference_hourly_cost'] !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyCost['reference_hourly_cost']) : '—' }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Horas proyecto</div>
+                    <div>{{ \App\Support\UiFormatter::formatHours($payrollHourlyCost['project_hours']) }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Horas internas</div>
+                    <div>{{ \App\Support\UiFormatter::formatHours($payrollHourlyCost['internal_hours']) }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Capacidad ref.</div>
+                    <div>{{ \App\Support\UiFormatter::formatHours($payrollHourlyCost['reference_capacity_hours']) }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Costo no asignado</div>
+                    <div>{{ \App\Support\UiFormatter::formatMoney($payrollHourlyCost['unassigned_cost']) }}</div>
+                </div>
+            </div>
+            <div class="small text-muted mt-3">
+                Costo HH real = costo empresa del período / horas productivas registradas.
+                {{ $payrollHourlyCost['reference_capacity_label'] ?? '' }}
+                @if (! empty($payrollHourlyCost['real_hourly_cost_message']))
+                    {{ $payrollHourlyCost['real_hourly_cost_message'] }}
+                @endif
+            </div>
+        </div>
+    @endif
+
+    @if ($resource === 'sales-documents' && ! empty($salesCalculationBreakdown))
+        <div class="app-panel p-3 mb-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <div class="section-title mb-1">Venta calculada</div>
+                    <div class="small text-muted">Desglose del documento y sus parámetros.</div>
+                </div>
+                <x-calculation-breakdown
+                    id="sales-show-breakdown"
+                    title="Cálculo de venta"
+                    subtitle="Documento confirmado o borrador"
+                    :breakdown="$salesCalculationBreakdown"
+                    trigger-class="btn btn-sm btn-outline-secondary"
+                />
+            </div>
+        </div>
+    @endif
+
+    @php($currentSection = null)
+    @foreach ($fields as $field => $definition)
+        @if (($definition['section'] ?? null) !== $currentSection)
+            @php($currentSection = $definition['section'] ?? null)
+            @if ($currentSection)
+                <div class="section-title">{{ $currentSection }}</div>
+            @endif
+        @endif
+        <div class="row mb-3">
             <dt class="col-sm-4">{{ $definition['label'] }}</dt>
-            <dd class="col-sm-8">
+            @php($display = \App\Support\UiFormatter::display($item, $field, $definition))
+            <dd class="col-sm-8 mb-0 {{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-sm-end amount-cell' : '' }}">
                 @if (str_contains(mb_strtolower($definition['label']), 'estado') || in_array($field, ['status', 'payment_status', 'approval_status', 'project_status', 'billing_status'], true))
-                    <x-status-badge :status="$displayValue($item, $field, $definition)" />
+                    <x-status-badge :status="$display" />
                 @else
-                    {{ $displayValue($item, $field, $definition) }}
+                    {{ $display }}
                 @endif
             </dd>
-        @endforeach
-    </dl>
+        </div>
+    @endforeach
 
     @if ($isCatalog)
         <form method="POST" action="{{ route('operational.toggle-active', [$resource, $item->id]) }}" class="mt-4">

@@ -6,19 +6,11 @@
 ])
 
 @php
-    $matchesItem = function (array $item) use ($currentResource): bool {
-        $patterns = $item['route_patterns'] ?? [$item['route']];
-        if (request()->routeIs($patterns)) {
-            return true;
-        }
-
-        return (bool) ($item['operational_fallback'] ?? false)
-            && ($item['resource'] ?? null) === $currentResource
-            && request()->routeIs(['operational.index', 'operational.create', 'operational.show', 'operational.edit']);
-    };
+    $operationalRouteNames = ['operational.index', 'operational.create', 'operational.show', 'operational.edit'];
+    $currentUrl = rtrim(url()->current(), '/');
 @endphp
 
-<div class="app-sidebar-content">
+<div class="app-sidebar-content" data-sidebar-instance="{{ $instance }}">
     <div class="app-sidebar-brand">
         <span class="app-sidebar-brand-icon">
             <i class="bi bi-safe2"></i>
@@ -26,18 +18,29 @@
         <div class="app-sidebar-brand-text">Flujo de Caja Pyme</div>
     </div>
 
-    <div class="app-sidebar-nav" data-sidebar-scroll>
+    <div class="app-sidebar-nav" data-sidebar-scroll="{{ $instance }}">
         @foreach ($navigation as $sectionIndex => $section)
             <div class="sidebar-section">
                 <div class="sidebar-section-title">{{ $section['title'] }}</div>
 
                 @foreach ($section['items'] ?? [] as $item)
                     @php
-                        $isActive = $matchesItem($item);
+                        $itemHref = rtrim(route($item['route'], $item['params'] ?? []), '/');
+                        $routePatterns = $item['route_patterns'] ?? [$item['route']];
+                        $isActive = (bool) ($item['operational_fallback'] ?? false)
+                            ? (($item['resource'] ?? null) === $currentResource
+                                && (
+                                    in_array($currentRoute, $operationalRouteNames, true)
+                                    || request()->is('operacion/'.($item['resource'] ?? '').'*')
+                                ))
+                            : ($itemHref === $currentUrl
+                                || collect($routePatterns)->contains(
+                                    fn (string $pattern): bool => \Illuminate\Support\Str::is($pattern, (string) $currentRoute)
+                                ));
                     @endphp
                     <a
-                        class="app-sidebar-link {{ $isActive ? 'sidebar-link-active' : '' }}"
-                        href="{{ route($item['route'], $item['params'] ?? []) }}"
+                        class="app-sidebar-link sidebar-link {{ $isActive ? 'is-active' : '' }}"
+                        href="{{ $itemHref }}"
                         data-sidebar-label="{{ $item['label'] }}"
                         aria-current="{{ $isActive ? 'page' : 'false' }}"
                     >
@@ -50,10 +53,24 @@
 
                 @foreach ($section['groups'] ?? [] as $groupIndex => $group)
                     @php
-                        $hasActiveChild = collect($group['items'])->contains(fn (array $item): bool => $matchesItem($item));
+                        $hasActiveChild = collect($group['items'])->contains(function (array $item) use ($currentResource, $currentRoute, $currentUrl, $operationalRouteNames): bool {
+                            $itemHref = rtrim(route($item['route'], $item['params'] ?? []), '/');
+                            $routePatterns = $item['route_patterns'] ?? [$item['route']];
+
+                            return (bool) ($item['operational_fallback'] ?? false)
+                                ? (($item['resource'] ?? null) === $currentResource
+                                    && (
+                                        in_array($currentRoute, $operationalRouteNames, true)
+                                        || request()->is('operacion/'.($item['resource'] ?? '').'*')
+                                    ))
+                                : ($itemHref === $currentUrl
+                                    || collect($routePatterns)->contains(
+                                        fn (string $pattern): bool => \Illuminate\Support\Str::is($pattern, (string) $currentRoute)
+                                    ));
+                        });
                         $collapseId = 'sidebarGroup'.$instance.$sectionIndex.$groupIndex;
                     @endphp
-                    <div class="sidebar-subgroup">
+                    <div class="sidebar-subgroup sidebar-group {{ $hasActiveChild ? 'is-open' : '' }}">
                         <button
                             class="sidebar-subgroup-toggle {{ $hasActiveChild ? '' : 'collapsed' }}"
                             type="button"
@@ -69,11 +86,22 @@
                             <div class="sidebar-subgroup-items">
                                 @foreach ($group['items'] as $item)
                                     @php
-                                        $isActive = $matchesItem($item);
+                                        $itemHref = rtrim(route($item['route'], $item['params'] ?? []), '/');
+                                        $routePatterns = $item['route_patterns'] ?? [$item['route']];
+                                        $isActive = (bool) ($item['operational_fallback'] ?? false)
+                                            ? (($item['resource'] ?? null) === $currentResource
+                                                && (
+                                                    in_array($currentRoute, $operationalRouteNames, true)
+                                                    || request()->is('operacion/'.($item['resource'] ?? '').'*')
+                                                ))
+                                            : ($itemHref === $currentUrl
+                                                || collect($routePatterns)->contains(
+                                                    fn (string $pattern): bool => \Illuminate\Support\Str::is($pattern, (string) $currentRoute)
+                                                ));
                                     @endphp
                                     <a
-                                        class="app-sidebar-link sidebar-subgroup-link {{ $isActive ? 'sidebar-link-active' : '' }}"
-                                        href="{{ route($item['route'], $item['params'] ?? []) }}"
+                                        class="app-sidebar-link sidebar-link sidebar-subgroup-link {{ $isActive ? 'is-active' : '' }}"
+                                        href="{{ $itemHref }}"
                                         data-sidebar-label="{{ $item['label'] }}"
                                         aria-current="{{ $isActive ? 'page' : 'false' }}"
                                     >

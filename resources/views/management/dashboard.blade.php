@@ -5,8 +5,6 @@
     $kpis = $data['kpis'];
     $flows = collect($data['flows']);
     $profitability = collect($data['profitability']);
-    $fmtMoney = fn ($value) => '$'.number_format((float) $value, 0, ',', '.');
-    $fmtPct = fn ($value) => number_format(((float) $value) * 100, 1, ',', '.').'%';
     $fromPeriod = \Illuminate\Support\Carbon::parse($dashboardMeta['from']);
     $toPeriod = \Illuminate\Support\Carbon::parse($dashboardMeta['to']);
     $expenseTotal = collect($expenseBreakdown)->sum('amount');
@@ -16,12 +14,12 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Dashboard ejecutivo</h1>
-        <p class="page-subtitle">Resumen financiero actualizado al {{ $dashboardMeta['updated_at']->format('d-m-Y') }}</p>
+        <p class="page-subtitle">Resumen financiero actualizado al {{ \App\Support\UiFormatter::formatDate($dashboardMeta['updated_at']) }}</p>
     </div>
     <form method="GET" class="dashboard-filters">
         <div class="filter-chip">
             <label class="form-label small text-muted mb-1">Escenario</label>
-            <select class="form-select" name="scenario" onchange="this.form.submit()">
+            <select class="form-select" name="scenario" data-submit-on-change="true">
                 @foreach (['CONSERVADOR', 'BASE', 'OPTIMISTA'] as $option)
                     <option value="{{ $option }}" @selected(($scenario ?: $scenarioData->code) === $option)>{{ ucfirst(strtolower($option)) }}</option>
                 @endforeach
@@ -29,22 +27,58 @@
         </div>
         <div class="filter-chip">
             <label class="form-label small text-muted mb-1">Desde</label>
-            <input class="form-control" type="text" value="{{ $fromPeriod->format('d-m-Y') }}" readonly>
+            <input class="form-control" type="text" value="{{ \App\Support\UiFormatter::formatDate($fromPeriod) }}" readonly>
         </div>
         <div class="filter-chip">
             <label class="form-label small text-muted mb-1">Hasta</label>
-            <input class="form-control" type="text" value="{{ $toPeriod->format('d-m-Y') }}" readonly>
+            <input class="form-control" type="text" value="{{ \App\Support\UiFormatter::formatDate($toPeriod) }}" readonly>
         </div>
     </form>
 </div>
 
 <div class="kpi-grid">
-    <x-kpi-card title="Saldo Disponible" :value="$fmtMoney($kpis['cash_available'])" icon="bi bi-bank" tone="primary" subtitle="Actual" />
-    <x-kpi-card title="Ingresos del Mes" :value="$fmtMoney($kpis['income_month'])" icon="bi bi-arrow-up-circle" tone="success" subtitle="Caja real del período" />
-    <x-kpi-card title="Egresos del Mes" :value="$fmtMoney($kpis['expense_month'])" icon="bi bi-arrow-down-circle" tone="danger" subtitle="Caja real del período" />
-    <x-kpi-card title="Flujo Neto del Mes" :value="$fmtMoney($kpis['net_flow'])" icon="bi bi-graph-up-arrow" :tone="$kpis['net_flow'] >= 0 ? 'info' : 'danger'" subtitle="Real" />
-    <x-kpi-card title="Cuentas por Cobrar" :value="$fmtMoney($kpis['receivables'])" icon="bi bi-person-lines-fill" tone="warning" :subtitle="$dashboardMeta['receivable_documents'].' documentos'" />
-    <x-kpi-card title="Cuentas por Pagar" :value="$fmtMoney($kpis['payables'])" icon="bi bi-wallet2" tone="warning" :subtitle="$dashboardMeta['payable_documents'].' documentos'" />
+    <x-kpi-card title="Saldo Disponible" :value="\App\Support\UiFormatter::formatMoney($kpis['cash_available'])" icon="bi bi-bank" tone="primary" subtitle="Actual" />
+    <x-kpi-card title="Ingresos del Mes" :value="\App\Support\UiFormatter::formatMoney($kpis['income_month'])" icon="bi bi-arrow-up-circle" tone="success" subtitle="Caja real del período" />
+    <x-kpi-card title="Egresos del Mes" :value="\App\Support\UiFormatter::formatMoney($kpis['expense_month'])" icon="bi bi-arrow-down-circle" tone="danger" subtitle="Caja real del período" />
+    <x-kpi-card title="Flujo Neto del Mes" :value="\App\Support\UiFormatter::formatMoney($kpis['net_flow'])" icon="bi bi-graph-up-arrow" :tone="$kpis['net_flow'] >= 0 ? 'info' : 'danger'" subtitle="Real" />
+    <x-kpi-card title="Cuentas por Cobrar" :value="\App\Support\UiFormatter::formatMoney($kpis['receivables'])" icon="bi bi-person-lines-fill" tone="warning" :subtitle="$dashboardMeta['receivable_documents'].' documentos'" />
+    <x-kpi-card title="Cuentas por Pagar" :value="\App\Support\UiFormatter::formatMoney($kpis['payables'])" icon="bi bi-wallet2" tone="warning" :subtitle="$dashboardMeta['payable_documents'].' documentos'" />
+</div>
+
+<div class="app-panel p-3 mb-4">
+    @if (! empty($ufInfo))
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+                <div class="small text-muted">UF</div>
+                <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($ufInfo['value'], 'UF') }}</div>
+                <div class="small text-muted">
+                    @if (! $ufInfo['is_exact'])
+                        Última UF oficial disponible: {{ \App\Support\UiFormatter::formatDate($ufInfo['value_date']) }}
+                    @else
+                        UF oficial disponible para la fecha actual: {{ \App\Support\UiFormatter::formatDate($ufInfo['value_date']) }}
+                    @endif
+                </div>
+            </div>
+            <span
+                class="badge {{ $ufInfo['is_exact'] ? 'text-bg-info' : 'text-bg-warning' }}"
+                data-bs-toggle="tooltip"
+                data-bs-title="{{ $ufInfo['is_exact']
+                    ? 'La UF oficial de hoy está disponible.'
+                    : 'El valor oficial para la fecha actual aún no está disponible. Se muestra la última UF oficial registrada.' }}"
+            >
+                {{ $ufInfo['is_exact'] ? 'Exacta' : 'Estimado' }}
+            </span>
+        </div>
+        @if (! $ufInfo['is_exact'])
+            <div class="alert alert-warning mt-3 mb-0 py-2">
+                UF del {{ \App\Support\UiFormatter::formatDate(now()) }} aún no disponible. Los indicadores informativos que requieren UF utilizan temporalmente la última UF oficial disponible del {{ \App\Support\UiFormatter::formatDate($ufInfo['value_date']) }}.
+            </div>
+        @endif
+    @else
+        <div class="alert alert-secondary mb-0">
+            UF no disponible.
+        </div>
+    @endif
 </div>
 
 <div class="dashboard-grid mb-4">
@@ -85,8 +119,8 @@
                                         <span>{{ $row['label'] }}</span>
                                     </div>
                                     <div class="text-end">
-                                        <div class="fw-semibold">{{ $fmtMoney($row['amount']) }}</div>
-                                        <div class="small text-muted">{{ $expenseTotal > 0 ? number_format(($row['amount'] / $expenseTotal) * 100, 1, ',', '.') : '0,0' }}%</div>
+                                        <div class="fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($row['amount']) }}</div>
+                                        <div class="small text-muted">{{ $expenseTotal > 0 ? \App\Support\UiFormatter::formatPercent($row['amount'] / $expenseTotal, 2) : '0 %' }}</div>
                                     </div>
                                 </div>
                             @endforeach
@@ -157,9 +191,9 @@
                     @forelse ($upcomingObligations as $row)
                         <tr>
                             <td>{{ $row->obligation_type }}</td>
-                            <td>{{ $row->period_date?->format('m-Y') }}</td>
-                            <td>{{ $row->due_date?->format('d-m-Y') }}</td>
-                            <td class="text-end">{{ $fmtMoney($row->pending_amount) }}</td>
+                            <td>{{ \App\Support\UiFormatter::formatDate($row->period_date) }}</td>
+                            <td>{{ \App\Support\UiFormatter::formatDate($row->due_date) }}</td>
+                            <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row->pending_amount) }}</td>
                             <td class="text-end {{ floor(now()->diffInDays($row->due_date, false)) <= 7 ? 'text-danger fw-semibold' : 'text-muted' }}">
                                 {{ floor(now()->diffInDays($row->due_date, false)) }} días
                             </td>
@@ -174,7 +208,7 @@
             </div>
             <div class="d-flex justify-content-between pt-3">
                 <span class="fw-semibold">Total estimado</span>
-                <span class="fw-bold text-primary">{{ $fmtMoney($upcomingObligations->sum('pending_amount')) }}</span>
+                <span class="fw-bold text-primary amount-cell">{{ \App\Support\UiFormatter::formatMoney($upcomingObligations->sum('pending_amount')) }}</span>
             </div>
         </div>
     </div>
@@ -197,7 +231,7 @@
                     @forelse ($priorityProjects as $row)
                         <tr>
                             <td>{{ $row['project_code'] }} {{ $row['project_name'] }}</td>
-                            <td class="text-end">{{ $fmtPct($row['margin_pct']) }}</td>
+                            <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatPercent($row['margin_pct']) }}</td>
                             <td class="text-end"><x-status-badge :status="$row['status']" /></td>
                         </tr>
                     @empty
@@ -230,8 +264,8 @@
 @endsection
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script>
+<script nonce="{{ $cspNonce ?? '' }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script nonce="{{ $cspNonce ?? '' }}">
     const flowLabels = @json($flows->map(fn ($row) => \Illuminate\Support\Carbon::parse($row['period'])->format('M Y'))->all());
     const flowReal = @json($flows->pluck('closing_real')->all());
     const flowProjected = @json($flows->pluck('closing_projected')->all());

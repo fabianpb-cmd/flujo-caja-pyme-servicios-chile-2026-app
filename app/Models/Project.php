@@ -3,14 +3,18 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Concerns\GuardsSensitiveAttributes;
+use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Project extends Model
 {
     use BelongsToCompany;
+    use GuardsSensitiveAttributes;
+    use HasFunctionalCode;
 
-    protected $guarded = [];
+    protected $guarded = ['company_id', 'code', 'vat_rate', 'sale_total'];
 
     protected function casts(): array
     {
@@ -19,6 +23,7 @@ class Project extends Model
             'end_date' => 'date',
             'invoice_date' => 'date',
             'projected_collection_date' => 'date',
+            'sales_currency_id' => 'integer',
             'sale_net' => 'decimal:2',
             'vat_rate' => 'decimal:6',
             'sale_total' => 'decimal:2',
@@ -29,6 +34,11 @@ class Project extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function salesCurrency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'sales_currency_id');
     }
 
     public function manager(): BelongsTo
@@ -59,5 +69,10 @@ class Project extends Model
     public function paymentTerm(): BelongsTo
     {
         return $this->belongsTo(PaymentTerm::class);
+    }
+
+    public function getSalesCurrencyDisplayCurrencyAttribute(): mixed
+    {
+        return $this->salesCurrency ?: 'CLP';
     }
 }

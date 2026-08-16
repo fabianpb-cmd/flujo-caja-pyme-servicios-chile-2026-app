@@ -36,6 +36,8 @@ return [
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
 
+    'absolute_lifetime' => (int) env('SESSION_ABSOLUTE_LIFETIME', 480),
+
     /*
     |--------------------------------------------------------------------------
     | Session Encryption
@@ -169,7 +171,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    'secure' => env('SESSION_SECURE_COOKIE', in_array(env('APP_ENV', 'local'), ['staging', 'production'], true)),
 
     /*
     |--------------------------------------------------------------------------

@@ -8,12 +8,16 @@ use App\Models\ExpenseDocument;
 use App\Models\LegalObligation;
 use App\Models\PayrollRecord;
 use App\Models\SalesDocument;
+use App\Support\MassAssignment;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
 class LegalObligationService
 {
-    public function __construct(private readonly LegalParameterService $legalParameters)
+    public function __construct(
+        private readonly LegalParameterService $legalParameters,
+        private readonly CompanySettingsService $settings,
+    )
     {
     }
 
@@ -51,7 +55,11 @@ class LegalObligationService
     {
         $start = Carbon::parse($periodDate)->startOfMonth();
         $end = $start->copy()->endOfMonth();
-        $rate = (float) $this->legalParameters->value($companyId, 'PPM_RATE', $start);
+        if (($this->settings->get($companyId, 'ppm_active', '1') ?? '1') !== '1') {
+            return 0.0;
+        }
+
+        $rate = (float) ($this->settings->get($companyId, 'ppm_rate', '0') ?? '0');
         $base = (float) SalesDocument::query()
             ->forCompany($companyId)
             ->where('is_voided', false)
@@ -65,29 +73,23 @@ class LegalObligationService
     {
         $start = Carbon::parse($periodDate)->startOfMonth();
         $end = $start->copy()->endOfMonth();
-        $base = (float) PayrollRecord::query()
+
+        return round((float) PayrollRecord::query()
             ->forCompany($companyId)
             ->whereBetween('period_date', [$start, $end])
-            ->sum('taxable_amount');
-
-        $rate = (float) $this->legalParameters->value($companyId, 'COTIZACION_EMPLEADOR', $start)
-            + (float) $this->legalParameters->value($companyId, 'SIS_RATE', $start)
-            + (float) $this->legalParameters->value($companyId, 'AFC_RATE', $start);
-
-        return round($base * $rate, 2);
+            ->selectRaw('COALESCE(SUM(afc_employer + employer_pension + accident_insurance + sanna), 0) as total')
+            ->value('total'), 2);
     }
 
     public function secondCategoryTaxForPeriod(int $companyId, CarbonInterface|string $periodDate): float
     {
         $start = Carbon::parse($periodDate)->startOfMonth();
         $end = $start->copy()->endOfMonth();
-        $rate = (float) $this->legalParameters->value($companyId, 'IMPUESTO_SEGUNDA_CATEGORIA_RATE', $start);
-        $base = (float) PayrollRecord::query()
+
+        return round((float) PayrollRecord::query()
             ->forCompany($companyId)
             ->whereBetween('period_date', [$start, $end])
-            ->sum('taxable_amount');
-
-        return round($base * $rate, 2);
+            ->sum('iusc_amount'), 2);
     }
 
     public function syncMonthlyObligations(int $companyId, CarbonInterface|string $startPeriod, int $months = 12): void
@@ -102,8 +104,8 @@ class LegalObligationService
             $this->upsertObligation($companyId, $period, 'IVA', $this->vatForPeriod($companyId, $period), $dueDate, 'Ingresos IVA - egresos IVA recuperable');
             $this->upsertObligation($companyId, $period, 'RETENCIONES_HONORARIOS', $this->honorariosRetentionForPeriod($companyId, $period), $dueDate, 'Retencion por honorarios del periodo');
             $this->upsertObligation($companyId, $period, 'PPM', $this->ppmForPeriod($companyId, $period), $dueDate, 'PPM segun ventas netas del periodo');
-            $this->upsertObligation($companyId, $period, 'COTIZACIONES', $this->employerContributionsForPeriod($companyId, $period), $dueDate, 'Cotizaciones empleador + SIS + AFC');
-            $this->upsertObligation($companyId, $period, 'IMPUESTO_SEGUNDA_CATEGORIA', $this->secondCategoryTaxForPeriod($companyId, $period), $dueDate, 'Impuesto segunda categoria parametrizado');
+            $this->upsertObligation($companyId, $period, 'COTIZACIONES', $this->employerContributionsForPeriod($companyId, $period), $dueDate, 'Cotizaciones empleador desde payroll: AFC, reforma previsional/SIS, Ley 16.744 y SANNA');
+            $this->upsertObligation($companyId, $period, 'IMPUESTO_SEGUNDA_CATEGORIA', $this->secondCategoryTaxForPeriod($companyId, $period), $dueDate, 'IUSC calculado por tabla mensual SII en payroll');
         }
     }
 
@@ -160,21 +162,22 @@ class LegalObligationService
     {
         $code = sprintf('OBL-%s-%s', $period->format('Ym'), $type);
 
-        $obligation = LegalObligation::query()->updateOrCreate(
-            [
-                'company_id' => $companyId,
-                'code' => $code,
-            ],
-            [
-                'obligation_type' => $type,
-                'period_date' => $period->toDateString(),
-                'due_date' => $dueDate->toDateString(),
-                'estimated_amount' => round($amount, 2),
-                'pending_amount' => round($amount, 2),
-                'source_calculation' => $source,
-                'status' => 'Pendiente',
-            ]
-        );
+        $obligation = LegalObligation::query()
+            ->where('company_id', $companyId)
+            ->where('code', $code)
+            ->first() ?? new LegalObligation();
+
+        MassAssignment::fillAndSave($obligation, [
+            'company_id' => $companyId,
+            'code' => $code,
+            'obligation_type' => $type,
+            'period_date' => $period->toDateString(),
+            'due_date' => $dueDate->toDateString(),
+            'estimated_amount' => round($amount, 2),
+            'pending_amount' => round($amount, 2),
+            'source_calculation' => $source,
+            'status' => 'Pendiente',
+        ]);
 
         $this->refreshStatus($obligation);
     }

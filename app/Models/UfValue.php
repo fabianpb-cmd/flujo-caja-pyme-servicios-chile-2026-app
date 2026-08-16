@@ -16,6 +16,7 @@ class UfValue extends Model
         return [
             'value_date' => 'date',
             'value' => 'decimal:4',
+            'active' => 'boolean',
         ];
     }
 }

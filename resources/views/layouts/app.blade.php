@@ -7,7 +7,7 @@
     <title>{{ config('app.name', 'Flujo de Caja') }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link href="{{ asset('css/app-dashboard.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/app-dashboard.css') }}?v={{ filemtime(public_path('css/app-dashboard.css')) }}" rel="stylesheet">
     @stack('styles')
 </head>
 @php
@@ -43,25 +43,20 @@
                 $sidebarItem('Asignaciones', 'bi bi-diagram-3', 'operational.index', ['assignments'], ['resource' => 'assignments', 'operational_fallback' => true]),
                 $sidebarItem('Horas', 'bi bi-clock-history', 'operational.index', ['time-entries'], ['resource' => 'time-entries', 'operational_fallback' => true]),
                 $sidebarItem('Remuneraciones', 'bi bi-cash-stack', 'operational.index', ['payroll-records'], ['resource' => 'payroll-records', 'operational_fallback' => true]),
+                $sidebarItem('Novedades remuneración', 'bi bi-pencil-square', 'operational.index', ['payroll-adjustments'], ['resource' => 'payroll-adjustments', 'operational_fallback' => true]),
             ],
         ],
         [
             'title' => 'Ventas',
             'items' => [
-                $sidebarItem('Facturas / Ingresos', 'bi bi-receipt', 'sales-documents.index', [], [
-                    'resource' => 'sales-documents',
-                    'operational_fallback' => true,
-                ]),
+                $sidebarItem('Facturas / Ingresos', 'bi bi-receipt', 'sales-documents.index'),
                 $sidebarItem('Cuentas por cobrar', 'bi bi-currency-dollar', 'receivables.index'),
             ],
         ],
         [
             'title' => 'Gastos',
             'items' => [
-                $sidebarItem('Egresos / Gastos', 'bi bi-cart3', 'expense-documents.index', [], [
-                    'resource' => 'expense-documents',
-                    'operational_fallback' => true,
-                ]),
+                $sidebarItem('Egresos / Gastos', 'bi bi-cart3', 'expense-documents.index'),
                 $sidebarItem('Cuentas por pagar', 'bi bi-wallet2', 'payables.index'),
             ],
         ],
@@ -88,9 +83,21 @@
             'title' => 'Administración',
             'groups' => [
                 [
-                    'title' => 'Configuración',
+                    'title' => 'Acceso',
                     'items' => [
-                        $sidebarItem('Escenarios', 'bi bi-sliders2', 'operational.index', ['scenarios'], ['resource' => 'scenarios', 'operational_fallback' => true]),
+                        $sidebarItem('Usuarios', 'bi bi-person-gear', 'admin.users.index'),
+                    ],
+                ],
+                [
+                    'title' => 'Parámetros y valores',
+                    'items' => [
+                        $sidebarItem('UF', 'bi bi-123', 'operational.index', ['uf-values'], ['resource' => 'uf-values', 'operational_fallback' => true]),
+                        $sidebarItem('UTM', 'bi bi-calendar3', 'operational.index', ['utm-values'], ['resource' => 'utm-values', 'operational_fallback' => true]),
+                        $sidebarItem('Tipos de cambio', 'bi bi-currency-exchange', 'operational.index', ['exchange-rates'], ['resource' => 'exchange-rates', 'operational_fallback' => true]),
+                        $sidebarItem('Parámetros legales', 'bi bi-journal-text', 'operational.index', ['legal-parameters'], ['resource' => 'legal-parameters', 'operational_fallback' => true]),
+                        $sidebarItem('AFP y tasas', 'bi bi-shield-check', 'operational.index', ['afp-rates'], ['resource' => 'afp-rates', 'operational_fallback' => true]),
+                        $sidebarItem('Tabla IUSC', 'bi bi-table', 'operational.index', ['income-tax-brackets'], ['resource' => 'income-tax-brackets', 'operational_fallback' => true]),
+                        $sidebarItem('Parámetros empresa', 'bi bi-building-gear', 'operational.index', ['company-settings'], ['resource' => 'company-settings', 'operational_fallback' => true]),
                     ],
                 ],
                 [
@@ -187,16 +194,22 @@
             'management.budgets' => ['Gestión', 'Presupuesto'],
             'management.flows' => ['Gestión', 'Flujo de caja'],
             'management.profitability' => ['Gestión', 'Rentabilidad'],
+            'admin.users.index' => ['Administración', 'Usuarios'],
+            'admin.users.create' => ['Administración', 'Usuarios', 'Nuevo'],
+            'admin.users.edit' => ['Administración', 'Usuarios', 'Editar'],
+            'admin.users.password.edit' => ['Administración', 'Usuarios', 'Restablecer contraseña'],
         ];
         $breadcrumb = $managementMap[$currentRouteName] ?? null;
     }
     $errorMessages = [];
-    if (isset($errors)) {
-        if (is_object($errors) && method_exists($errors, 'all')) {
-            $errorMessages = $errors->all();
-        } elseif (is_array($errors)) {
-            $errorMessages = array_values($errors);
-        }
+    $sharedErrors = $__env->getShared()['errors'] ?? null;
+
+    if ($sharedErrors instanceof \Illuminate\Support\ViewErrorBag) {
+        $errorMessages = $sharedErrors->getBag('default')->all();
+    } elseif ($sharedErrors instanceof \Illuminate\Support\MessageBag) {
+        $errorMessages = $sharedErrors->all();
+    } elseif (isset($errors) && is_array($errors)) {
+        $errorMessages = array_values($errors);
     }
 @endphp
 <body>
@@ -242,6 +255,32 @@
                     @endif
 
                     @yield('content')
+
+                    @auth
+                        <div class="modal fade" id="sessionExpiryModal" tabindex="-1" aria-labelledby="sessionExpiryModalLabel" aria-hidden="true" data-session-warning-minutes="5">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="sessionExpiryModalLabel">Tu sesión está por expirar</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p class="mb-2">Por seguridad, la sesión se cerrará por inactividad.</p>
+                                        <p class="mb-0 text-muted small">Puedes mantenerla abierta o cerrar sesión ahora.</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-primary" data-session-keep-alive>
+                                            Mantener sesión
+                                        </button>
+                                        <form method="POST" action="{{ route('logout') }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-primary">Cerrar sesión</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endauth
                 </main>
             </div>
         </div>
@@ -251,11 +290,11 @@
         </main>
     @endauth
 </div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script>
+<script nonce="{{ $cspNonce ?? '' }}" src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script nonce="{{ $cspNonce ?? '' }}">
     (() => {
         const collapseKey = 'sidebarCollapsed';
-        const scrollKey = 'sidebarScrollTop';
+        const scrollKeyPrefix = 'sidebarScrollTop:';
         const body = document.body;
         const toggle = document.getElementById('sidebarCollapseToggle');
         const desktopBreakpoint = window.matchMedia('(min-width: 768px)');
@@ -289,6 +328,7 @@
         };
 
         const getVisibleSidebarNav = () => sidebarNavs.find((nav) => nav.offsetParent !== null) ?? null;
+        const getScrollKey = (sidebar) => `${scrollKeyPrefix}${sidebar?.dataset.sidebarScroll || 'default'}`;
 
         const restoreSidebarScroll = () => {
             const sidebar = getVisibleSidebarNav();
@@ -296,12 +336,12 @@
                 return;
             }
 
-            const saved = window.sessionStorage.getItem(scrollKey);
+            const saved = window.sessionStorage.getItem(getScrollKey(sidebar));
             if (saved !== null) {
                 sidebar.scrollTop = parseInt(saved, 10) || 0;
             }
 
-            const activeItem = sidebar.querySelector('.sidebar-link-active');
+            const activeItem = sidebar.querySelector('.sidebar-link.is-active');
             if (!activeItem) {
                 return;
             }
@@ -318,7 +358,7 @@
                 return;
             }
 
-            window.sessionStorage.setItem(scrollKey, String(sidebar.scrollTop));
+            window.sessionStorage.setItem(getScrollKey(sidebar), String(sidebar.scrollTop));
         };
 
         applyResponsiveSidebarState();
@@ -345,8 +385,220 @@
 
         restoreSidebarScroll();
         syncSidebarTitles();
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        tooltipTriggerList.forEach((trigger) => {
+            bootstrap.Tooltip.getOrCreateInstance(trigger);
+        });
+        document.querySelectorAll('[data-submit-on-change="true"]').forEach((element) => {
+            element.addEventListener('change', () => {
+                element.form?.requestSubmit();
+            });
+        });
+
+        const sessionModalElement = document.getElementById('sessionExpiryModal');
+        if (sessionModalElement) {
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(sessionModalElement, {
+                backdrop: 'static',
+                keyboard: false,
+            });
+            const warningMinutes = Number(sessionModalElement.dataset.sessionWarningMinutes || '5');
+            const sessionLifetimeMinutes = Number(@json((int) config('session.lifetime')));
+            const warningDelayMs = Math.max((sessionLifetimeMinutes - warningMinutes) * 60 * 1000, 0);
+            const keepAliveButton = sessionModalElement.querySelector('[data-session-keep-alive]');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+            const keepAliveUrl = @json(route('session.keep-alive'));
+            let warningTimer = null;
+            let warningVisible = false;
+
+            const scheduleWarning = () => {
+                if (warningTimer) {
+                    window.clearTimeout(warningTimer);
+                }
+
+                if (!Number.isFinite(warningDelayMs) || warningDelayMs <= 0) {
+                    return;
+                }
+
+                warningTimer = window.setTimeout(() => {
+                    warningVisible = true;
+                    modalInstance.show();
+                }, warningDelayMs);
+            };
+
+            const resetWarningTimer = () => {
+                if (warningVisible) {
+                    return;
+                }
+
+                scheduleWarning();
+            };
+
+            const activityEvents = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+            activityEvents.forEach((eventName) => {
+                window.addEventListener(eventName, resetWarningTimer, { passive: true });
+            });
+
+            sessionModalElement.addEventListener('hidden.bs.modal', () => {
+                warningVisible = false;
+                scheduleWarning();
+            });
+
+            if (keepAliveButton) {
+                keepAliveButton.addEventListener('click', async () => {
+                    keepAliveButton.disabled = true;
+                    try {
+                        const response = await fetch(keepAliveUrl, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken,
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json',
+                            },
+                            credentials: 'same-origin',
+                        });
+
+                        if (response.ok) {
+                            warningVisible = false;
+                            modalInstance.hide();
+                            scheduleWarning();
+                        } else {
+                            window.location.href = @json(route('login'));
+                        }
+                    } catch (error) {
+                        window.location.href = @json(route('login'));
+                    } finally {
+                        keepAliveButton.disabled = false;
+                    }
+                });
+            }
+
+            scheduleWarning();
+        }
         window.addEventListener('pageshow', restoreSidebarScroll);
         window.addEventListener('resize', applyResponsiveSidebarState);
+    })();
+</script>
+<script nonce="{{ $cspNonce ?? '' }}">
+    (() => {
+        const normalize = (value) => {
+            const cleaned = String(value || '').toUpperCase().replace(/[^0-9K]/g, '');
+            if (!cleaned) {
+                return '';
+            }
+
+            const body = cleaned.slice(0, -1).replace(/^0+/, '');
+            const dv = cleaned.slice(-1);
+
+            return body ? `${body}-${dv}` : '';
+        };
+
+        const checkDigit = (body) => {
+            let sum = 0;
+            let multiplier = 2;
+
+            for (let index = body.length - 1; index >= 0; index -= 1) {
+                sum += Number(body[index]) * multiplier;
+                multiplier = multiplier === 7 ? 2 : multiplier + 1;
+            }
+
+            const rest = 11 - (sum % 11);
+            return rest === 11 ? '0' : (rest === 10 ? 'K' : String(rest));
+        };
+
+        const isValid = (value) => {
+            const normalized = normalize(value);
+            if (!normalized) {
+                return false;
+            }
+
+            const [body, dv] = normalized.split('-');
+            return /^\d+$/.test(body) && checkDigit(body) === dv;
+        };
+
+        const format = (value) => {
+            const normalized = normalize(value);
+            if (!normalized) {
+                return '';
+            }
+
+            const [body, dv] = normalized.split('-');
+            return `${Number(body).toLocaleString('es-CL')}-${dv}`;
+        };
+
+        const message = 'El RUT ingresado no es válido. Revise el número y dígito verificador.';
+
+        const ensureFeedback = (input) => {
+            let feedback = input.parentElement?.querySelector('.invalid-feedback[data-rut-feedback="true"]');
+            if (!feedback) {
+                feedback = document.createElement('div');
+                feedback.className = 'invalid-feedback';
+                feedback.dataset.rutFeedback = 'true';
+                input.insertAdjacentElement('afterend', feedback);
+            }
+
+            return feedback;
+        };
+
+        const validateRutInput = (input, shouldFormat = false) => {
+            const raw = input.value.trim();
+            if (raw === '') {
+                input.classList.remove('is-invalid');
+                input.setCustomValidity('');
+                const feedback = input.parentElement?.querySelector('.invalid-feedback[data-rut-feedback="true"]');
+                if (feedback) {
+                    feedback.remove();
+                }
+                return true;
+            }
+
+            const normalized = normalize(raw);
+            const valid = isValid(normalized);
+            const feedback = ensureFeedback(input);
+
+            if (!valid) {
+                input.classList.add('is-invalid');
+                input.setCustomValidity(message);
+                feedback.textContent = message;
+                return false;
+            }
+
+            input.classList.remove('is-invalid');
+            input.setCustomValidity('');
+            if (shouldFormat) {
+                input.value = format(normalized);
+            }
+            const existing = input.parentElement?.querySelector('.invalid-feedback[data-rut-feedback="true"]');
+            if (existing) {
+                existing.remove();
+            }
+            return true;
+        };
+
+        const bindRutInputs = () => {
+            document.querySelectorAll('input[data-rut-field="true"]').forEach((input) => {
+                input.addEventListener('blur', () => validateRutInput(input, true));
+                input.addEventListener('input', () => {
+                    if (input.classList.contains('is-invalid')) {
+                        validateRutInput(input, false);
+                    }
+                });
+                validateRutInput(input, true);
+            });
+
+            document.querySelectorAll('form').forEach((form) => {
+                form.addEventListener('submit', (event) => {
+                    const rutInputs = Array.from(form.querySelectorAll('input[data-rut-field="true"]'));
+                    const invalid = rutInputs.filter((input) => !validateRutInput(input, true));
+                    if (invalid.length > 0) {
+                        event.preventDefault();
+                        invalid[0].focus();
+                    }
+                });
+            });
+        };
+
+        window.ChileanRutUI = { normalize, format, isValid };
+        bindRutInputs();
     })();
 </script>
 @stack('scripts')

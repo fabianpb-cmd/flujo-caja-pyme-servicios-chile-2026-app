@@ -11,6 +11,7 @@ class CompanySettingsService
         return CompanySetting::query()
             ->forCompany($companyId)
             ->where('setting_key', $key)
+            ->where('active', true)
             ->value('setting_value') ?? $default;
     }
 }

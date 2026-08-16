@@ -22,6 +22,7 @@ use App\Models\ObligationType;
 use App\Models\OccupationalInsuranceEntity;
 use App\Models\PaymentMethod;
 use App\Models\PaymentTerm;
+use App\Models\Person;
 use App\Models\Position;
 use App\Models\ProjectManager;
 use App\Models\ProjectType;
@@ -73,10 +74,10 @@ class CatalogService
         ], $timestamp);
 
         $this->upsertSimple($companyId, Currency::class, [
-            ['code' => 'CLP', 'name' => 'CLP', 'sort_order' => 10],
-            ['code' => 'UF', 'name' => 'UF', 'sort_order' => 20],
-            ['code' => 'USD', 'name' => 'USD', 'sort_order' => 30],
-            ['code' => 'EUR', 'name' => 'EUR', 'sort_order' => 40],
+            ['code' => 'CLP', 'name' => 'Peso chileno', 'symbol' => '$', 'minor_units' => 0, 'is_base_currency' => true, 'sort_order' => 10],
+            ['code' => 'UF', 'name' => 'Unidad de Fomento', 'symbol' => 'UF', 'minor_units' => 2, 'is_base_currency' => false, 'sort_order' => 20],
+            ['code' => 'USD', 'name' => 'Dólar estadounidense', 'symbol' => 'US$', 'minor_units' => 2, 'is_base_currency' => false, 'sort_order' => 30],
+            ['code' => 'EUR', 'name' => 'Euro', 'symbol' => '€', 'minor_units' => 2, 'is_base_currency' => false, 'sort_order' => 40],
         ], $timestamp);
 
         $this->upsertSimple($companyId, PaymentMethod::class, [
@@ -365,6 +366,7 @@ class CatalogService
             'active' => 'active',
             'inactive' => 'inactive',
         ]);
+        $report['mapped']['people_identity'] = $this->backfillPeopleIdentityFields($companyId);
 
         return $report;
     }
@@ -416,12 +418,33 @@ class CatalogService
 
     private function syncPeopleFields(array $data): array
     {
+        if (empty($data['name']) && (filled($data['first_names'] ?? null) || filled($data['paternal_surname'] ?? null) || filled($data['maternal_surname'] ?? null))) {
+            $data['name'] = trim(collect([
+                $data['first_names'] ?? null,
+                $data['paternal_surname'] ?? null,
+                $data['maternal_surname'] ?? null,
+            ])->filter()->implode(' '));
+        }
+
         $data = $this->syncCatalogName($data, 'position_id', Position::class, 'role');
         $data = $this->syncCatalogName($data, 'employment_mode_id', EmploymentMode::class, 'modality');
         $data = $this->syncContractType($data, 'employment_contract_type_id', 'employment', 'contract_type');
         $data = $this->syncCatalogName($data, 'health_system_id', HealthSystem::class, 'health_system');
 
         return $this->syncRecordStatus($data, 'worker_status_id', 'worker', 'status');
+    }
+
+    private function backfillPeopleIdentityFields(int $companyId): int
+    {
+        return Person::query()
+            ->forCompany($companyId)
+            ->whereNull('first_names')
+            ->whereNotNull('name')
+            ->update([
+                'first_names' => DB::raw('name'),
+                'paternal_surname' => DB::raw('NULL'),
+                'maternal_surname' => DB::raw('NULL'),
+            ]);
     }
 
     private function syncAssignmentFields(array $data): array

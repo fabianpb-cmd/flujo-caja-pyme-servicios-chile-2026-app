@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CrudResourceRequest;
 use App\Models\ExpenseDocument;
+use App\Models\Currency;
 use App\Models\Person;
 use App\Models\PayrollRecord;
 use App\Models\SalesDocument;
@@ -11,14 +12,20 @@ use App\Policies\CompanyOwnedPolicy;
 use App\Services\AuditService;
 use App\Services\CashMovementService;
 use App\Services\CatalogService;
+use App\Services\HourlyRateService;
+use App\Services\HourlyCostService;
 use App\Services\PayablesService;
 use App\Services\PayrollService;
+use App\Services\SalesPrefacturationService;
 use App\Services\ReceivablesService;
+use App\Support\MassAssignment;
+use DomainException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class OperationalCrudController extends Controller
@@ -29,6 +36,9 @@ class OperationalCrudController extends Controller
         private readonly ReceivablesService $receivables,
         private readonly PayablesService $payables,
         private readonly PayrollService $payroll,
+        private readonly SalesPrefacturationService $salesPrefacturation,
+        private readonly HourlyRateService $hourlyRates,
+        private readonly HourlyCostService $hourlyCosts,
         private readonly CatalogService $catalogs,
         private readonly AuditService $audit,
     ) {
@@ -46,6 +56,8 @@ class OperationalCrudController extends Controller
         }
         $this->authorizeResource($request, $config, 'viewAny');
         $search = trim((string) $request->input('q'));
+        $sort = $request->string('sort')->toString();
+        $direction = strtolower($request->string('direction')->toString()) === 'desc' ? 'desc' : 'asc';
 
         $query = $config['model']::query()
             ->with($this->relationNames($config));
@@ -53,6 +65,8 @@ class OperationalCrudController extends Controller
         if (method_exists(new $config['model'], 'scopeForCompany')) {
             $query->forCompany($request->user()->company_id);
         }
+
+        $sorts = $this->sortableFields($config);
 
         $items = $query
             ->when($search !== '', function ($query) use ($config, $search) {
@@ -68,11 +82,19 @@ class OperationalCrudController extends Controller
                     }
                 });
             })
-            ->latest('id')
+            ->when(isset($sorts[$sort]), function ($query) use ($sort, $direction, $sorts) {
+                foreach ((array) $sorts[$sort] as $column) {
+                    if ($column instanceof \Illuminate\Database\Query\Expression) {
+                        $query->orderByRaw((string) $column.' '.$direction);
+                    } else {
+                        $query->orderBy($column, $direction);
+                    }
+                }
+            }, fn ($query) => $query->latest('id'))
             ->paginate(15)
             ->withQueryString();
 
-        return view('operational.index', compact('resource', 'config', 'items', 'search'));
+        return view('operational.index', compact('resource', 'config', 'items', 'search', 'sort', 'direction', 'sorts'));
     }
 
     public function create(Request $request, string $resource): View
@@ -80,11 +102,19 @@ class OperationalCrudController extends Controller
         $config = $this->config($resource);
         $this->authorizeResource($request, $config, 'create');
 
+        $item = new $config['model'];
+        if ($resource === 'projects') {
+            $item->sales_currency_id = $this->baseCurrencyId($request->user()->company_id);
+        }
+
         return view('operational.form', [
             'resource' => $resource,
             'config' => $config,
-            'item' => new $config['model'],
-            'options' => $this->options($config, $request, new $config['model']),
+            'item' => $item,
+            'options' => $this->options($config, $request, $item),
+            'codeMeta' => $this->codeMeta($config['model']),
+            'payrollViewMeta' => $this->payrollViewMeta($resource),
+            'payrollHourlyCost' => null,
         ]);
     }
 
@@ -92,13 +122,17 @@ class OperationalCrudController extends Controller
     {
         $config = $this->config($resource);
         $this->authorizeResource($request, $config, 'create');
-        $data = $this->prepareData($request, $resource, $request->validated());
+        try {
+            $data = $this->prepareData($request, $resource, $request->validated());
+        } catch (DomainException $exception) {
+            return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+        }
 
         if ($resource === 'cash-movements') {
             $this->cashMovements->create($data, $request->user());
         } else {
             $model = DB::transaction(function () use ($config, $data) {
-                return $config['model']::query()->create($data);
+                return MassAssignment::create($config['model'], $data);
             });
 
             $this->refreshDerivedState($model);
@@ -114,7 +148,11 @@ class OperationalCrudController extends Controller
         $item = $config['model']::query()->with($this->relationNames($config))->findOrFail($record);
         $this->authorizeResource($request, $config, 'view', $item);
 
-        return view('operational.show', compact('resource', 'config', 'item'));
+        $payrollHourlyCost = $resource === 'payroll-records' ? $this->hourlyCosts->forPayroll($item) : null;
+        $payrollCalculationBreakdown = $resource === 'payroll-records' ? $this->payroll->explain($item) : null;
+        $salesCalculationBreakdown = $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null;
+
+        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown'));
     }
 
     public function edit(Request $request, string $resource, int $record): View
@@ -128,6 +166,11 @@ class OperationalCrudController extends Controller
             'config' => $config,
             'item' => $item,
             'options' => $this->options($config, $request, $item),
+            'codeMeta' => $this->codeMeta($config['model']),
+            'payrollViewMeta' => $this->payrollViewMeta($resource),
+            'payrollHourlyCost' => $resource === 'payroll-records' ? $this->hourlyCosts->forPayroll($item) : null,
+            'payrollCalculationBreakdown' => $resource === 'payroll-records' ? $this->payroll->explain($item) : null,
+            'salesCalculationBreakdown' => $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null,
         ]);
     }
 
@@ -137,9 +180,16 @@ class OperationalCrudController extends Controller
         $item = $config['model']::query()->findOrFail($record);
         $this->authorizeResource($request, $config, 'update', $item);
 
-        $data = $this->prepareData($request, $resource, $request->validated());
+        try {
+            $data = $this->prepareData($request, $resource, $request->validated());
+        } catch (DomainException $exception) {
+            return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+        }
+        if ($this->codeMeta($config['model'])['auto']) {
+            unset($data['code']);
+        }
         $before = $item->toArray();
-        DB::transaction(fn () => $item->update($data));
+        DB::transaction(fn () => MassAssignment::fillAndSave($item, $data));
         $this->refreshDerivedState($item->refresh());
         $this->audit->record('operational.updated', $item->refresh(), $request->user(), $before);
 
@@ -212,7 +262,31 @@ class OperationalCrudController extends Controller
         }
 
         if ($resource === 'time-entries') {
-            $data['calculated_amount'] = round((float) $data['hours_approved'] * (float) $data['hourly_value'], 2);
+            $person = Person::query()->forCompany($data['company_id'])->findOrFail($data['person_id']);
+            $project = \App\Models\Project::query()->forCompany($data['company_id'])->findOrFail($data['project_id']);
+            $resolution = $this->hourlyRates->resolveForTimeEntry($person, $project, $data['entry_date']);
+
+            $data['client_id'] = (int) $project->client_id;
+            $data['assignment_id'] = $resolution['assignment_id'] ?? $data['assignment_id'] ?? null;
+            $data['hourly_value'] = $resolution['amount'] ?? null;
+            $data['calculated_amount'] = round((float) $data['hours_approved'] * (float) ($data['hourly_value'] ?? 0), 2);
+        }
+
+        if ($resource === 'projects') {
+            $data['sales_currency_id'] = (int) ($data['sales_currency_id'] ?? $this->baseCurrencyId($data['company_id']));
+            $currency = Currency::query()->find($data['sales_currency_id']);
+            $projectDate = $data['start_date'] ?? now()->toDateString();
+            $vatRate = (float) $this->receivables->vatRate($data['company_id'], $projectDate);
+            $saleNet = (float) ($data['sale_net'] ?? 0);
+            if (! $this->moneyHasAllowedScale($saleNet, $currency ?: 'CLP')) {
+                throw ValidationException::withMessages([
+                    'sale_net' => $this->moneyScaleMessage($currency ?: 'CLP'),
+                ]);
+            }
+            $saleNet = \App\Support\UiFormatter::roundAmount($saleNet, $currency ?: 'CLP');
+            $data['vat_rate'] = $vatRate;
+            $data['sale_total'] = \App\Support\UiFormatter::roundAmount($saleNet + ($saleNet * $vatRate), $currency ?: 'CLP');
+            $data['sale_net'] = $saleNet;
         }
 
         if ($resource === 'payroll-records') {
@@ -222,6 +296,40 @@ class OperationalCrudController extends Controller
         }
 
         return $data;
+    }
+
+    private function baseCurrencyId(int $companyId): ?int
+    {
+        return Currency::query()
+            ->forCompany($companyId)
+            ->where(function ($query) {
+                $query->where('code', 'CLP')->orWhere('is_base_currency', true);
+            })
+            ->orderByDesc('is_base_currency')
+            ->value('id');
+    }
+
+    private function moneyHasAllowedScale(mixed $value, mixed $currency): bool
+    {
+        $string = trim((string) $value);
+        if ($string === '') {
+            return true;
+        }
+
+        $decimals = preg_match('/[.,](\d+)$/', $string, $matches) ? strlen($matches[1]) : 0;
+        $minorUnits = (int) data_get($currency, 'minor_units', match (strtoupper((string) $currency)) {
+            'CLP' => 0,
+            default => 2,
+        });
+
+        return $decimals <= $minorUnits;
+    }
+
+    private function moneyScaleMessage(mixed $currency): string
+    {
+        return strtoupper((string) data_get($currency, 'code', $currency)) === 'CLP'
+            ? 'Los montos en pesos chilenos deben ingresarse sin decimales.'
+            : 'El monto supera la cantidad de decimales permitida para la moneda seleccionada.';
     }
 
     private function refreshDerivedState(object $model): void
@@ -242,6 +350,8 @@ class OperationalCrudController extends Controller
     private function options(array $config, Request $request, ?Model $item = null): array
     {
         $options = [];
+        $resource = (string) $request->route('resource');
+        $effectiveDate = $this->effectiveDateForResource($resource, $request, $item);
 
         foreach ($config['fields'] as $field => $definition) {
             if (($definition['type'] ?? null) !== 'relation') {
@@ -249,7 +359,7 @@ class OperationalCrudController extends Controller
             }
 
             $query = $definition['model']::query();
-            if (method_exists(new $definition['model'], 'scopeForCompany')) {
+            if (($definition['global'] ?? false) !== true && method_exists(new $definition['model'], 'scopeForCompany')) {
                 $query->forCompany($request->user()->company_id);
             }
 
@@ -272,13 +382,88 @@ class OperationalCrudController extends Controller
                 });
             }
 
+            $this->applyVigencyFilter($query, $definition['model'], $resource, $field, $effectiveDate, $selectedId);
+
             $records = $query->orderBy($definition['display'])->get();
 
-            $options[$field] = $records->mapWithKeys(function ($record) use ($definition) {
-                $payload = ['id' => $record->id, 'label' => $record->{$definition['display']}];
+            $options[$field] = $records->mapWithKeys(function ($record) use ($definition, $config, $field, $resource, $effectiveDate, $selectedId) {
+                $label = $record->{$definition['display']};
+                if ((string) $record->getKey() === (string) $selectedId && ! $this->isVigentRecord($record, $resource, $field, $effectiveDate)) {
+                    $label .= ' (No vigente)';
+                }
+
+                $payload = ['id' => $record->id, 'label' => $label];
 
                 if (isset($definition['option_parent_key'])) {
                     $payload['parent_id'] = $record->{$definition['option_parent_key']};
+                }
+
+                if (($config['model'] ?? null) === PayrollRecord::class && $field === 'person_id' && $record instanceof Person) {
+                    $record->loadMissing(['employmentMode', 'employmentContractType', 'afp', 'healthSystemCatalog']);
+                    $payload += [
+                        'payroll_mode' => strtoupper((string) ($record->employmentMode?->code ?: $record->modality ?: '')),
+                        'payroll_mode_label' => $record->employmentMode?->name ?: $record->modality,
+                        'payroll_contract_label' => $record->employmentContractType?->name ?: $record->contract_type,
+                        'payroll_afp_label' => $record->afp?->name,
+                        'payroll_health_label' => $record->healthSystemCatalog?->name ?: $record->health_system,
+                        'payroll_monthly_value' => $record->monthly_value,
+                        'payroll_hourly_value' => $record->hourly_value,
+                        'payroll_hourly_currency' => $record->hourly_rate_display_currency,
+                        'payroll_start_date' => optional($record->start_date)->format('Y-m-d'),
+                        'payroll_end_date' => optional($record->end_date)->format('Y-m-d'),
+                    ];
+                }
+
+                if (($definition['model'] ?? null) === \App\Models\Currency::class) {
+                    $payload['currency_code'] = $record->code;
+                    $payload['currency_symbol'] = $record->symbol;
+                }
+
+                if ($resource === 'time-entries' && $field === 'project_id' && $record instanceof \App\Models\Project) {
+                    $record->loadMissing(['client', 'salesCurrency']);
+                    $assignmentRanges = \App\Models\ProjectAssignment::query()
+                        ->where('company_id', $record->company_id)
+                        ->where('project_id', $record->id)
+                        ->with(['assignmentStatus:id,code', 'hourlyRateCurrency:id,code,symbol,minor_units'])
+                        ->get()
+                        ->filter(fn ($assignment) => strtolower((string) $assignment->assignmentStatus?->code) === 'active')
+                        ->map(fn ($assignment) => [
+                            'person_id' => $assignment->person_id,
+                            'start_date' => optional($assignment->start_date)->format('Y-m-d'),
+                            'end_date' => optional($assignment->end_date)->format('Y-m-d'),
+                            'hourly_value' => $assignment->hourly_value,
+                            'hourly_rate_unit_type' => strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')),
+                            'currency_code' => $assignment->hourlyRateCurrency?->code,
+                            'currency_symbol' => $assignment->hourlyRateCurrency?->symbol,
+                            'source_label' => trim((string) ($assignment->code ?: $assignment->project?->name ?: 'Asignación')),
+                        ])->values()->all();
+
+                    $payload += [
+                        'client_id' => $record->client_id,
+                        'client_label' => $record->client?->legal_name,
+                        'project_rate_amount' => $record->contracted_hourly_rate,
+                        'project_rate_unit_type' => 'CURRENCY',
+                        'project_rate_currency_code' => $record->salesCurrency?->code ?: 'CLP',
+                        'project_rate_currency_symbol' => $record->salesCurrency?->symbol ?: '$',
+                        'project_rate_minor_units' => $record->salesCurrency?->minor_units ?? 0,
+                        'assignment_ranges' => $assignmentRanges,
+                    ];
+                }
+
+                if ($resource === 'payroll-records' && $field === 'project_id') {
+                    $ranges = \App\Models\ProjectAssignment::query()
+                        ->where('company_id', $record->company_id)
+                        ->where('project_id', $record->id)
+                        ->with('assignmentStatus:id,code')
+                        ->get()
+                        ->filter(fn ($assignment) => strtolower((string) $assignment->assignmentStatus?->code) === 'active')
+                        ->map(fn ($assignment) => [
+                            'person_id' => $assignment->person_id,
+                            'start_date' => optional($assignment->start_date)->format('Y-m-d'),
+                            'end_date' => optional($assignment->end_date)->format('Y-m-d'),
+                        ])->values()->all();
+
+                    $payload['assignment_ranges'] = $ranges;
                 }
 
                 return [$record->id => $payload];
@@ -288,15 +473,173 @@ class OperationalCrudController extends Controller
         return $options;
     }
 
+    private function codeMeta(string $modelClass): array
+    {
+        $model = new $modelClass;
+        $auto = method_exists($model, 'functionalCodeAuto') && $model->functionalCodeAuto();
+
+        return [
+            'auto' => $auto,
+            'label' => $auto ? 'Se generará automáticamente' : 'Código',
+        ];
+    }
+
+    private function payrollViewMeta(string $resource): array
+    {
+        if ($resource !== 'payroll-records') {
+            return [];
+        }
+
+        return [
+            'dependent_only_fields' => [
+                'pension_health_base',
+                'afc_base',
+                'afp_mandatory',
+                'afp_commission',
+                'health_employee',
+                'afc_employee',
+                'iusc_amount',
+                'afc_employer',
+                'employer_pension',
+                'accident_insurance',
+                'sanna',
+                'vacation_provision_amount',
+            ],
+            'honorarios_only_fields' => [
+                'employee_retention',
+            ],
+        ];
+    }
+
+    private function effectiveDateForResource(string $resource, Request $request, ?Model $item): ?string
+    {
+        return match ($resource) {
+            'sales-documents', 'expense-documents' => $request->input('issue_date') ?: optional($item?->issue_date)->toDateString(),
+            'time-entries' => $request->input('entry_date') ?: optional($item?->entry_date)->toDateString(),
+            'payroll-records' => $request->input('period_date') ?: optional($item?->period_date)->toDateString(),
+            'projects', 'assignments', 'people' => $request->input('start_date') ?: optional($item?->start_date)->toDateString(),
+            default => null,
+        };
+    }
+
+    private function applyVigencyFilter($query, string $modelClass, string $resource, string $field, ?string $effectiveDate, mixed $selectedId): void
+    {
+        if ($selectedId) {
+            $keyName = (new $modelClass)->getKeyName();
+            $query->where(function ($builder) use ($modelClass, $resource, $field, $effectiveDate, $selectedId, $keyName) {
+                $this->applyVigencyConstraints($builder, $modelClass, $resource, $field, $effectiveDate);
+                $builder->orWhere($keyName, $selectedId);
+            });
+
+            return;
+        }
+
+        $this->applyVigencyConstraints($query, $modelClass, $resource, $field, $effectiveDate);
+    }
+
+    private function applyVigencyConstraints($query, string $modelClass, string $resource, string $field, ?string $effectiveDate): void
+    {
+        if (Schema::hasColumn((new $modelClass)->getTable(), 'active')) {
+            $query->where('active', true);
+        }
+
+        if (Schema::hasColumn((new $modelClass)->getTable(), 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        match ($modelClass) {
+            \App\Models\Client::class => $query->whereHas('clientStatus', fn ($builder) => $builder->where('code', 'active')),
+            \App\Models\Project::class => $query->whereHas('projectStatus', fn ($builder) => $builder->where('code', 'active')),
+            \App\Models\Person::class => $query->whereHas('workerStatus', fn ($builder) => $builder->where('code', 'active')),
+            \App\Models\ProjectAssignment::class => $query->whereHas('assignmentStatus', fn ($builder) => $builder->where('code', 'active')),
+            default => null,
+        };
+
+        if ($effectiveDate && Schema::hasColumn((new $modelClass)->getTable(), 'start_date')) {
+            $query->where(function ($builder) use ($effectiveDate) {
+                $builder->whereNull('start_date')->orWhereDate('start_date', '<=', $effectiveDate);
+            });
+        }
+
+        if ($effectiveDate && Schema::hasColumn((new $modelClass)->getTable(), 'end_date')) {
+            $query->where(function ($builder) use ($effectiveDate) {
+                $builder->whereNull('end_date')->orWhereDate('end_date', '>=', $effectiveDate);
+            });
+        }
+    }
+
+    private function isVigentRecord(Model $record, string $resource, string $field, ?string $effectiveDate): bool
+    {
+        if (isset($record->active) && ! $record->active) {
+            return false;
+        }
+
+        if (isset($record->is_active) && ! $record->is_active) {
+            return false;
+        }
+
+        $statusOk = match ($record::class) {
+            \App\Models\Client::class => strtolower((string) $record->clientStatus?->code) === 'active',
+            \App\Models\Project::class => strtolower((string) $record->projectStatus?->code) === 'active',
+            \App\Models\Person::class => strtolower((string) $record->workerStatus?->code) === 'active',
+            \App\Models\ProjectAssignment::class => strtolower((string) $record->assignmentStatus?->code) === 'active',
+            default => true,
+        };
+
+        if (! $statusOk) {
+            return false;
+        }
+
+        if ($effectiveDate && isset($record->start_date) && $record->start_date && $record->start_date->gt($effectiveDate)) {
+            return false;
+        }
+
+        if ($effectiveDate && isset($record->end_date) && $record->end_date && $record->end_date->lt($effectiveDate)) {
+            return false;
+        }
+
+        return true;
+    }
+
     private function relationNames(array $config): array
     {
         $model = new $config['model'];
+        $fields = array_merge($config['fields'] ?? [], $config['index_fields'] ?? []);
 
-        return collect($config['fields'])
+        return collect($fields)
             ->filter(fn (array $definition): bool => ($definition['type'] ?? null) === 'relation')
             ->map(fn (array $definition, string $field): string => $definition['relation_name'] ?? str($field)->beforeLast('_id')->camel()->toString())
             ->filter(fn (string $relation): bool => method_exists($model, $relation))
             ->values()
+            ->all();
+    }
+
+    private function sortableFields(array $config): array
+    {
+        $model = new $config['model'];
+        $table = $model->getTable();
+        $fields = $config['index_fields'] ?? $config['fields'] ?? [];
+
+        return collect($fields)
+            ->mapWithKeys(function (array $definition, string $field) use ($table) {
+                if (($definition['sortable'] ?? true) === false) {
+                    return [];
+                }
+
+                if (isset($definition['sort_columns'])) {
+                    return [$field => (array) $definition['sort_columns']];
+                }
+
+                if (($definition['type'] ?? null) === 'relation') {
+                    return [];
+                }
+
+                if (Schema::hasColumn($table, $field)) {
+                    return [$field => [$field]];
+                }
+
+                return [];
+            })
             ->all();
     }
 

@@ -4,14 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Budget;
 use App\Models\CashMovement;
+use App\Models\Client;
 use App\Models\ExpenseDocument;
 use App\Models\LegalObligation;
 use App\Models\PayrollRecord;
+use App\Models\Project;
 use App\Models\SalesDocument;
 use App\Services\BudgetService;
 use App\Services\CashFlowService;
 use App\Services\DashboardService;
 use App\Services\LegalObligationService;
+use App\Services\LegalParameterService;
 use App\Services\ProfitabilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,6 +29,7 @@ class ManagementController extends Controller
         private readonly ProfitabilityService $profitability,
         private readonly BudgetService $budgets,
         private readonly LegalObligationService $obligations,
+        private readonly LegalParameterService $legalParameters,
     ) {
     }
 
@@ -41,6 +45,7 @@ class ManagementController extends Controller
         $profitability = collect($data['profitability']);
         $monthStart = now()->startOfMonth();
         $monthEnd = now()->endOfMonth();
+        $ufInfo = $this->legalParameters->latestOfficialUfOnOrBefore($companyId, now());
 
         $expenseDocuments = ExpenseDocument::query()
             ->forCompany($companyId)
@@ -119,6 +124,7 @@ class ManagementController extends Controller
             ],
             'expenseBreakdown' => $expenseBreakdown,
             'upcomingObligations' => $upcomingObligations,
+            'ufInfo' => $ufInfo,
             'priorityProjects' => $profitability
                 ->sortBy(fn (array $row) => match ($row['status']) {
                     'Pérdida' => 0,
@@ -192,14 +198,60 @@ class ManagementController extends Controller
         $companyId = (int) $request->user()->company_id;
         $query = trim((string) $request->input('q'));
         $status = trim((string) $request->input('status'));
+        $period = trim((string) $request->input('period'));
+        $clientId = $request->integer('client_id') ?: null;
+        $projectId = $request->integer('project_id') ?: null;
+        $projectStatus = trim((string) $request->input('project_status'));
 
-        $rows = collect($this->profitability->byProject($companyId))
+        $rows = collect($this->profitability->byProject($companyId, [
+            'period' => $period !== '' ? $period.'-01' : null,
+            'client_id' => $clientId,
+            'project_id' => $projectId,
+            'project_status' => $projectStatus,
+        ]))
             ->when($query !== '', function ($collection) use ($query) {
                 return $collection->filter(fn (array $row): bool => str_contains(mb_strtolower($row['project_name'].' '.$row['project_code'].' '.$row['client_name']), mb_strtolower($query)));
             })
             ->when($status !== '', fn ($collection) => $collection->where('status', $status))
             ->values();
+        $summary = $this->profitability->costSummary($companyId, [
+            'period' => $period !== '' ? $period.'-01' : null,
+        ]);
 
-        return view('management.profitability', compact('rows', 'query', 'status'));
+        $clients = Client::query()
+            ->forCompany($companyId)
+            ->orderBy('legal_name')
+            ->get(['id', 'legal_name']);
+
+        $projects = Project::query()
+            ->forCompany($companyId)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name']);
+
+        $projectStatuses = Project::query()
+            ->forCompany($companyId)
+            ->with('projectStatus')
+            ->get()
+            ->map(fn (Project $project) => [
+                'code' => $project->projectStatus?->code ?: $project->project_status,
+                'name' => $project->projectStatus?->name ?: $project->project_status,
+            ])
+            ->filter(fn (array $row) => filled($row['code']))
+            ->unique('code')
+            ->values();
+
+        return view('management.profitability', compact(
+            'rows',
+            'query',
+            'status',
+            'summary',
+            'period',
+            'clientId',
+            'projectId',
+            'projectStatus',
+            'clients',
+            'projects',
+            'projectStatuses',
+        ));
     }
 }

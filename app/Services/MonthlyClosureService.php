@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\MonthlyClosure;
 use App\Models\User;
+use App\Support\MassAssignment;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
@@ -22,20 +23,24 @@ class MonthlyClosureService
         $period = Carbon::parse($period)->startOfMonth();
         $flow = $this->cashFlow->monthly($companyId, $period, 1)[0];
 
-        $closure = MonthlyClosure::query()->updateOrCreate(
-            ['company_id' => $companyId, 'period_date' => $period->toDateString()],
-            [
-                'opening_balance' => $flow['opening_real'],
-                'closing_balance' => $flow['closing_real'],
-                'cash_in' => $flow['income_real'],
-                'cash_out' => round($flow['other_real'] + $flow['personnel_real'] + $flow['legal_real'], 2),
-                'accounts_receivable' => $this->receivables->accountsReceivable($companyId, $period->copy()->endOfMonth()),
-                'accounts_payable' => $this->payables->accountsPayable($companyId, $period->copy()->endOfMonth()),
-                'status' => 'closed',
-                'closed_by_user_id' => $user?->id,
-                'closed_at' => now(),
-            ]
-        );
+        $closure = MonthlyClosure::query()
+            ->where('company_id', $companyId)
+            ->whereDate('period_date', $period->toDateString())
+            ->first() ?? new MonthlyClosure();
+
+        MassAssignment::fillAndSave($closure, [
+            'company_id' => $companyId,
+            'period_date' => $period->toDateString(),
+            'opening_balance' => $flow['opening_real'],
+            'closing_balance' => $flow['closing_real'],
+            'cash_in' => $flow['income_real'],
+            'cash_out' => round($flow['other_real'] + $flow['personnel_real'] + $flow['legal_real'], 2),
+            'accounts_receivable' => $this->receivables->accountsReceivable($companyId, $period->copy()->endOfMonth()),
+            'accounts_payable' => $this->payables->accountsPayable($companyId, $period->copy()->endOfMonth()),
+            'status' => 'closed',
+            'closed_by_user_id' => $user?->id,
+            'closed_at' => now(),
+        ]);
 
         $this->audit->record('monthly_closure.closed', $closure, $user);
 

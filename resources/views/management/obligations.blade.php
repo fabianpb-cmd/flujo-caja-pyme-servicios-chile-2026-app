@@ -1,9 +1,5 @@
 @extends('layouts.app')
 
-@php
-    $fmtMoney = fn ($value) => '$'.number_format((float) $value, 0, ',', '.');
-@endphp
-
 @section('content')
 <div class="page-header">
     <div>
@@ -35,11 +31,11 @@
             <tr>
                 <td>{{ $row->code }}</td>
                 <td>{{ $row->obligation_type }}</td>
-                <td>{{ $row->period_date?->format('m-Y') }}</td>
-                <td>{{ $row->due_date?->format('d-m-Y') }}</td>
-                <td class="text-end">{{ $fmtMoney($row->estimated_amount) }}</td>
-                <td class="text-end">{{ $fmtMoney($row->paid_amount) }}</td>
-                <td class="text-end">{{ $fmtMoney($row->pending_amount) }}</td>
+                <td>{{ \App\Support\UiFormatter::formatDate($row->period_date) }}</td>
+                <td>{{ \App\Support\UiFormatter::formatDate($row->due_date) }}</td>
+                <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row->estimated_amount) }}</td>
+                <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row->paid_amount) }}</td>
+                <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($row->pending_amount) }}</td>
                 <td>
                     <x-status-badge :status="$row->status" />
                 </td>

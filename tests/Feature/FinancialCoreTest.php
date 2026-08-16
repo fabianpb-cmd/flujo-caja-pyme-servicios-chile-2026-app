@@ -3,15 +3,25 @@
 namespace Tests\Feature;
 
 use App\Models\CashAccount;
+use App\Models\Afp;
+use App\Models\AfpRate;
 use App\Models\AuditLog;
 use App\Models\Company;
+use App\Models\CompanySetting;
+use App\Models\Currency;
+use App\Models\ExchangeRate;
+use App\Models\ContractType;
 use App\Models\ExpenseDocument;
 use App\Models\LegalParameter;
 use App\Models\MonthlyClosure;
 use App\Models\Person;
 use App\Models\SalesDocument;
+use App\Models\UfValue;
 use App\Models\User;
 use App\Services\CashMovementService;
+use App\Services\CompanySettingsService;
+use App\Services\HourlyRateService;
+use App\Services\IncomeTaxService;
 use App\Services\LegalParameterService;
 use App\Services\PayablesService;
 use App\Services\PayrollService;
@@ -56,10 +66,30 @@ class FinancialCoreTest extends TestCase
             'is_active' => true,
         ]);
 
+        $this->seed(\Database\Seeders\IncomeTaxBracketSeeder::class);
+        $this->seedAfp('HABITAT', 0.0127);
+        $this->seedUf('2026-02-01', 40844.79);
+        $this->seedUf('2026-03-01', 40844.79);
+        $this->seedUf('2026-06-01', 40844.79);
+        $this->seedUf('2026-07-01', 40844.79);
+        $this->seedUf('2026-08-01', 40844.79);
         $this->seedLegalParameter('IVA', 'IVA', '2026-01-01', null, 0.19);
         $this->seedLegalParameter('RETENCION_HONORARIOS', 'Retencion honorarios', '2026-01-01', '2026-12-31', 0.1525);
         $this->seedLegalParameter('RETENCION_HONORARIOS', 'Retencion honorarios', '2027-01-01', '2027-12-31', 0.16);
-        $this->seedLegalParameter('PROVISION_VACACIONES', 'Provision vacaciones', '2026-01-01', null, 0.0833);
+        $this->seedLegalParameter('AFP_TRABAJADOR', 'AFP trabajador', '2026-01-01', null, 0.10);
+        $this->seedLegalParameter('SALUD_MINIMA', 'Salud minima', '2026-01-01', null, 0.07);
+        $this->seedLegalParameter('AFC_TRABAJADOR_INDEFINIDO', 'AFC trabajador indefinido', '2026-01-01', null, 0.006);
+        $this->seedLegalParameter('AFC_EMPLEADOR_INDEFINIDO', 'AFC empleador indefinido', '2026-01-01', null, 0.024);
+        $this->seedLegalParameter('AFC_EMPLEADOR_PLAZO_FIJO', 'AFC empleador plazo fijo', '2026-01-01', null, 0.03);
+        $this->seedLegalParameter('LEY_16744_BASICA', 'Ley 16744 basica', '2026-01-01', null, 0.009);
+        $this->seedLegalParameter('LEY_16744_ADICIONAL', 'Ley 16744 adicional', '2026-01-01', null, 0);
+        $this->seedLegalParameter('SANNA_RATE', 'SANNA', '2026-01-01', null, 0.0003);
+        $this->seedLegalParameter('TOPE_IMPONIBLE_UF', 'Tope previsional', '2026-01-01', '2026-12-31', 90.0);
+        $this->seedLegalParameter('TOPE_AFC_UF', 'Tope AFC', '2026-01-01', '2026-12-31', 135.2);
+        $this->seedLegalParameter('COTIZACION_EMPLEADOR', 'Cotizacion empleador', '2026-01-01', '2026-07-31', 0.01);
+        $this->seedLegalParameter('SIS_RATE', 'SIS', '2026-01-01', '2026-07-31', 0.0162);
+        $this->seedLegalParameter('COTIZACION_EMPLEADOR', 'Cotizacion empleador', '2026-08-01', '2027-07-31', 0.035);
+        $this->seedLegalParameter('SIS_RATE', 'SIS integrado', '2026-08-01', '2027-07-31', 0.0);
     }
 
     public function test_iva_is_calculated_from_legal_parameter(): void
@@ -69,6 +99,20 @@ class FinancialCoreTest extends TestCase
         $this->assertSame(1000.0, $amounts['net_amount']);
         $this->assertSame(190.0, $amounts['vat_amount']);
         $this->assertSame(1190.0, $amounts['gross_amount']);
+    }
+
+    public function test_missing_historical_parameter_raises_controlled_error(): void
+    {
+        $other = Company::query()->create([
+            'code' => 'CMP-NOPARAM',
+            'name' => 'Sin parámetros',
+            'status' => 'active',
+        ]);
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('Falta parametro legal IVA vigente para 2026-08-09.');
+
+        app(ReceivablesService::class)->amountsWithVat($other->id, 1000, '2026-08-09');
     }
 
     public function test_honorarios_use_historical_retention_rate(): void
@@ -115,7 +159,244 @@ class FinancialCoreTest extends TestCase
         $this->assertSame(15, $payroll['worked_days']);
         $this->assertSame(30, $payroll['month_days']);
         $this->assertSame(500000.0, $payroll['base_salary']);
-        $this->assertSame(41650.0, $payroll['vacation_provision']);
+        $this->assertSame(0.625, (float) $payroll['vacation_days_accrued_period']);
+        $this->assertSame(20833.33, $payroll['vacation_provision']);
+    }
+
+    public function test_honorarios_2026_retention_exact_case(): void
+    {
+        $payroll = app(PayrollService::class)->calculate($this->person([
+            'modality' => 'Honorarios mensual',
+            'monthly_value' => 100000,
+        ]), '2026-07-01');
+
+        $this->assertSame(15250.0, $payroll['employee_retention']);
+        $this->assertSame(84750.0, $payroll['net_pay']);
+    }
+
+    public function test_dependent_payroll_calculates_afp_health_afc_and_company_cost(): void
+    {
+        $person = $this->person([
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 1000000,
+            'afp_id' => Afp::query()->where('code', 'HABITAT')->value('id'),
+            'employment_contract_type_id' => $this->contractType('INDEFINIDO'),
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01');
+
+        $this->assertSame(1000000.0, $payroll['taxable_amount']);
+        $this->assertSame(100000.0, $payroll['afp_mandatory']);
+        $this->assertSame(12700.0, $payroll['afp_commission']);
+        $this->assertSame(70000.0, $payroll['health_legal']);
+        $this->assertSame(6000.0, $payroll['afc_employee']);
+        $this->assertSame(24000.0, $payroll['afc_employer']);
+        $this->assertSame(35000.0, $payroll['employer_pension']);
+        $this->assertSame(0.035, $payroll['employer_pension_rate']);
+        $this->assertSame(9000.0, $payroll['accident_insurance']);
+        $this->assertSame(300.0, $payroll['sanna']);
+        $this->assertSame(41666.67, $payroll['vacation_provision']);
+        $this->assertSame(1109966.67, $payroll['employer_cost']);
+    }
+
+    public function test_fixed_term_contract_uses_afc_employer_only(): void
+    {
+        $person = $this->person([
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 1000000,
+            'employment_contract_type_id' => $this->contractType('PLAZO_FIJO'),
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01');
+
+        $this->assertSame(0.0, $payroll['afc_employee']);
+        $this->assertSame(30000.0, $payroll['afc_employer']);
+    }
+
+    public function test_taxable_caps_use_uf_for_pension_health_and_afc(): void
+    {
+        $person = $this->person([
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 10000000,
+            'employment_contract_type_id' => $this->contractType('INDEFINIDO'),
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01');
+
+        $this->assertSame(3676031.1, $payroll['pension_health_base']);
+        $this->assertSame(5522215.61, $payroll['afc_base']);
+        $this->assertSame(367603.11, $payroll['afp_mandatory']);
+        $this->assertSame(33133.29, $payroll['afc_employee']);
+    }
+
+    public function test_income_tax_service_uses_monthly_sii_bracket(): void
+    {
+        $result = app(IncomeTaxService::class)->calculate(2000000, '2026-08-01');
+
+        $this->assertSame(41309.54, $result['iusc_amount']);
+    }
+
+    public function test_income_tax_exempt_bracket_returns_zero(): void
+    {
+        $result = app(IncomeTaxService::class)->calculate(900000, '2026-08-01');
+
+        $this->assertSame(0.0, $result['iusc_amount']);
+    }
+
+    public function test_payroll_calculation_returns_historical_snapshot_fields(): void
+    {
+        $person = $this->person([
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 1000000,
+            'afp_id' => Afp::query()->where('code', 'HABITAT')->value('id'),
+            'employment_contract_type_id' => $this->contractType('INDEFINIDO'),
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01');
+
+        $this->assertSame(40844.79, $payroll['legal_snapshot']['uf_value']);
+        $this->assertSame(90.0, $payroll['legal_snapshot']['pension_cap_uf']);
+        $this->assertSame(135.2, $payroll['legal_snapshot']['afc_cap_uf']);
+        $this->assertSame(0.1, $payroll['legal_snapshot']['afp_mandatory_rate']);
+        $this->assertSame(0.0127, $payroll['legal_snapshot']['afp_commission_rate']);
+        $this->assertSame(0.07, $payroll['legal_snapshot']['health_legal_rate']);
+        $this->assertSame(0.006, $payroll['legal_snapshot']['afc_employee_rate']);
+        $this->assertSame(0.024, $payroll['legal_snapshot']['afc_employer_rate']);
+        $this->assertSame(0.035, $payroll['legal_snapshot']['employer_pension_rate']);
+        $this->assertSame(0.009, $payroll['legal_snapshot']['accident_insurance_rate']);
+        $this->assertSame(0.0003, $payroll['legal_snapshot']['sanna_rate']);
+        $this->assertSame(0.0, $payroll['legal_snapshot']['sis_rate']);
+    }
+
+    public function test_company_specific_additional_accident_rate_only_affects_that_company(): void
+    {
+        CompanySetting::query()->create([
+            'company_id' => $this->company->id,
+            'setting_key' => 'additional_accident_rate',
+            'setting_value' => '0.004000',
+            'setting_type' => 'decimal',
+            'is_public' => false,
+            'active' => true,
+        ]);
+
+        $person = $this->person([
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 1000000,
+            'employment_contract_type_id' => $this->contractType('INDEFINIDO'),
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01');
+        $this->assertSame(13000.0, $payroll['accident_insurance']);
+
+        $otherCompany = Company::query()->create(['code' => 'CMP-OTHER', 'name' => 'Otra', 'status' => 'active']);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'AFP_TRABAJADOR', '2026-01-01', null, 0.10);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'SALUD_MINIMA', '2026-01-01', null, 0.07);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'AFC_TRABAJADOR_INDEFINIDO', '2026-01-01', null, 0.006);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'AFC_EMPLEADOR_INDEFINIDO', '2026-01-01', null, 0.024);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'LEY_16744_BASICA', '2026-01-01', null, 0.009);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'LEY_16744_ADICIONAL', '2026-01-01', null, 0.0);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'SANNA_RATE', '2026-01-01', null, 0.0003);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'TOPE_IMPONIBLE_UF', '2026-01-01', null, 90);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'TOPE_AFC_UF', '2026-01-01', null, 135.2);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'COTIZACION_EMPLEADOR', '2026-08-01', '2027-07-31', 0.035);
+        $this->seedLegalParameterForCompany($otherCompany->id, 'SIS_RATE', '2026-08-01', '2027-07-31', 0.0);
+        UfValue::query()->create(['company_id' => $otherCompany->id, 'value_date' => '2026-08-01', 'value' => 40844.79]);
+
+        $otherPerson = Person::query()->create([
+            'company_id' => $otherCompany->id,
+            'code' => 'PER-OTHER',
+            'name' => 'Otra Persona',
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 1000000,
+            'employment_contract_type_id' => $this->contractType('INDEFINIDO'),
+        ]);
+
+        $otherPayroll = app(PayrollService::class)->calculate($otherPerson, '2026-08-01');
+        $this->assertSame(9000.0, $otherPayroll['accident_insurance']);
+    }
+
+    public function test_ppm_uses_company_setting_and_does_not_affect_other_company(): void
+    {
+        CompanySetting::query()->create([
+            'company_id' => $this->company->id,
+            'setting_key' => 'ppm_active',
+            'setting_value' => '1',
+            'setting_type' => 'boolean',
+            'is_public' => false,
+            'active' => true,
+        ]);
+        CompanySetting::query()->create([
+            'company_id' => $this->company->id,
+            'setting_key' => 'ppm_rate',
+            'setting_value' => '0.002000',
+            'setting_type' => 'decimal',
+            'is_public' => false,
+            'active' => true,
+        ]);
+
+        SalesDocument::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'ING-PPM',
+            'client_id' => $this->clientId(),
+            'document_type' => 'Factura',
+            'issue_date' => '2026-08-09',
+            'net_amount' => 1000000,
+            'vat_amount' => 190000,
+            'gross_amount' => 1190000,
+            'status' => 'Pendiente',
+        ]);
+
+        $this->assertSame(2000.0, app(\App\Services\LegalObligationService::class)->ppmForPeriod($this->company->id, '2026-08-01'));
+    }
+
+    public function test_hourly_rate_service_uses_historical_exchange_rate_for_foreign_currency(): void
+    {
+        $currency = Currency::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'USD',
+            'name' => 'Dólar',
+            'symbol' => 'US$',
+            'minor_units' => 2,
+            'active' => true,
+            'is_base_currency' => false,
+        ]);
+
+        ExchangeRate::query()->create([
+            'company_id' => $this->company->id,
+            'currency_id' => $currency->id,
+            'rate_date' => '2026-08-01',
+            'value_clp' => 924.78,
+            'active' => true,
+        ]);
+
+        $person = $this->person([
+            'modality' => 'Pago por hora',
+            'hourly_value' => 45.5,
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $currency->id,
+        ]);
+
+        $resolved = app(HourlyRateService::class)->resolvePersonRate($person, '2026-08-01');
+
+        $this->assertSame(42077.0, $resolved);
+    }
+
+    public function test_monthly_fixed_salary_always_uses_thirty_day_divisor(): void
+    {
+        $february = app(PayrollService::class)->calculate($this->person([
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 900000,
+            'start_date' => '2026-02-16',
+        ]), '2026-02-01');
+
+        $march = app(PayrollService::class)->calculate($this->person([
+            'modality' => 'Dependiente mensual',
+            'monthly_value' => 900000,
+            'start_date' => '2026-03-16',
+        ]), '2026-03-01');
+
+        $this->assertSame(390000.0, $february['base_salary']);
+        $this->assertSame(480000.0, $march['base_salary']);
     }
 
     public function test_partial_payments_update_invoice_balance_and_status(): void
@@ -230,6 +511,55 @@ class FinancialCoreTest extends TestCase
             'value' => $value,
             'unit' => '%',
         ]);
+    }
+
+    private function seedLegalParameterForCompany(int $companyId, string $code, string $from, ?string $to, float $value): void
+    {
+        LegalParameter::query()->create([
+            'company_id' => $companyId,
+            'parameter_code' => $code,
+            'parameter_name' => $code,
+            'valid_from' => $from,
+            'valid_to' => $to,
+            'value' => $value,
+            'unit' => '%',
+            'active' => true,
+        ]);
+    }
+
+    private function seedUf(string $date, float $value): void
+    {
+        UfValue::query()->create([
+            'company_id' => $this->company->id,
+            'value_date' => $date,
+            'value' => $value,
+            'source' => 'test',
+        ]);
+    }
+
+    private function seedAfp(string $code, float $commission): void
+    {
+        $afp = Afp::query()->create([
+            'code' => $code,
+            'name' => ucfirst(strtolower($code)),
+            'is_active' => true,
+        ]);
+
+        AfpRate::query()->create([
+            'afp_id' => $afp->id,
+            'valid_from' => '2026-01-01',
+            'employee_commission_rate' => $commission,
+            'employer_commission_rate' => 0,
+            'insurance_rate' => 0,
+        ]);
+    }
+
+    private function contractType(string $code): int
+    {
+        return ContractType::query()->firstOrCreate(
+            ['company_id' => $this->company->id, 'domain' => 'general', 'code' => $code],
+            ['name' => str_replace('_', ' ', $code), 'active' => true]
+        )->id;
     }
 
     private function person(array $overrides = []): Person

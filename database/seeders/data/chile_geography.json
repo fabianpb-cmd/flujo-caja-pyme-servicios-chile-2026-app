@@ -1,0 +1,2162 @@
+{
+  "regions": [
+    {
+      "code": "CL-AP",
+      "name": "Arica y Parinacota",
+      "sort_order": 1
+    },
+    {
+      "code": "CL-TA",
+      "name": "Tarapacá",
+      "sort_order": 2
+    },
+    {
+      "code": "CL-AN",
+      "name": "Antofagasta",
+      "sort_order": 3
+    },
+    {
+      "code": "CL-AT",
+      "name": "Atacama",
+      "sort_order": 4
+    },
+    {
+      "code": "CL-CO",
+      "name": "Coquimbo",
+      "sort_order": 5
+    },
+    {
+      "code": "CL-VS",
+      "name": "Valparaíso",
+      "sort_order": 6
+    },
+    {
+      "code": "CL-LI",
+      "name": "O’Higgins",
+      "sort_order": 7
+    },
+    {
+      "code": "CL-ML",
+      "name": "Maule",
+      "sort_order": 8
+    },
+    {
+      "code": "CL-NB",
+      "name": "Ñuble",
+      "sort_order": 9
+    },
+    {
+      "code": "CL-BI",
+      "name": "Biobío",
+      "sort_order": 10
+    },
+    {
+      "code": "CL-AR",
+      "name": "Araucanía",
+      "sort_order": 11
+    },
+    {
+      "code": "CL-LR",
+      "name": "Los Ríos",
+      "sort_order": 12
+    },
+    {
+      "code": "CL-LL",
+      "name": "Los Lagos",
+      "sort_order": 13
+    },
+    {
+      "code": "CL-AI",
+      "name": "Aysén",
+      "sort_order": 14
+    },
+    {
+      "code": "CL-MA",
+      "name": "Magallanes",
+      "sort_order": 15
+    },
+    {
+      "code": "CL-RM",
+      "name": "Metropolitana",
+      "sort_order": 16
+    }
+  ],
+  "communes": [
+    {
+      "code": "15101",
+      "name": "Arica",
+      "region_code": "CL-AP",
+      "sort_order": 1
+    },
+    {
+      "code": "15102",
+      "name": "Camarones",
+      "region_code": "CL-AP",
+      "sort_order": 2
+    },
+    {
+      "code": "15201",
+      "name": "Putre",
+      "region_code": "CL-AP",
+      "sort_order": 3
+    },
+    {
+      "code": "15202",
+      "name": "General Lagos",
+      "region_code": "CL-AP",
+      "sort_order": 4
+    },
+    {
+      "code": "01101",
+      "name": "Iquique",
+      "region_code": "CL-TA",
+      "sort_order": 1
+    },
+    {
+      "code": "01102",
+      "name": "Alto Hospicio",
+      "region_code": "CL-TA",
+      "sort_order": 2
+    },
+    {
+      "code": "01201",
+      "name": "Pozo Almonte",
+      "region_code": "CL-TA",
+      "sort_order": 3
+    },
+    {
+      "code": "01402",
+      "name": "Camiña",
+      "region_code": "CL-TA",
+      "sort_order": 4
+    },
+    {
+      "code": "01403",
+      "name": "Colchane",
+      "region_code": "CL-TA",
+      "sort_order": 5
+    },
+    {
+      "code": "01404",
+      "name": "Huara",
+      "region_code": "CL-TA",
+      "sort_order": 6
+    },
+    {
+      "code": "01405",
+      "name": "Pica",
+      "region_code": "CL-TA",
+      "sort_order": 7
+    },
+    {
+      "code": "02101",
+      "name": "Antofagasta",
+      "region_code": "CL-AN",
+      "sort_order": 1
+    },
+    {
+      "code": "02102",
+      "name": "Mejillones",
+      "region_code": "CL-AN",
+      "sort_order": 2
+    },
+    {
+      "code": "02103",
+      "name": "Sierra Gorda",
+      "region_code": "CL-AN",
+      "sort_order": 3
+    },
+    {
+      "code": "02104",
+      "name": "Taltal",
+      "region_code": "CL-AN",
+      "sort_order": 4
+    },
+    {
+      "code": "02201",
+      "name": "Calama",
+      "region_code": "CL-AN",
+      "sort_order": 5
+    },
+    {
+      "code": "02202",
+      "name": "Ollagüe",
+      "region_code": "CL-AN",
+      "sort_order": 6
+    },
+    {
+      "code": "02203",
+      "name": "San Pedro de Atacama",
+      "region_code": "CL-AN",
+      "sort_order": 7
+    },
+    {
+      "code": "02301",
+      "name": "Tocopilla",
+      "region_code": "CL-AN",
+      "sort_order": 8
+    },
+    {
+      "code": "02302",
+      "name": "María Elena",
+      "region_code": "CL-AN",
+      "sort_order": 9
+    },
+    {
+      "code": "03101",
+      "name": "Copiapó",
+      "region_code": "CL-AT",
+      "sort_order": 1
+    },
+    {
+      "code": "03102",
+      "name": "Caldera",
+      "region_code": "CL-AT",
+      "sort_order": 2
+    },
+    {
+      "code": "03103",
+      "name": "Tierra Amarilla",
+      "region_code": "CL-AT",
+      "sort_order": 3
+    },
+    {
+      "code": "03201",
+      "name": "Chañaral",
+      "region_code": "CL-AT",
+      "sort_order": 4
+    },
+    {
+      "code": "03202",
+      "name": "Diego de Almagro",
+      "region_code": "CL-AT",
+      "sort_order": 5
+    },
+    {
+      "code": "03301",
+      "name": "Vallenar",
+      "region_code": "CL-AT",
+      "sort_order": 6
+    },
+    {
+      "code": "03302",
+      "name": "Alto del Carmen",
+      "region_code": "CL-AT",
+      "sort_order": 7
+    },
+    {
+      "code": "03303",
+      "name": "Freirina",
+      "region_code": "CL-AT",
+      "sort_order": 8
+    },
+    {
+      "code": "03304",
+      "name": "Huasco",
+      "region_code": "CL-AT",
+      "sort_order": 9
+    },
+    {
+      "code": "04101",
+      "name": "La Serena",
+      "region_code": "CL-CO",
+      "sort_order": 1
+    },
+    {
+      "code": "04102",
+      "name": "Coquimbo",
+      "region_code": "CL-CO",
+      "sort_order": 2
+    },
+    {
+      "code": "04103",
+      "name": "Andacollo",
+      "region_code": "CL-CO",
+      "sort_order": 3
+    },
+    {
+      "code": "04104",
+      "name": "La Higuera",
+      "region_code": "CL-CO",
+      "sort_order": 4
+    },
+    {
+      "code": "04105",
+      "name": "Paihuano",
+      "region_code": "CL-CO",
+      "sort_order": 5
+    },
+    {
+      "code": "04106",
+      "name": "Vicuña",
+      "region_code": "CL-CO",
+      "sort_order": 6
+    },
+    {
+      "code": "04201",
+      "name": "Illapel",
+      "region_code": "CL-CO",
+      "sort_order": 7
+    },
+    {
+      "code": "04202",
+      "name": "Canela",
+      "region_code": "CL-CO",
+      "sort_order": 8
+    },
+    {
+      "code": "04203",
+      "name": "Los Vilos",
+      "region_code": "CL-CO",
+      "sort_order": 9
+    },
+    {
+      "code": "04204",
+      "name": "Salamanca",
+      "region_code": "CL-CO",
+      "sort_order": 10
+    },
+    {
+      "code": "04301",
+      "name": "Ovalle",
+      "region_code": "CL-CO",
+      "sort_order": 11
+    },
+    {
+      "code": "04302",
+      "name": "Combarbalá",
+      "region_code": "CL-CO",
+      "sort_order": 12
+    },
+    {
+      "code": "04303",
+      "name": "Monte Patria",
+      "region_code": "CL-CO",
+      "sort_order": 13
+    },
+    {
+      "code": "04304",
+      "name": "Punitaqui",
+      "region_code": "CL-CO",
+      "sort_order": 14
+    },
+    {
+      "code": "04305",
+      "name": "Río Hurtado",
+      "region_code": "CL-CO",
+      "sort_order": 15
+    },
+    {
+      "code": "05101",
+      "name": "Valparaíso",
+      "region_code": "CL-VS",
+      "sort_order": 1
+    },
+    {
+      "code": "05102",
+      "name": "Casablanca",
+      "region_code": "CL-VS",
+      "sort_order": 2
+    },
+    {
+      "code": "05103",
+      "name": "Concón",
+      "region_code": "CL-VS",
+      "sort_order": 3
+    },
+    {
+      "code": "05104",
+      "name": "Juan Fernández",
+      "region_code": "CL-VS",
+      "sort_order": 4
+    },
+    {
+      "code": "05105",
+      "name": "Puchuncaví",
+      "region_code": "CL-VS",
+      "sort_order": 5
+    },
+    {
+      "code": "05107",
+      "name": "Quintero",
+      "region_code": "CL-VS",
+      "sort_order": 6
+    },
+    {
+      "code": "05109",
+      "name": "Viña del Mar",
+      "region_code": "CL-VS",
+      "sort_order": 7
+    },
+    {
+      "code": "05201",
+      "name": "Isla de Pascua",
+      "region_code": "CL-VS",
+      "sort_order": 8
+    },
+    {
+      "code": "05301",
+      "name": "Los Andes",
+      "region_code": "CL-VS",
+      "sort_order": 9
+    },
+    {
+      "code": "05302",
+      "name": "Calle Larga",
+      "region_code": "CL-VS",
+      "sort_order": 10
+    },
+    {
+      "code": "05303",
+      "name": "Rinconada",
+      "region_code": "CL-VS",
+      "sort_order": 11
+    },
+    {
+      "code": "05304",
+      "name": "San Esteban",
+      "region_code": "CL-VS",
+      "sort_order": 12
+    },
+    {
+      "code": "05401",
+      "name": "La Ligua",
+      "region_code": "CL-VS",
+      "sort_order": 13
+    },
+    {
+      "code": "05402",
+      "name": "Cabildo",
+      "region_code": "CL-VS",
+      "sort_order": 14
+    },
+    {
+      "code": "05403",
+      "name": "Papudo",
+      "region_code": "CL-VS",
+      "sort_order": 15
+    },
+    {
+      "code": "05404",
+      "name": "Petorca",
+      "region_code": "CL-VS",
+      "sort_order": 16
+    },
+    {
+      "code": "05405",
+      "name": "Zapallar",
+      "region_code": "CL-VS",
+      "sort_order": 17
+    },
+    {
+      "code": "05501",
+      "name": "Quillota",
+      "region_code": "CL-VS",
+      "sort_order": 18
+    },
+    {
+      "code": "05502",
+      "name": "La Calera",
+      "region_code": "CL-VS",
+      "sort_order": 19
+    },
+    {
+      "code": "05503",
+      "name": "Hijuelas",
+      "region_code": "CL-VS",
+      "sort_order": 20
+    },
+    {
+      "code": "05504",
+      "name": "La Cruz",
+      "region_code": "CL-VS",
+      "sort_order": 21
+    },
+    {
+      "code": "05506",
+      "name": "Nogales",
+      "region_code": "CL-VS",
+      "sort_order": 22
+    },
+    {
+      "code": "05601",
+      "name": "San Antonio",
+      "region_code": "CL-VS",
+      "sort_order": 23
+    },
+    {
+      "code": "05602",
+      "name": "Algarrobo",
+      "region_code": "CL-VS",
+      "sort_order": 24
+    },
+    {
+      "code": "05603",
+      "name": "Cartagena",
+      "region_code": "CL-VS",
+      "sort_order": 25
+    },
+    {
+      "code": "05604",
+      "name": "El Quisco",
+      "region_code": "CL-VS",
+      "sort_order": 26
+    },
+    {
+      "code": "05605",
+      "name": "El Tabo",
+      "region_code": "CL-VS",
+      "sort_order": 27
+    },
+    {
+      "code": "05606",
+      "name": "Santo Domingo",
+      "region_code": "CL-VS",
+      "sort_order": 28
+    },
+    {
+      "code": "05701",
+      "name": "San Felipe",
+      "region_code": "CL-VS",
+      "sort_order": 29
+    },
+    {
+      "code": "05702",
+      "name": "Catemu",
+      "region_code": "CL-VS",
+      "sort_order": 30
+    },
+    {
+      "code": "05703",
+      "name": "Llaillay",
+      "region_code": "CL-VS",
+      "sort_order": 31
+    },
+    {
+      "code": "05704",
+      "name": "Panquehue",
+      "region_code": "CL-VS",
+      "sort_order": 32
+    },
+    {
+      "code": "05705",
+      "name": "Putaendo",
+      "region_code": "CL-VS",
+      "sort_order": 33
+    },
+    {
+      "code": "05706",
+      "name": "Santa María",
+      "region_code": "CL-VS",
+      "sort_order": 34
+    },
+    {
+      "code": "05801",
+      "name": "Quilpué",
+      "region_code": "CL-VS",
+      "sort_order": 35
+    },
+    {
+      "code": "05802",
+      "name": "Limache",
+      "region_code": "CL-VS",
+      "sort_order": 36
+    },
+    {
+      "code": "05803",
+      "name": "Olmué",
+      "region_code": "CL-VS",
+      "sort_order": 37
+    },
+    {
+      "code": "05804",
+      "name": "Villa Alemana",
+      "region_code": "CL-VS",
+      "sort_order": 38
+    },
+    {
+      "code": "06101",
+      "name": "Rancagua",
+      "region_code": "CL-LI",
+      "sort_order": 1
+    },
+    {
+      "code": "06102",
+      "name": "Codegua",
+      "region_code": "CL-LI",
+      "sort_order": 2
+    },
+    {
+      "code": "06103",
+      "name": "Coinco",
+      "region_code": "CL-LI",
+      "sort_order": 3
+    },
+    {
+      "code": "06104",
+      "name": "Coltauco",
+      "region_code": "CL-LI",
+      "sort_order": 4
+    },
+    {
+      "code": "06105",
+      "name": "Doñihue",
+      "region_code": "CL-LI",
+      "sort_order": 5
+    },
+    {
+      "code": "06106",
+      "name": "Graneros",
+      "region_code": "CL-LI",
+      "sort_order": 6
+    },
+    {
+      "code": "06107",
+      "name": "Las Cabras",
+      "region_code": "CL-LI",
+      "sort_order": 7
+    },
+    {
+      "code": "06108",
+      "name": "Machalí",
+      "region_code": "CL-LI",
+      "sort_order": 8
+    },
+    {
+      "code": "06109",
+      "name": "Malloa",
+      "region_code": "CL-LI",
+      "sort_order": 9
+    },
+    {
+      "code": "06110",
+      "name": "Mostazal",
+      "region_code": "CL-LI",
+      "sort_order": 10
+    },
+    {
+      "code": "06111",
+      "name": "Olivar",
+      "region_code": "CL-LI",
+      "sort_order": 11
+    },
+    {
+      "code": "06112",
+      "name": "Peumo",
+      "region_code": "CL-LI",
+      "sort_order": 12
+    },
+    {
+      "code": "06113",
+      "name": "Pichidegua",
+      "region_code": "CL-LI",
+      "sort_order": 13
+    },
+    {
+      "code": "06114",
+      "name": "Quinta de Tilcoco",
+      "region_code": "CL-LI",
+      "sort_order": 14
+    },
+    {
+      "code": "06115",
+      "name": "Rengo",
+      "region_code": "CL-LI",
+      "sort_order": 15
+    },
+    {
+      "code": "06116",
+      "name": "Requínoa",
+      "region_code": "CL-LI",
+      "sort_order": 16
+    },
+    {
+      "code": "06117",
+      "name": "San Vicente",
+      "region_code": "CL-LI",
+      "sort_order": 17
+    },
+    {
+      "code": "06201",
+      "name": "Pichilemu",
+      "region_code": "CL-LI",
+      "sort_order": 18
+    },
+    {
+      "code": "06202",
+      "name": "La Estrella",
+      "region_code": "CL-LI",
+      "sort_order": 19
+    },
+    {
+      "code": "06203",
+      "name": "Litueche",
+      "region_code": "CL-LI",
+      "sort_order": 20
+    },
+    {
+      "code": "06204",
+      "name": "Marchihue",
+      "region_code": "CL-LI",
+      "sort_order": 21
+    },
+    {
+      "code": "06205",
+      "name": "Navidad",
+      "region_code": "CL-LI",
+      "sort_order": 22
+    },
+    {
+      "code": "06206",
+      "name": "Paredones",
+      "region_code": "CL-LI",
+      "sort_order": 23
+    },
+    {
+      "code": "06301",
+      "name": "San Fernando",
+      "region_code": "CL-LI",
+      "sort_order": 24
+    },
+    {
+      "code": "06302",
+      "name": "Chépica",
+      "region_code": "CL-LI",
+      "sort_order": 25
+    },
+    {
+      "code": "06303",
+      "name": "Chimbarongo",
+      "region_code": "CL-LI",
+      "sort_order": 26
+    },
+    {
+      "code": "06304",
+      "name": "Lolol",
+      "region_code": "CL-LI",
+      "sort_order": 27
+    },
+    {
+      "code": "06305",
+      "name": "Nancagua",
+      "region_code": "CL-LI",
+      "sort_order": 28
+    },
+    {
+      "code": "06306",
+      "name": "Palmilla",
+      "region_code": "CL-LI",
+      "sort_order": 29
+    },
+    {
+      "code": "06307",
+      "name": "Peralillo",
+      "region_code": "CL-LI",
+      "sort_order": 30
+    },
+    {
+      "code": "06308",
+      "name": "Placilla",
+      "region_code": "CL-LI",
+      "sort_order": 31
+    },
+    {
+      "code": "06309",
+      "name": "Pumanque",
+      "region_code": "CL-LI",
+      "sort_order": 32
+    },
+    {
+      "code": "06310",
+      "name": "Santa Cruz",
+      "region_code": "CL-LI",
+      "sort_order": 33
+    },
+    {
+      "code": "07101",
+      "name": "Talca",
+      "region_code": "CL-ML",
+      "sort_order": 1
+    },
+    {
+      "code": "07102",
+      "name": "Constitución",
+      "region_code": "CL-ML",
+      "sort_order": 2
+    },
+    {
+      "code": "07103",
+      "name": "Curepto",
+      "region_code": "CL-ML",
+      "sort_order": 3
+    },
+    {
+      "code": "07104",
+      "name": "Empedrado",
+      "region_code": "CL-ML",
+      "sort_order": 4
+    },
+    {
+      "code": "07105",
+      "name": "Maule",
+      "region_code": "CL-ML",
+      "sort_order": 5
+    },
+    {
+      "code": "07106",
+      "name": "Pelarco",
+      "region_code": "CL-ML",
+      "sort_order": 6
+    },
+    {
+      "code": "07107",
+      "name": "Pencahue",
+      "region_code": "CL-ML",
+      "sort_order": 7
+    },
+    {
+      "code": "07108",
+      "name": "Río Claro",
+      "region_code": "CL-ML",
+      "sort_order": 8
+    },
+    {
+      "code": "07109",
+      "name": "San Clemente",
+      "region_code": "CL-ML",
+      "sort_order": 9
+    },
+    {
+      "code": "07110",
+      "name": "San Rafael",
+      "region_code": "CL-ML",
+      "sort_order": 10
+    },
+    {
+      "code": "07201",
+      "name": "Cauquenes",
+      "region_code": "CL-ML",
+      "sort_order": 11
+    },
+    {
+      "code": "07202",
+      "name": "Chanco",
+      "region_code": "CL-ML",
+      "sort_order": 12
+    },
+    {
+      "code": "07203",
+      "name": "Pelluhue",
+      "region_code": "CL-ML",
+      "sort_order": 13
+    },
+    {
+      "code": "07301",
+      "name": "Curicó",
+      "region_code": "CL-ML",
+      "sort_order": 14
+    },
+    {
+      "code": "07302",
+      "name": "Hualañé",
+      "region_code": "CL-ML",
+      "sort_order": 15
+    },
+    {
+      "code": "07303",
+      "name": "Licantén",
+      "region_code": "CL-ML",
+      "sort_order": 16
+    },
+    {
+      "code": "07304",
+      "name": "Molina",
+      "region_code": "CL-ML",
+      "sort_order": 17
+    },
+    {
+      "code": "07305",
+      "name": "Rauco",
+      "region_code": "CL-ML",
+      "sort_order": 18
+    },
+    {
+      "code": "07306",
+      "name": "Romeral",
+      "region_code": "CL-ML",
+      "sort_order": 19
+    },
+    {
+      "code": "07307",
+      "name": "Sagrada Familia",
+      "region_code": "CL-ML",
+      "sort_order": 20
+    },
+    {
+      "code": "07308",
+      "name": "Teno",
+      "region_code": "CL-ML",
+      "sort_order": 21
+    },
+    {
+      "code": "07309",
+      "name": "Vichuquén",
+      "region_code": "CL-ML",
+      "sort_order": 22
+    },
+    {
+      "code": "07401",
+      "name": "Linares",
+      "region_code": "CL-ML",
+      "sort_order": 23
+    },
+    {
+      "code": "07402",
+      "name": "Colbún",
+      "region_code": "CL-ML",
+      "sort_order": 24
+    },
+    {
+      "code": "07403",
+      "name": "Longaví",
+      "region_code": "CL-ML",
+      "sort_order": 25
+    },
+    {
+      "code": "07404",
+      "name": "Parral",
+      "region_code": "CL-ML",
+      "sort_order": 26
+    },
+    {
+      "code": "07405",
+      "name": "Retiro",
+      "region_code": "CL-ML",
+      "sort_order": 27
+    },
+    {
+      "code": "07406",
+      "name": "San Javier",
+      "region_code": "CL-ML",
+      "sort_order": 28
+    },
+    {
+      "code": "07407",
+      "name": "Villa Alegre",
+      "region_code": "CL-ML",
+      "sort_order": 29
+    },
+    {
+      "code": "07408",
+      "name": "Yerbas Buenas",
+      "region_code": "CL-ML",
+      "sort_order": 30
+    },
+    {
+      "code": "08401",
+      "name": "Chillán",
+      "region_code": "CL-NB",
+      "sort_order": 1
+    },
+    {
+      "code": "08406",
+      "name": "Chillán Viejo",
+      "region_code": "CL-NB",
+      "sort_order": 2
+    },
+    {
+      "code": "08413",
+      "name": "Quillón",
+      "region_code": "CL-NB",
+      "sort_order": 3
+    },
+    {
+      "code": "08402",
+      "name": "Bulnes",
+      "region_code": "CL-NB",
+      "sort_order": 4
+    },
+    {
+      "code": "08418",
+      "name": "San Ignacio",
+      "region_code": "CL-NB",
+      "sort_order": 5
+    },
+    {
+      "code": "08407",
+      "name": "El Carmen",
+      "region_code": "CL-NB",
+      "sort_order": 6
+    },
+    {
+      "code": "08411",
+      "name": "Pinto",
+      "region_code": "CL-NB",
+      "sort_order": 7
+    },
+    {
+      "code": "08410",
+      "name": "Pemuco",
+      "region_code": "CL-NB",
+      "sort_order": 8
+    },
+    {
+      "code": "08421",
+      "name": "Yungay",
+      "region_code": "CL-NB",
+      "sort_order": 9
+    },
+    {
+      "code": "08414",
+      "name": "Quirihue",
+      "region_code": "CL-NB",
+      "sort_order": 10
+    },
+    {
+      "code": "08403",
+      "name": "Cobquecura",
+      "region_code": "CL-NB",
+      "sort_order": 11
+    },
+    {
+      "code": "08408",
+      "name": "Ninhue",
+      "region_code": "CL-NB",
+      "sort_order": 12
+    },
+    {
+      "code": "08420",
+      "name": "Treguaco",
+      "region_code": "CL-NB",
+      "sort_order": 13
+    },
+    {
+      "code": "08404",
+      "name": "Coelemu",
+      "region_code": "CL-NB",
+      "sort_order": 14
+    },
+    {
+      "code": "08412",
+      "name": "Portezuelo",
+      "region_code": "CL-NB",
+      "sort_order": 15
+    },
+    {
+      "code": "08415",
+      "name": "Ránquil",
+      "region_code": "CL-NB",
+      "sort_order": 16
+    },
+    {
+      "code": "08416",
+      "name": "San Carlos",
+      "region_code": "CL-NB",
+      "sort_order": 17
+    },
+    {
+      "code": "08409",
+      "name": "Ñiquén",
+      "region_code": "CL-NB",
+      "sort_order": 18
+    },
+    {
+      "code": "08405",
+      "name": "Coihueco",
+      "region_code": "CL-NB",
+      "sort_order": 19
+    },
+    {
+      "code": "08417",
+      "name": "San Fabián",
+      "region_code": "CL-NB",
+      "sort_order": 20
+    },
+    {
+      "code": "08419",
+      "name": "San Nicolás",
+      "region_code": "CL-NB",
+      "sort_order": 21
+    },
+    {
+      "code": "08101",
+      "name": "Concepción",
+      "region_code": "CL-BI",
+      "sort_order": 1
+    },
+    {
+      "code": "08102",
+      "name": "Coronel",
+      "region_code": "CL-BI",
+      "sort_order": 2
+    },
+    {
+      "code": "08103",
+      "name": "Chiguayante",
+      "region_code": "CL-BI",
+      "sort_order": 3
+    },
+    {
+      "code": "08104",
+      "name": "Florida",
+      "region_code": "CL-BI",
+      "sort_order": 4
+    },
+    {
+      "code": "08105",
+      "name": "Hualqui",
+      "region_code": "CL-BI",
+      "sort_order": 5
+    },
+    {
+      "code": "08106",
+      "name": "Lota",
+      "region_code": "CL-BI",
+      "sort_order": 6
+    },
+    {
+      "code": "08107",
+      "name": "Penco",
+      "region_code": "CL-BI",
+      "sort_order": 7
+    },
+    {
+      "code": "08108",
+      "name": "San Pedro de la Paz",
+      "region_code": "CL-BI",
+      "sort_order": 8
+    },
+    {
+      "code": "08109",
+      "name": "Santa Juana",
+      "region_code": "CL-BI",
+      "sort_order": 9
+    },
+    {
+      "code": "08110",
+      "name": "Talcahuano",
+      "region_code": "CL-BI",
+      "sort_order": 10
+    },
+    {
+      "code": "08111",
+      "name": "Tomé",
+      "region_code": "CL-BI",
+      "sort_order": 11
+    },
+    {
+      "code": "08112",
+      "name": "Hualpén",
+      "region_code": "CL-BI",
+      "sort_order": 12
+    },
+    {
+      "code": "08201",
+      "name": "Lebu",
+      "region_code": "CL-BI",
+      "sort_order": 13
+    },
+    {
+      "code": "08202",
+      "name": "Arauco",
+      "region_code": "CL-BI",
+      "sort_order": 14
+    },
+    {
+      "code": "08203",
+      "name": "Cañete",
+      "region_code": "CL-BI",
+      "sort_order": 15
+    },
+    {
+      "code": "08204",
+      "name": "Contulmo",
+      "region_code": "CL-BI",
+      "sort_order": 16
+    },
+    {
+      "code": "08205",
+      "name": "Curanilahue",
+      "region_code": "CL-BI",
+      "sort_order": 17
+    },
+    {
+      "code": "08206",
+      "name": "Los Álamos",
+      "region_code": "CL-BI",
+      "sort_order": 18
+    },
+    {
+      "code": "08207",
+      "name": "Tirúa",
+      "region_code": "CL-BI",
+      "sort_order": 19
+    },
+    {
+      "code": "08301",
+      "name": "Los Ángeles",
+      "region_code": "CL-BI",
+      "sort_order": 20
+    },
+    {
+      "code": "08302",
+      "name": "Antuco",
+      "region_code": "CL-BI",
+      "sort_order": 21
+    },
+    {
+      "code": "08303",
+      "name": "Cabrero",
+      "region_code": "CL-BI",
+      "sort_order": 22
+    },
+    {
+      "code": "08304",
+      "name": "Laja",
+      "region_code": "CL-BI",
+      "sort_order": 23
+    },
+    {
+      "code": "08305",
+      "name": "Mulchén",
+      "region_code": "CL-BI",
+      "sort_order": 24
+    },
+    {
+      "code": "08306",
+      "name": "Nacimiento",
+      "region_code": "CL-BI",
+      "sort_order": 25
+    },
+    {
+      "code": "08307",
+      "name": "Negrete",
+      "region_code": "CL-BI",
+      "sort_order": 26
+    },
+    {
+      "code": "08308",
+      "name": "Quilaco",
+      "region_code": "CL-BI",
+      "sort_order": 27
+    },
+    {
+      "code": "08309",
+      "name": "Quilleco",
+      "region_code": "CL-BI",
+      "sort_order": 28
+    },
+    {
+      "code": "08310",
+      "name": "San Rosendo",
+      "region_code": "CL-BI",
+      "sort_order": 29
+    },
+    {
+      "code": "08311",
+      "name": "Santa Bárbara",
+      "region_code": "CL-BI",
+      "sort_order": 30
+    },
+    {
+      "code": "08312",
+      "name": "Tucapel",
+      "region_code": "CL-BI",
+      "sort_order": 31
+    },
+    {
+      "code": "08313",
+      "name": "Yumbel",
+      "region_code": "CL-BI",
+      "sort_order": 32
+    },
+    {
+      "code": "08314",
+      "name": "Alto Biobío",
+      "region_code": "CL-BI",
+      "sort_order": 33
+    },
+    {
+      "code": "09101",
+      "name": "Temuco",
+      "region_code": "CL-AR",
+      "sort_order": 1
+    },
+    {
+      "code": "09102",
+      "name": "Carahue",
+      "region_code": "CL-AR",
+      "sort_order": 2
+    },
+    {
+      "code": "09103",
+      "name": "Cunco",
+      "region_code": "CL-AR",
+      "sort_order": 3
+    },
+    {
+      "code": "09104",
+      "name": "Curarrehue",
+      "region_code": "CL-AR",
+      "sort_order": 4
+    },
+    {
+      "code": "09105",
+      "name": "Freire",
+      "region_code": "CL-AR",
+      "sort_order": 5
+    },
+    {
+      "code": "09106",
+      "name": "Galvarino",
+      "region_code": "CL-AR",
+      "sort_order": 6
+    },
+    {
+      "code": "09107",
+      "name": "Gorbea",
+      "region_code": "CL-AR",
+      "sort_order": 7
+    },
+    {
+      "code": "09108",
+      "name": "Lautaro",
+      "region_code": "CL-AR",
+      "sort_order": 8
+    },
+    {
+      "code": "09109",
+      "name": "Loncoche",
+      "region_code": "CL-AR",
+      "sort_order": 9
+    },
+    {
+      "code": "09110",
+      "name": "Melipeuco",
+      "region_code": "CL-AR",
+      "sort_order": 10
+    },
+    {
+      "code": "09111",
+      "name": "Nueva Imperial",
+      "region_code": "CL-AR",
+      "sort_order": 11
+    },
+    {
+      "code": "09112",
+      "name": "Padre las Casas",
+      "region_code": "CL-AR",
+      "sort_order": 12
+    },
+    {
+      "code": "09113",
+      "name": "Perquenco",
+      "region_code": "CL-AR",
+      "sort_order": 13
+    },
+    {
+      "code": "09114",
+      "name": "Pitrufquén",
+      "region_code": "CL-AR",
+      "sort_order": 14
+    },
+    {
+      "code": "09115",
+      "name": "Pucón",
+      "region_code": "CL-AR",
+      "sort_order": 15
+    },
+    {
+      "code": "09116",
+      "name": "Saavedra",
+      "region_code": "CL-AR",
+      "sort_order": 16
+    },
+    {
+      "code": "09117",
+      "name": "Teodoro Schmidt",
+      "region_code": "CL-AR",
+      "sort_order": 17
+    },
+    {
+      "code": "09118",
+      "name": "Toltén",
+      "region_code": "CL-AR",
+      "sort_order": 18
+    },
+    {
+      "code": "09119",
+      "name": "Vilcún",
+      "region_code": "CL-AR",
+      "sort_order": 19
+    },
+    {
+      "code": "09120",
+      "name": "Villarrica",
+      "region_code": "CL-AR",
+      "sort_order": 20
+    },
+    {
+      "code": "09121",
+      "name": "Cholchol",
+      "region_code": "CL-AR",
+      "sort_order": 21
+    },
+    {
+      "code": "09201",
+      "name": "Angol",
+      "region_code": "CL-AR",
+      "sort_order": 22
+    },
+    {
+      "code": "09202",
+      "name": "Collipulli",
+      "region_code": "CL-AR",
+      "sort_order": 23
+    },
+    {
+      "code": "09203",
+      "name": "Curacautín",
+      "region_code": "CL-AR",
+      "sort_order": 24
+    },
+    {
+      "code": "09204",
+      "name": "Ercilla",
+      "region_code": "CL-AR",
+      "sort_order": 25
+    },
+    {
+      "code": "09205",
+      "name": "Lonquimay",
+      "region_code": "CL-AR",
+      "sort_order": 26
+    },
+    {
+      "code": "09206",
+      "name": "Los Sauces",
+      "region_code": "CL-AR",
+      "sort_order": 27
+    },
+    {
+      "code": "09207",
+      "name": "Lumaco",
+      "region_code": "CL-AR",
+      "sort_order": 28
+    },
+    {
+      "code": "09208",
+      "name": "Purén",
+      "region_code": "CL-AR",
+      "sort_order": 29
+    },
+    {
+      "code": "09209",
+      "name": "Renaico",
+      "region_code": "CL-AR",
+      "sort_order": 30
+    },
+    {
+      "code": "09210",
+      "name": "Traiguén",
+      "region_code": "CL-AR",
+      "sort_order": 31
+    },
+    {
+      "code": "09211",
+      "name": "Victoria",
+      "region_code": "CL-AR",
+      "sort_order": 32
+    },
+    {
+      "code": "14101",
+      "name": "Valdivia",
+      "region_code": "CL-LR",
+      "sort_order": 1
+    },
+    {
+      "code": "14102",
+      "name": "Corral",
+      "region_code": "CL-LR",
+      "sort_order": 2
+    },
+    {
+      "code": "14103",
+      "name": "Lanco",
+      "region_code": "CL-LR",
+      "sort_order": 3
+    },
+    {
+      "code": "14104",
+      "name": "Los Lagos",
+      "region_code": "CL-LR",
+      "sort_order": 4
+    },
+    {
+      "code": "14105",
+      "name": "Máfil",
+      "region_code": "CL-LR",
+      "sort_order": 5
+    },
+    {
+      "code": "14106",
+      "name": "Mariquina",
+      "region_code": "CL-LR",
+      "sort_order": 6
+    },
+    {
+      "code": "14107",
+      "name": "Paillaco",
+      "region_code": "CL-LR",
+      "sort_order": 7
+    },
+    {
+      "code": "14108",
+      "name": "Panguipulli",
+      "region_code": "CL-LR",
+      "sort_order": 8
+    },
+    {
+      "code": "14201",
+      "name": "La Unión",
+      "region_code": "CL-LR",
+      "sort_order": 9
+    },
+    {
+      "code": "14202",
+      "name": "Futrono",
+      "region_code": "CL-LR",
+      "sort_order": 10
+    },
+    {
+      "code": "14203",
+      "name": "Lago Ranco",
+      "region_code": "CL-LR",
+      "sort_order": 11
+    },
+    {
+      "code": "14204",
+      "name": "Río Bueno",
+      "region_code": "CL-LR",
+      "sort_order": 12
+    },
+    {
+      "code": "10101",
+      "name": "Puerto Montt",
+      "region_code": "CL-LL",
+      "sort_order": 1
+    },
+    {
+      "code": "10102",
+      "name": "Calbuco",
+      "region_code": "CL-LL",
+      "sort_order": 2
+    },
+    {
+      "code": "10103",
+      "name": "Cochamó",
+      "region_code": "CL-LL",
+      "sort_order": 3
+    },
+    {
+      "code": "10104",
+      "name": "Fresia",
+      "region_code": "CL-LL",
+      "sort_order": 4
+    },
+    {
+      "code": "10105",
+      "name": "Frutillar",
+      "region_code": "CL-LL",
+      "sort_order": 5
+    },
+    {
+      "code": "10106",
+      "name": "Los Muermos",
+      "region_code": "CL-LL",
+      "sort_order": 6
+    },
+    {
+      "code": "10107",
+      "name": "Llanquihue",
+      "region_code": "CL-LL",
+      "sort_order": 7
+    },
+    {
+      "code": "10108",
+      "name": "Maullín",
+      "region_code": "CL-LL",
+      "sort_order": 8
+    },
+    {
+      "code": "10109",
+      "name": "Puerto Varas",
+      "region_code": "CL-LL",
+      "sort_order": 9
+    },
+    {
+      "code": "10201",
+      "name": "Castro",
+      "region_code": "CL-LL",
+      "sort_order": 10
+    },
+    {
+      "code": "10202",
+      "name": "Ancud",
+      "region_code": "CL-LL",
+      "sort_order": 11
+    },
+    {
+      "code": "10203",
+      "name": "Chonchi",
+      "region_code": "CL-LL",
+      "sort_order": 12
+    },
+    {
+      "code": "10204",
+      "name": "Curaco de Vélez",
+      "region_code": "CL-LL",
+      "sort_order": 13
+    },
+    {
+      "code": "10205",
+      "name": "Dalcahue",
+      "region_code": "CL-LL",
+      "sort_order": 14
+    },
+    {
+      "code": "10206",
+      "name": "Puqueldón",
+      "region_code": "CL-LL",
+      "sort_order": 15
+    },
+    {
+      "code": "10207",
+      "name": "Queilén",
+      "region_code": "CL-LL",
+      "sort_order": 16
+    },
+    {
+      "code": "10208",
+      "name": "Quellón",
+      "region_code": "CL-LL",
+      "sort_order": 17
+    },
+    {
+      "code": "10209",
+      "name": "Quemchi",
+      "region_code": "CL-LL",
+      "sort_order": 18
+    },
+    {
+      "code": "10210",
+      "name": "Quinchao",
+      "region_code": "CL-LL",
+      "sort_order": 19
+    },
+    {
+      "code": "10301",
+      "name": "Osorno",
+      "region_code": "CL-LL",
+      "sort_order": 20
+    },
+    {
+      "code": "10302",
+      "name": "Puerto Octay",
+      "region_code": "CL-LL",
+      "sort_order": 21
+    },
+    {
+      "code": "10303",
+      "name": "Purranque",
+      "region_code": "CL-LL",
+      "sort_order": 22
+    },
+    {
+      "code": "10304",
+      "name": "Puyehue",
+      "region_code": "CL-LL",
+      "sort_order": 23
+    },
+    {
+      "code": "10305",
+      "name": "Río Negro",
+      "region_code": "CL-LL",
+      "sort_order": 24
+    },
+    {
+      "code": "10306",
+      "name": "San Juan de la Costa",
+      "region_code": "CL-LL",
+      "sort_order": 25
+    },
+    {
+      "code": "10307",
+      "name": "San Pablo",
+      "region_code": "CL-LL",
+      "sort_order": 26
+    },
+    {
+      "code": "10401",
+      "name": "Chaitén",
+      "region_code": "CL-LL",
+      "sort_order": 27
+    },
+    {
+      "code": "10402",
+      "name": "Futaleufú",
+      "region_code": "CL-LL",
+      "sort_order": 28
+    },
+    {
+      "code": "10403",
+      "name": "Hualaihué",
+      "region_code": "CL-LL",
+      "sort_order": 29
+    },
+    {
+      "code": "10404",
+      "name": "Palena",
+      "region_code": "CL-LL",
+      "sort_order": 30
+    },
+    {
+      "code": "11101",
+      "name": "Coyhaique",
+      "region_code": "CL-AI",
+      "sort_order": 1
+    },
+    {
+      "code": "11102",
+      "name": "Lago Verde",
+      "region_code": "CL-AI",
+      "sort_order": 2
+    },
+    {
+      "code": "11201",
+      "name": "Aysén",
+      "region_code": "CL-AI",
+      "sort_order": 3
+    },
+    {
+      "code": "11202",
+      "name": "Cisnes",
+      "region_code": "CL-AI",
+      "sort_order": 4
+    },
+    {
+      "code": "11203",
+      "name": "Guaitecas",
+      "region_code": "CL-AI",
+      "sort_order": 5
+    },
+    {
+      "code": "11301",
+      "name": "Cochrane",
+      "region_code": "CL-AI",
+      "sort_order": 6
+    },
+    {
+      "code": "11302",
+      "name": "O’Higgins",
+      "region_code": "CL-AI",
+      "sort_order": 7
+    },
+    {
+      "code": "11303",
+      "name": "Tortel",
+      "region_code": "CL-AI",
+      "sort_order": 8
+    },
+    {
+      "code": "11401",
+      "name": "Chile Chico",
+      "region_code": "CL-AI",
+      "sort_order": 9
+    },
+    {
+      "code": "11402",
+      "name": "Río Ibáñez",
+      "region_code": "CL-AI",
+      "sort_order": 10
+    },
+    {
+      "code": "12101",
+      "name": "Punta Arenas",
+      "region_code": "CL-MA",
+      "sort_order": 1
+    },
+    {
+      "code": "12102",
+      "name": "Laguna Blanca",
+      "region_code": "CL-MA",
+      "sort_order": 2
+    },
+    {
+      "code": "12103",
+      "name": "Río Verde",
+      "region_code": "CL-MA",
+      "sort_order": 3
+    },
+    {
+      "code": "12104",
+      "name": "San Gregorio",
+      "region_code": "CL-MA",
+      "sort_order": 4
+    },
+    {
+      "code": "12201",
+      "name": "Cabo de Hornos (Ex. Navarino)",
+      "region_code": "CL-MA",
+      "sort_order": 5
+    },
+    {
+      "code": "12202",
+      "name": "Antártica",
+      "region_code": "CL-MA",
+      "sort_order": 6
+    },
+    {
+      "code": "12301",
+      "name": "Porvenir",
+      "region_code": "CL-MA",
+      "sort_order": 7
+    },
+    {
+      "code": "12302",
+      "name": "Primavera",
+      "region_code": "CL-MA",
+      "sort_order": 8
+    },
+    {
+      "code": "12303",
+      "name": "Timaukel",
+      "region_code": "CL-MA",
+      "sort_order": 9
+    },
+    {
+      "code": "12401",
+      "name": "Natales",
+      "region_code": "CL-MA",
+      "sort_order": 10
+    },
+    {
+      "code": "12402",
+      "name": "Torres del Paine",
+      "region_code": "CL-MA",
+      "sort_order": 11
+    },
+    {
+      "code": "13101",
+      "name": "Santiago",
+      "region_code": "CL-RM",
+      "sort_order": 1
+    },
+    {
+      "code": "13102",
+      "name": "Cerrillos",
+      "region_code": "CL-RM",
+      "sort_order": 2
+    },
+    {
+      "code": "13103",
+      "name": "Cerro Navia",
+      "region_code": "CL-RM",
+      "sort_order": 3
+    },
+    {
+      "code": "13104",
+      "name": "Conchalí",
+      "region_code": "CL-RM",
+      "sort_order": 4
+    },
+    {
+      "code": "13105",
+      "name": "El Bosque",
+      "region_code": "CL-RM",
+      "sort_order": 5
+    },
+    {
+      "code": "13106",
+      "name": "Estación Central",
+      "region_code": "CL-RM",
+      "sort_order": 6
+    },
+    {
+      "code": "13107",
+      "name": "Huechuraba",
+      "region_code": "CL-RM",
+      "sort_order": 7
+    },
+    {
+      "code": "13108",
+      "name": "Independencia",
+      "region_code": "CL-RM",
+      "sort_order": 8
+    },
+    {
+      "code": "13109",
+      "name": "La Cisterna",
+      "region_code": "CL-RM",
+      "sort_order": 9
+    },
+    {
+      "code": "13110",
+      "name": "La Florida",
+      "region_code": "CL-RM",
+      "sort_order": 10
+    },
+    {
+      "code": "13111",
+      "name": "La Granja",
+      "region_code": "CL-RM",
+      "sort_order": 11
+    },
+    {
+      "code": "13112",
+      "name": "La Pintana",
+      "region_code": "CL-RM",
+      "sort_order": 12
+    },
+    {
+      "code": "13113",
+      "name": "La Reina",
+      "region_code": "CL-RM",
+      "sort_order": 13
+    },
+    {
+      "code": "13114",
+      "name": "Las Condes",
+      "region_code": "CL-RM",
+      "sort_order": 14
+    },
+    {
+      "code": "13115",
+      "name": "Lo Barnechea",
+      "region_code": "CL-RM",
+      "sort_order": 15
+    },
+    {
+      "code": "13116",
+      "name": "Lo Espejo",
+      "region_code": "CL-RM",
+      "sort_order": 16
+    },
+    {
+      "code": "13117",
+      "name": "Lo Prado",
+      "region_code": "CL-RM",
+      "sort_order": 17
+    },
+    {
+      "code": "13118",
+      "name": "Macul",
+      "region_code": "CL-RM",
+      "sort_order": 18
+    },
+    {
+      "code": "13119",
+      "name": "Maipú",
+      "region_code": "CL-RM",
+      "sort_order": 19
+    },
+    {
+      "code": "13120",
+      "name": "Ñuñoa",
+      "region_code": "CL-RM",
+      "sort_order": 20
+    },
+    {
+      "code": "13121",
+      "name": "Pedro Aguirre Cerda",
+      "region_code": "CL-RM",
+      "sort_order": 21
+    },
+    {
+      "code": "13122",
+      "name": "Peñalolén",
+      "region_code": "CL-RM",
+      "sort_order": 22
+    },
+    {
+      "code": "13123",
+      "name": "Providencia",
+      "region_code": "CL-RM",
+      "sort_order": 23
+    },
+    {
+      "code": "13124",
+      "name": "Pudahuel",
+      "region_code": "CL-RM",
+      "sort_order": 24
+    },
+    {
+      "code": "13125",
+      "name": "Quilicura",
+      "region_code": "CL-RM",
+      "sort_order": 25
+    },
+    {
+      "code": "13126",
+      "name": "Quinta Normal",
+      "region_code": "CL-RM",
+      "sort_order": 26
+    },
+    {
+      "code": "13127",
+      "name": "Recoleta",
+      "region_code": "CL-RM",
+      "sort_order": 27
+    },
+    {
+      "code": "13128",
+      "name": "Renca",
+      "region_code": "CL-RM",
+      "sort_order": 28
+    },
+    {
+      "code": "13129",
+      "name": "San Joaquín",
+      "region_code": "CL-RM",
+      "sort_order": 29
+    },
+    {
+      "code": "13130",
+      "name": "San Miguel",
+      "region_code": "CL-RM",
+      "sort_order": 30
+    },
+    {
+      "code": "13131",
+      "name": "San Ramón",
+      "region_code": "CL-RM",
+      "sort_order": 31
+    },
+    {
+      "code": "13132",
+      "name": "Vitacura",
+      "region_code": "CL-RM",
+      "sort_order": 32
+    },
+    {
+      "code": "13201",
+      "name": "Puente Alto",
+      "region_code": "CL-RM",
+      "sort_order": 33
+    },
+    {
+      "code": "13202",
+      "name": "Pirque",
+      "region_code": "CL-RM",
+      "sort_order": 34
+    },
+    {
+      "code": "13203",
+      "name": "San José de Maipo",
+      "region_code": "CL-RM",
+      "sort_order": 35
+    },
+    {
+      "code": "13301",
+      "name": "Colina",
+      "region_code": "CL-RM",
+      "sort_order": 36
+    },
+    {
+      "code": "13302",
+      "name": "Lampa",
+      "region_code": "CL-RM",
+      "sort_order": 37
+    },
+    {
+      "code": "13303",
+      "name": "Tiltil",
+      "region_code": "CL-RM",
+      "sort_order": 38
+    },
+    {
+      "code": "13401",
+      "name": "San Bernardo",
+      "region_code": "CL-RM",
+      "sort_order": 39
+    },
+    {
+      "code": "13402",
+      "name": "Buin",
+      "region_code": "CL-RM",
+      "sort_order": 40
+    },
+    {
+      "code": "13403",
+      "name": "Calera de Tango",
+      "region_code": "CL-RM",
+      "sort_order": 41
+    },
+    {
+      "code": "13404",
+      "name": "Paine",
+      "region_code": "CL-RM",
+      "sort_order": 42
+    },
+    {
+      "code": "13501",
+      "name": "Melipilla",
+      "region_code": "CL-RM",
+      "sort_order": 43
+    },
+    {
+      "code": "13502",
+      "name": "Alhué",
+      "region_code": "CL-RM",
+      "sort_order": 44
+    },
+    {
+      "code": "13503",
+      "name": "Curacaví",
+      "region_code": "CL-RM",
+      "sort_order": 45
+    },
+    {
+      "code": "13504",
+      "name": "María Pinto",
+      "region_code": "CL-RM",
+      "sort_order": 46
+    },
+    {
+      "code": "13505",
+      "name": "San Pedro",
+      "region_code": "CL-RM",
+      "sort_order": 47
+    },
+    {
+      "code": "13601",
+      "name": "Talagante",
+      "region_code": "CL-RM",
+      "sort_order": 48
+    },
+    {
+      "code": "13602",
+      "name": "El Monte",
+      "region_code": "CL-RM",
+      "sort_order": 49
+    },
+    {
+      "code": "13603",
+      "name": "Isla de Maipo",
+      "region_code": "CL-RM",
+      "sort_order": 50
+    },
+    {
+      "code": "13604",
+      "name": "Padre Hurtado",
+      "region_code": "CL-RM",
+      "sort_order": 51
+    },
+    {
+      "code": "13605",
+      "name": "Peñaflor",
+      "region_code": "CL-RM",
+      "sort_order": 52
+    }
+  ]
+}

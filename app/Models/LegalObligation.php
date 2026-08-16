@@ -3,14 +3,18 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Concerns\GuardsSensitiveAttributes;
+use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LegalObligation extends Model
 {
     use BelongsToCompany;
+    use GuardsSensitiveAttributes;
+    use HasFunctionalCode;
 
-    protected $guarded = [];
+    protected $guarded = ['company_id', 'code', 'paid_amount', 'pending_amount', 'status'];
 
     protected function casts(): array
     {

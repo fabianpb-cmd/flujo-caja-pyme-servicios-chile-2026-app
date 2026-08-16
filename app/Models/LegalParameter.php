@@ -17,6 +17,7 @@ class LegalParameter extends Model
             'valid_from' => 'date',
             'valid_to' => 'date',
             'value' => 'decimal:6',
+            'active' => 'boolean',
         ];
     }
 }

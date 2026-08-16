@@ -15,16 +15,22 @@ class PayablesService
 
     public function amountsWithVat(int $companyId, string|float|int $netAmount, CarbonInterface|string $date, bool $recoverableVat = true): array
     {
-        $vatRate = (float) $this->legalParameters->value($companyId, 'IVA', $date);
+        $vatRate = $this->vatRate($companyId, $date);
         $net = round((float) $netAmount, 2);
         $vat = round($net * $vatRate, 2);
 
         return [
             'net_amount' => $net,
+            'vat_rate' => $vatRate,
             'vat_amount' => $vat,
             'recoverable_vat_amount' => $recoverableVat ? $vat : 0.0,
             'gross_amount' => round($net + $vat, 2),
         ];
+    }
+
+    public function vatRate(int $companyId, CarbonInterface|string $date): float
+    {
+        return (float) $this->legalParameters->value($companyId, 'IVA', $date);
     }
 
     public function paidAmount(ExpenseDocument $document, CarbonInterface|string|null $asOf = null): float

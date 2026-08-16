@@ -24,6 +24,7 @@ use App\Services\CashMovementService;
 use App\Services\PayablesService;
 use App\Services\PayrollService;
 use App\Services\ReceivablesService;
+use App\Support\ChileanRut;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -160,6 +161,12 @@ class FinanceExcelImporter
         $this->valid($sheet);
 
         if (! $this->dryRun) {
+            $companyTaxId = ChileanRut::normalize($companyTaxId);
+            if ($companyTaxId !== null && ! ChileanRut::isValid($companyTaxId)) {
+                $this->warning($sheet, 'RUT de empresa inválido, omitido.');
+                $companyTaxId = null;
+            }
+
             $this->company = Company::query()->updateOrCreate(
                 ['code' => 'CMP-001'],
                 ['name' => $companyName ?: 'Empresa Demo', 'tax_id' => $companyTaxId, 'status' => 'active']
@@ -264,11 +271,17 @@ class FinanceExcelImporter
             $this->valid('clientes');
 
             if (! $this->dryRun) {
+                $taxId = ChileanRut::normalize($this->str($this->get($row, ['RUT'])));
+                if ($taxId !== null && ! ChileanRut::isValid($taxId)) {
+                    $this->warning('clientes', "Cliente {$code}: RUT inválido, omitido.");
+                    $taxId = null;
+                }
+
                 Client::query()->updateOrCreate(
                     ['company_id' => $this->companyId(), 'code' => $code],
                     [
                         'legal_name' => $this->str($this->get($row, ['Razón social', 'Razon social'])) ?: $code,
-                        'tax_id' => $this->str($this->get($row, ['RUT'])),
+                        'tax_id' => $taxId,
                         'contact_name' => $this->str($this->get($row, ['Contacto'])),
                         'contact_email' => $this->str($this->get($row, ['Correo'])),
                         'payment_term_days' => (int) ($this->number($this->get($row, ['Plazo pago (días)', 'Plazo pago (dias)'])) ?: 30),
@@ -315,7 +328,14 @@ class FinanceExcelImporter
                         'end_date' => $this->date($this->get($row, ['Fecha término', 'Fecha termino'])),
                         'contract_type' => $this->str($this->get($row, ['Tipo contrato'])),
                         'sale_net' => $this->money($this->get($row, ['Venta neta ($)'])),
-                        'vat_rate' => $this->yes($this->get($row, ['Afecto IVA'])) ? 0.19 : 0,
+                        'vat_rate' => $this->yes($this->get($row, ['Afecto IVA']))
+                            ? $this->receivables->vatRate(
+                                $this->companyId(),
+                                $this->date($this->get($row, ['Fecha facturación', 'Fecha facturacion']))
+                                    ?: $this->date($this->get($row, ['Fecha inicio']))
+                                    ?: now()->toDateString()
+                            )
+                            : 0,
                         'sale_total' => $this->money($this->get($row, ['Venta total ($)'])),
                         'payment_form' => $this->str($this->get($row, ['Forma de pago'])),
                         'installments' => (int) ($this->number($this->get($row, ['Nº cuotas/hitos', 'No cuotas/hitos'])) ?: 1),
@@ -793,7 +813,15 @@ class FinanceExcelImporter
                 $accountCode = $this->code($this->get($row, ['Cuenta / Banco'])) ?: 'BANK-001';
                 $account = CashAccount::query()->firstOrCreate(
                     ['code' => $accountCode],
-                    ['company_id' => $this->companyId(), 'name' => $accountCode, 'currency' => 'CLP', 'opening_balance' => 0, 'is_active' => true]
+                    [
+                        'company_id' => $this->companyId(),
+                        'name' => $accountCode,
+                        'currency' => CompanySetting::query()->forCompany($this->companyId())->where('setting_key', 'base_currency_code')->value('setting_value')
+                            ?? CompanySetting::query()->forCompany($this->companyId())->where('setting_key', 'currency')->value('setting_value')
+                            ?? 'CLP',
+                        'opening_balance' => 0,
+                        'is_active' => true,
+                    ]
                 );
 
                 $sourceType = $this->sourceType($this->get($row, ['Tipo Documento Origen']));
