@@ -90,6 +90,7 @@ return [
         'section' => 'Operación',
         'model' => Project::class,
         'display' => 'name',
+        'vigent_status_codes' => ['active', 'EN_EJECUCION'],
         'fields' => [
             'code' => ['label' => 'Codigo', 'type' => 'text'],
             'client_id' => ['label' => 'Cliente', 'type' => 'relation', 'model' => Client::class, 'display' => 'legal_name'],
@@ -234,7 +235,7 @@ return [
             'hourly_rate_unit_type' => ['label' => 'Unidad valor HH', 'type' => 'select', 'options' => ['UF' => 'UF', 'CURRENCY' => 'Moneda'], 'col' => 'col-12 col-md-6 col-xl-3'],
             'hourly_rate_currency_id' => ['label' => 'Moneda valor HH', 'type' => 'relation', 'model' => Currency::class, 'display' => 'name', 'col' => 'col-12 col-md-6 col-xl-3'],
             'hourly_value' => ['label' => 'Valor HH', 'type' => 'money', 'currency_field' => 'hourly_rate_display_currency', 'col' => 'col-12 col-md-6 col-xl-3'],
-            'project_value' => ['label' => 'Valor proyecto', 'type' => 'money', 'col' => 'col-12 col-md-6 col-xl-3'],
+            'project_value' => ['label' => 'Monto pactado asignación', 'type' => 'money', 'col' => 'col-12 col-md-6 col-xl-3', 'help' => 'Monto fijo pactado con esta persona por su participación en el proyecto. Se usa como base de remuneración cuando la modalidad es por proyecto. No corresponde al valor de venta del proyecto.'],
             'monthly_hours' => ['label' => 'Horas mensuales', 'type' => 'number', 'presentation' => 'hours', 'col' => 'col-12 col-md-6 col-xl-3'],
             'cost_center_id' => ['label' => 'Centro costo', 'type' => 'relation', 'model' => CostCenter::class, 'display' => 'name', 'col' => 'col-12 col-md-6 col-xl-4'],
             'start_date' => ['label' => 'Fecha inicio', 'type' => 'date', 'col' => 'col-12 col-md-6 col-xl-3'],

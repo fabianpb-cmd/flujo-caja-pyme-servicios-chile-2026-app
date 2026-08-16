@@ -72,8 +72,11 @@ assert_zip_contains() {
   local zip_file="$1"
   local expected="$2"
   local label="$3"
+  local entries
 
-  if ! unzip -Z1 "$zip_file" | grep -Fxq "$expected"; then
+  entries="$(unzip -Z1 "$zip_file")"
+
+  if ! grep -Fxq "$expected" <<<"$entries"; then
     echo "$label debe contener $expected" >&2
     exit 1
   fi

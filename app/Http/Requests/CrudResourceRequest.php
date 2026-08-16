@@ -334,7 +334,7 @@ class CrudResourceRequest extends FormRequest
 
         return match (get_class($related)) {
             \App\Models\Client::class => $this->statusCode($related, 'clientStatus') === 'active',
-            \App\Models\Project::class => $this->statusCode($related, 'projectStatus') === 'active',
+            \App\Models\Project::class => \App\Models\Project::isVigentStatusCode($this->statusCode($related, 'projectStatus')),
             \App\Models\Person::class => $this->statusCode($related, 'workerStatus') === 'active',
             \App\Models\ProjectAssignment::class => $this->statusCode($related, 'assignmentStatus') === 'active',
             default => true,

@@ -129,15 +129,6 @@
             'Los datos desactivados históricamente se mantienen para trazabilidad.',
         ],
     ],
-    'assignments' => [
-        'title' => '¿Cómo completar la asignación?',
-        'bullets' => [
-            'Seleccione persona, cliente y proyecto relacionados.',
-            'La vigencia controla qué operaciones la pueden reutilizar.',
-            'La tarifa HH puede pactarse en UF o en moneda.',
-            'Solo registros vigentes pueden asignarse a nuevas operaciones.',
-        ],
-    ],
     'time-entries' => [
         'title' => '¿Cómo registrar horas?',
         'bullets' => [
@@ -157,6 +148,15 @@
             'Las ventas del proyecto respetan la moneda definida para éste.',
             'Solo registros vigentes pueden asignarse a nuevas operaciones.',
             'Las relaciones históricas se conservan aunque posteriormente queden inactivas.',
+        ],
+    ],
+    'assignments' => [
+        'title' => '¿Cómo completar la asignación?',
+        'bullets' => [
+            'Define cómo se remunera la participación de esta persona en el proyecto.',
+            'Si el acuerdo es por hora, completa Valor HH.',
+            'Si existe un monto fijo por toda la participación o por un hito, completa Monto pactado asignación.',
+            'Normalmente se utiliza una modalidad u otra. Si completas ambas, revisa que corresponda al acuerdo contractual.',
         ],
     ],
 ])
@@ -195,9 +195,10 @@
         'project_id' => 'Proyecto al que se asigna la persona.',
         'start_date' => 'Inicio de vigencia de la asignación.',
         'end_date' => 'Déjela vacía mientras la asignación permanezca vigente.',
-        'hourly_rate_unit_type' => 'Unidad en que se pactó la tarifa por hora.',
-        'hourly_value' => 'Tarifa por hora expresada en la unidad seleccionada.',
-        'project_value' => 'Valor contractual o referencial del proyecto, expresado en la unidad indicada.',
+        'hourly_rate_unit_type' => 'Moneda o unidad utilizada para valorizar la hora de esta persona en el proyecto.',
+        'hourly_value' => 'Valor pactado por cada hora imputada al proyecto.',
+        'project_value' => 'Monto fijo pactado con esta persona por su participación en el proyecto. No corresponde al valor de venta del proyecto.',
+        'monthly_hours' => 'Horas mensuales estimadas o comprometidas para esta asignación.',
     ],
     'time-entries' => [
         'person_id' => 'Persona que registra las horas.',
@@ -258,6 +259,19 @@
 @php($timeEntryRatePreviewAmount = data_get($timeEntryRatePreview, 'amount'))
 @php($timeEntryRatePreviewDisplay = $timeEntryRatePreviewAmount !== null ? \App\Support\UiFormatter::formatNumber($timeEntryRatePreviewAmount, $timeEntryRatePreviewDecimals) : null)
 @php($timeEntryRatePreviewSource = data_get($timeEntryRatePreview, 'source_label'))
+@php($assignmentSelectedProjectId = $resource === 'assignments' ? old('project_id', $item->project_id ?? null) : null)
+@php($assignmentSelectedProject = $assignmentSelectedProjectId !== null ? ($options['project_id'][$assignmentSelectedProjectId] ?? null) : null)
+@php($assignmentProjectSaleNet = data_get($assignmentSelectedProject, 'project_sale_net'))
+@php($assignmentProjectSaleCurrencyCode = data_get($assignmentSelectedProject, 'project_sale_currency_code', 'CLP'))
+@php($assignmentProjectSaleCurrencySymbol = data_get($assignmentSelectedProject, 'project_sale_currency_symbol', '$'))
+@php($assignmentProjectSaleMinorUnits = (int) data_get($assignmentSelectedProject, 'project_sale_minor_units', 0))
+@php($assignmentProjectSaleDisplay = $assignmentSelectedProject !== null && $assignmentProjectSaleNet !== null
+    ? \App\Support\UiFormatter::formatMoney($assignmentProjectSaleNet, $assignmentProjectSaleCurrencyCode)
+    : null)
+@php($assignmentHourlyValue = old('hourly_value', $item->hourly_value ?? null))
+@php($assignmentProjectValue = old('project_value', $item->project_value ?? null))
+@php($assignmentHasBothValues = is_numeric($assignmentHourlyValue) && (float) $assignmentHourlyValue > 0 && is_numeric($assignmentProjectValue) && (float) $assignmentProjectValue > 0)
+@php($assignmentProjectExceedsSale = $assignmentProjectSaleNet !== null && is_numeric($assignmentProjectValue) && (float) $assignmentProjectValue > (float) $assignmentProjectSaleNet)
 @php($payrollDependentOnly = $payrollViewMeta['dependent_only_fields'] ?? [])
 @php($payrollHonorariosOnly = $payrollViewMeta['honorarios_only_fields'] ?? [])
 @php($payrollDisplayValue = function (string $field, array $definition, mixed $value) use ($item) {
@@ -723,6 +737,42 @@
                                         >{{ $label }}</option>
                                     @endforeach
                                 </select>
+                            @elseif ($resource === 'assignments' && $field === 'project_id')
+                                @php($assignmentProjectValue = old('project_id', $item->project_id ?? ''))
+                                <select
+                                    id="{{ $field }}"
+                                    name="{{ $field }}"
+                                    class="form-select"
+                                    data-assignments-project-select="true"
+                                >
+                                    <option value="">Seleccione</option>
+                                    @foreach (($options[$field] ?? []) as $key => $option)
+                                        @php($label = is_array($option) ? $option['label'] : $option)
+                                        @php($parentId = is_array($option) ? ($option['parent_id'] ?? null) : null)
+                                        <option
+                                            value="{{ $key }}"
+                                            @selected((string) $assignmentProjectValue === (string) $key)
+                                            @if($parentId) data-parent-id="{{ $parentId }}" @endif
+                                            @if(is_array($option))
+                                                data-project-sale-net="{{ $option['project_sale_net'] ?? '' }}"
+                                                data-project-sale-currency-code="{{ $option['project_sale_currency_code'] ?? '' }}"
+                                                data-project-sale-currency-symbol="{{ $option['project_sale_currency_symbol'] ?? '' }}"
+                                                data-project-sale-minor-units="{{ $option['project_sale_minor_units'] ?? '' }}"
+                                            @endif
+                                        >{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                                <div class="small mt-1 text-muted" data-assignments-project-sale-net>
+                                    {{ $assignmentProjectSaleDisplay ? 'Venta neta proyecto: '.$assignmentProjectSaleDisplay : 'Seleccione un proyecto para ver la venta neta de referencia.' }}
+                                </div>
+                                <div class="mt-2 {{ $assignmentHasBothValues || $assignmentProjectExceedsSale ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-assignments-warning-box>
+                                    <div class="{{ $assignmentHasBothValues ? '' : 'd-none' }}" data-assignments-warning-double>
+                                        Se ingresó una tarifa por hora y un monto fijo. Verifique que ambas condiciones correspondan al acuerdo para evitar duplicidad en la remuneración.
+                                    </div>
+                                    <div class="{{ $assignmentProjectExceedsSale ? '' : 'd-none' }} mt-1" data-assignments-warning-sale>
+                                        El monto pactado de esta asignación supera la venta neta del proyecto. Revise el impacto económico antes de guardar.
+                                    </div>
+                                </div>
                             @elseif ($resource === 'time-entries' && $field === 'person_id')
                                 <select
                                     id="{{ $field }}"
@@ -770,68 +820,7 @@
                                     <input type="hidden" name="hourly_rate_currency_id" value="{{ $selectedRateUnitType === 'UF' ? '' : $selectedRateCurrencyId }}" data-rate-currency-field>
                                 </div>
                             @else
-                                @if (($definition['readonly'] ?? false) === true)
-                                    <input id="{{ $field }}" class="form-control" value="{{ $genericDisplayValue($field, $definition, $value) }}" readonly aria-readonly="true">
-                                @elseif ($type === 'textarea')
-                                    <textarea id="{{ $field }}" name="{{ $field }}" class="form-control" rows="3">{{ $value }}</textarea>
-                                @elseif ($type === 'select')
-                                    <select id="{{ $field }}" name="{{ $field }}" class="form-select">
-                                        <option value="">Seleccione</option>
-                                        @foreach (($definition['options'] ?? []) as $key => $label)
-                                            <option value="{{ $key }}" @selected((string) $value === (string) $key)>{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-                                @elseif ($type === 'relation')
-                                    <select
-                                        id="{{ $field }}"
-                                        name="{{ $field }}"
-                                        class="form-select"
-                                        @if(isset($definition['depends_on']))
-                                            data-dependent-select="true"
-                                            data-parent-field="{{ $definition['depends_on'] }}"
-                                            data-placeholder-default="Seleccione"
-                                            data-placeholder-parent="{{ $definition['depends_on'] === 'client_id' ? 'Seleccione un cliente primero' : ($definition['depends_on'] === 'expense_category_id' ? 'Seleccione una categoría primero' : 'Seleccione un valor padre primero') }}"
-                                            data-placeholder-empty="{{ $field === 'project_id' ? 'No hay proyectos para este cliente' : ($field === 'expense_subcategory_id' ? 'No hay subcategorías para esta categoría' : 'No hay opciones disponibles') }}"
-                                        @endif
-                                    >
-                                        <option value="">Seleccione</option>
-                                        @foreach (($options[$field] ?? []) as $key => $option)
-                                            @php($label = is_array($option) ? $option['label'] : $option)
-                                            @php($parentId = is_array($option) ? ($option['parent_id'] ?? null) : null)
-                                            <option value="{{ $key }}" @selected((string) $value === (string) $key) @if($parentId) data-parent-id="{{ $parentId }}" @endif>{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-                                @else
-                                    @php($displayValue = $type === 'date' ? ($value ? \App\Support\UiFormatter::formatDate($value) : null) : ($value instanceof \Carbon\CarbonInterface ? $value->format('Y-m-d') : $value))
-                                    @php($inputType = (($definition['presentation'] ?? null) === 'phone' || $field === 'phone_country_code') ? 'tel' : (in_array($type, ['email', 'number'], true) ? $type : 'text'))
-                                    @if ($sharedRateUnitFields && in_array($field, ['hourly_value', 'project_value'], true))
-                                        <div class="input-group">
-                                            <span class="input-group-text rate-unit-chip" data-rate-unit-prefix-for="{{ $field }}">{{ $selectedRateUnitPrefix }}</span>
-                                            <input
-                                                id="{{ $field }}"
-                                                name="{{ $field }}"
-                                                type="{{ $inputType }}"
-                                                class="form-control"
-                                                value="{{ $displayValue }}"
-                                                @if ($type === 'date') placeholder="dd/mm/yyyy" inputmode="numeric" @endif
-                                                @if (($definition['presentation'] ?? null) === 'rut') placeholder="12.345.678-5" @endif
-                                                @if (($definition['presentation'] ?? null) === 'phone') placeholder="+56 9 1234 5678" @endif
-                                            >
-                                        </div>
-                                    @else
-                                        <input
-                                            id="{{ $field }}"
-                                            name="{{ $field }}"
-                                            type="{{ $inputType }}"
-                                            class="form-control"
-                                            value="{{ $displayValue }}"
-                                        @if ($type === 'date') placeholder="dd/mm/yyyy" inputmode="numeric" @endif
-                                        @if (($definition['presentation'] ?? null) === 'rut') placeholder="12.345.678-5" @endif
-                                        @if (($definition['presentation'] ?? null) === 'phone') placeholder="+56 9 1234 5678" @endif
-                                        @if (($definition['presentation'] ?? null) === 'rut') data-rut-field="true" autocomplete="off" @endif
-                                    >
-                                    @endif
-                                @endif
+                                @include('operational.partials.field-input')
                             @endif
                             @error($field)
                                 <div class="text-danger small mt-1">{{ $message }}</div>
@@ -1324,6 +1313,81 @@
         timeEntryDateInput?.addEventListener('change', syncTimeEntryProjects);
         timeEntryDateInput?.addEventListener('blur', syncTimeEntryProjects);
         syncTimeEntryProjects();
+
+        const assignmentProjectSelect = form.querySelector('[data-assignments-project-select="true"]');
+        const assignmentProjectSaleNet = form.querySelector('[data-assignments-project-sale-net]');
+        const assignmentWarningBox = form.querySelector('[data-assignments-warning-box]');
+        const assignmentWarningDouble = form.querySelector('[data-assignments-warning-double]');
+        const assignmentWarningSale = form.querySelector('[data-assignments-warning-sale]');
+        const assignmentHourlyInput = form.querySelector('#hourly_value');
+        const assignmentProjectInput = form.querySelector('#project_value');
+
+        const parseAssignmentNumber = (value) => {
+            if (value === null || value === undefined || value === '') {
+                return null;
+            }
+
+            const normalized = String(value).replace(/\s+/g, '').replace(',', '.');
+            const parsed = Number(normalized);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const formatAssignmentMoney = (value, currencyCode = 'CLP', decimals = 0) => {
+            if (value === null || value === undefined || value === '') {
+                return '';
+            }
+
+            const code = String(currencyCode || 'CLP').toUpperCase();
+            const symbol = {
+                CLP: '$',
+                UF: 'UF',
+                USD: 'US$',
+                EUR: '€',
+            }[code] || code;
+
+            return `${symbol} ${new Intl.NumberFormat('es-CL', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+            }).format(Number(value))}`;
+        };
+
+        const syncAssignmentContext = () => {
+            if (!assignmentProjectSelect || !assignmentProjectSaleNet || !assignmentWarningBox) {
+                return;
+            }
+
+            const option = assignmentProjectSelect.options[assignmentProjectSelect.selectedIndex];
+            const saleNetRaw = option?.dataset?.projectSaleNet || '';
+            const saleCurrencyCode = option?.dataset?.projectSaleCurrencyCode || 'CLP';
+            const saleCurrencySymbol = option?.dataset?.projectSaleCurrencySymbol || (saleCurrencyCode === 'CLP' ? '$' : saleCurrencyCode);
+            const saleMinorUnits = Number.parseInt(option?.dataset?.projectSaleMinorUnits || '0', 10);
+            const saleNet = parseAssignmentNumber(saleNetRaw);
+            const saleText = saleNet !== null
+                ? `Venta neta proyecto: ${formatAssignmentMoney(saleNet, saleCurrencyCode, Number.isNaN(saleMinorUnits) ? 0 : saleMinorUnits)}`
+                : 'Seleccione un proyecto para ver la venta neta de referencia.';
+
+            assignmentProjectSaleNet.textContent = saleNet !== null ? saleText : saleText;
+
+            const hourlyValue = parseAssignmentNumber(assignmentHourlyInput?.value);
+            const projectValue = parseAssignmentNumber(assignmentProjectInput?.value);
+            const hasBothValues = (hourlyValue ?? 0) > 0 && (projectValue ?? 0) > 0;
+            const exceedsSaleNet = saleNet !== null && projectValue !== null && projectValue > saleNet;
+
+            if (assignmentWarningDouble) {
+                assignmentWarningDouble.classList.toggle('d-none', !hasBothValues);
+            }
+
+            if (assignmentWarningSale) {
+                assignmentWarningSale.classList.toggle('d-none', !exceedsSaleNet);
+            }
+
+            assignmentWarningBox.classList.toggle('d-none', !hasBothValues && !exceedsSaleNet);
+        };
+
+        assignmentProjectSelect?.addEventListener('change', syncAssignmentContext);
+        assignmentHourlyInput?.addEventListener('input', syncAssignmentContext);
+        assignmentProjectInput?.addEventListener('input', syncAssignmentContext);
+        syncAssignmentContext();
     })();
 </script>
 @endpush

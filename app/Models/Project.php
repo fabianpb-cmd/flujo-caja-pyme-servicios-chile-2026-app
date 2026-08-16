@@ -14,6 +14,18 @@ class Project extends Model
     use GuardsSensitiveAttributes;
     use HasFunctionalCode;
 
+    public static function vigentStatusCodes(): array
+    {
+        return config('operational.projects.vigent_status_codes', ['active']);
+    }
+
+    public static function isVigentStatusCode(?string $code): bool
+    {
+        $normalized = strtolower(trim((string) $code));
+
+        return in_array($normalized, array_map(fn (string $statusCode): string => strtolower(trim($statusCode)), static::vigentStatusCodes()), true);
+    }
+
     protected $guarded = ['company_id', 'code', 'vat_rate', 'sale_total'];
 
     protected function casts(): array

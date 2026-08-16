@@ -450,6 +450,16 @@ class OperationalCrudController extends Controller
                     ];
                 }
 
+                if ($resource === 'assignments' && $field === 'project_id' && $record instanceof \App\Models\Project) {
+                    $record->loadMissing(['client', 'salesCurrency']);
+                    $payload += [
+                        'project_sale_net' => $record->sale_net,
+                        'project_sale_currency_code' => $record->salesCurrency?->code ?: 'CLP',
+                        'project_sale_currency_symbol' => $record->salesCurrency?->symbol ?: '$',
+                        'project_sale_minor_units' => $record->salesCurrency?->minor_units ?? 0,
+                    ];
+                }
+
                 if ($resource === 'payroll-records' && $field === 'project_id') {
                     $ranges = \App\Models\ProjectAssignment::query()
                         ->where('company_id', $record->company_id)
@@ -549,7 +559,7 @@ class OperationalCrudController extends Controller
 
         match ($modelClass) {
             \App\Models\Client::class => $query->whereHas('clientStatus', fn ($builder) => $builder->where('code', 'active')),
-            \App\Models\Project::class => $query->whereHas('projectStatus', fn ($builder) => $builder->where('code', 'active')),
+            \App\Models\Project::class => $query->whereHas('projectStatus', fn ($builder) => $builder->whereIn('code', \App\Models\Project::vigentStatusCodes())),
             \App\Models\Person::class => $query->whereHas('workerStatus', fn ($builder) => $builder->where('code', 'active')),
             \App\Models\ProjectAssignment::class => $query->whereHas('assignmentStatus', fn ($builder) => $builder->where('code', 'active')),
             default => null,
@@ -580,7 +590,7 @@ class OperationalCrudController extends Controller
 
         $statusOk = match ($record::class) {
             \App\Models\Client::class => strtolower((string) $record->clientStatus?->code) === 'active',
-            \App\Models\Project::class => strtolower((string) $record->projectStatus?->code) === 'active',
+            \App\Models\Project::class => \App\Models\Project::isVigentStatusCode($record->projectStatus?->code),
             \App\Models\Person::class => strtolower((string) $record->workerStatus?->code) === 'active',
             \App\Models\ProjectAssignment::class => strtolower((string) $record->assignmentStatus?->code) === 'active',
             default => true,

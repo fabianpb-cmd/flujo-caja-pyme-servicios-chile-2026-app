@@ -183,6 +183,60 @@ class OperationalUiTest extends TestCase
         $response->assertDontSee('Moneda valor HH');
     }
 
+    public function test_assignments_accept_projects_in_execution_for_the_selected_client(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-EXEC',
+            'legal_name' => 'Cliente Ejecución',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-EXEC',
+            'first_names' => 'Proyecto',
+            'paternal_surname' => 'Ejecución',
+            'name' => 'Proyecto Ejecución',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-EXEC',
+            'name' => 'Proyecto En Ejecución',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $form = $this->actingAs($admin)->get(route('operational.create', 'assignments'));
+
+        $form->assertOk();
+        $form->assertSee('Proyecto En Ejecución');
+        $form->assertSee('data-parent-id="'.$project->id.'"', false);
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'assignments'), [
+            'code' => 'ASI-EXEC',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $response->assertRedirect(route('operational.index', 'assignments'));
+        $this->assertDatabaseHas('project_assignments', [
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-EXEC',
+        ]);
+    }
+
     public function test_time_entries_use_assignment_or_project_rate_and_show_unit_readonly(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
