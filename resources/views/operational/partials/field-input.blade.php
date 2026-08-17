@@ -1,16 +1,17 @@
 @php
     $renderedFieldInput = null;
+    $fieldErrorClass = $errors->has($field) ? ' is-invalid' : '';
 
     if (($definition['readonly'] ?? false) === true) {
-        $renderedFieldInput = '<input id="'.e($field).'" class="form-control" value="'.e($genericDisplayValue($field, $definition, $value)).'" readonly aria-readonly="true">';
+        $renderedFieldInput = '<input id="'.e($field).'" class="form-control'.e($fieldErrorClass).'" value="'.e($genericDisplayValue($field, $definition, $value)).'" readonly aria-readonly="true">';
     } elseif ($type === 'textarea') {
-        $renderedFieldInput = '<textarea id="'.e($field).'" name="'.e($field).'" class="form-control" rows="3">'.e($value).'</textarea>';
+        $renderedFieldInput = '<textarea id="'.e($field).'" name="'.e($field).'" class="form-control'.e($fieldErrorClass).'" rows="3">'.e($value).'</textarea>';
     } elseif ($type === 'select') {
         $optionsHtml = '<option value="">Seleccione</option>';
         foreach (($definition['options'] ?? []) as $key => $label) {
             $optionsHtml .= '<option value="'.e($key).'"'.((string) $value === (string) $key ? ' selected' : '').'>'.e($label).'</option>';
         }
-        $renderedFieldInput = '<select id="'.e($field).'" name="'.e($field).'" class="form-select">'.$optionsHtml.'</select>';
+        $renderedFieldInput = '<select id="'.e($field).'" name="'.e($field).'" class="form-select'.e($fieldErrorClass).'">'.$optionsHtml.'</select>';
     } elseif ($type === 'relation') {
         $relationAttributes = '';
         if (isset($definition['depends_on'])) {
@@ -25,7 +26,7 @@
             $optionsHtml .= '<option value="'.e($key).'"'.$optionAttributes.'>'.e($label).'</option>';
         }
 
-        $renderedFieldInput = '<select id="'.e($field).'" name="'.e($field).'" class="form-select"'.$relationAttributes.'>'.$optionsHtml.'</select>';
+        $renderedFieldInput = '<select id="'.e($field).'" name="'.e($field).'" class="form-select'.e($fieldErrorClass).'"'.$relationAttributes.'>'.$optionsHtml.'</select>';
     } elseif ($resource === 'assignments' && in_array($field, ['hourly_value', 'project_value', 'monthly_hours'], true)) {
         $displayValue = $type === 'date' ? ($value ? \App\Support\UiFormatter::formatDate($value) : null) : ($value instanceof \Carbon\CarbonInterface ? $value->format('Y-m-d') : $value);
         $renderedFieldInput = view('operational.partials.assignment-numeric-field', [
@@ -57,7 +58,7 @@
             $inputExtraAttributes .= ' placeholder="+56 9 1234 5678"';
         }
 
-        $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="'.e($inputType).'" class="form-control" value="'.e($displayValue).'"'.$inputExtraAttributes.'>';
+        $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="'.e($inputType).'" class="form-control'.e($fieldErrorClass).'" value="'.e($displayValue).'"'.$inputExtraAttributes.'>';
     }
 @endphp
 

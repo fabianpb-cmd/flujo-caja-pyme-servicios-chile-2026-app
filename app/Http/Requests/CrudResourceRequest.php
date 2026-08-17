@@ -107,6 +107,28 @@ class CrudResourceRequest extends FormRequest
         return $rules;
     }
 
+    public function attributes(): array
+    {
+        $config = config('operational.'.$this->route('resource').'.fields', []);
+
+        return collect($config)
+            ->mapWithKeys(fn (array $definition, string $field): array => [$field => $definition['label'] ?? $field])
+            ->all();
+    }
+
+    public function messages(): array
+    {
+        return match ((string) $this->route('resource')) {
+            'assignments' => [
+                'start_date.required_with' => 'La fecha inicio es obligatoria cuando se informa la fecha término.',
+                'end_date.required_with' => 'La fecha término es obligatoria cuando se informa la fecha inicio.',
+                'end_date.after_or_equal' => 'La fecha término debe ser igual o posterior a la fecha inicio.',
+                'monthly_hours.max' => 'Horas mensuales no puede superar 744.',
+            ],
+            default => [],
+        };
+    }
+
     protected function prepareForValidation(): void
     {
         $config = config('operational.'.$this->route('resource').'.fields', []);
@@ -450,7 +472,7 @@ class CrudResourceRequest extends FormRequest
         return match ($resource) {
             'assignments' => [
                 'hourly_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('hourly_value', 'El valor HH')],
-                'project_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('project_value', 'El monto pactado asignación')],
+                'project_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('project_value', 'El monto pactado de la asignación')],
                 'monthly_hours' => ['type' => 'unsignedSmallInteger', 'max' => 65535, 'label' => $labels('monthly_hours', 'Las horas mensuales')],
             ],
             default => [],

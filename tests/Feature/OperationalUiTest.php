@@ -222,22 +222,32 @@ class OperationalUiTest extends TestCase
         $response = $this->actingAs($admin)->get(route('operational.create', 'assignments'));
 
         $response->assertOk();
-        $response->assertSeeText('Unidad valor HH');
+        $response->assertSeeText('Nueva asignación');
+        $response->assertSeeText('Operación / Asignaciones / Nueva asignación');
+        $response->assertDontSeeText('Nuevo Asignaciones');
+        $response->assertSeeText('Unidad del valor HH');
         $response->assertSeeText('Valor HH');
-        $response->assertSeeText('Monto pactado asignación');
+        $response->assertSeeText('Monto pactado de la asignación');
         $response->assertSeeText('Horas mensuales');
         $response->assertSeeText('Fecha inicio');
-        $response->assertSeeText('Fecha termino');
+        $response->assertSeeText('Fecha término');
+        $response->assertSeeText('Centro de costo');
         $response->assertSee('data-bs-toggle="tooltip"', false);
-        $response->assertSeeText('Usa Valor HH cuando el acuerdo se paga por hora registrada al proyecto.');
-        $response->assertSeeText('Usa Monto pactado asignación cuando existe un monto fijo para toda la participación o para un hito.');
-        $response->assertSeeText('Si dejas un monto en 0,00 el sistema lo interpreta como cero y no como una segunda modalidad activa.');
-        $response->assertSeeText('Si completas Valor HH y Monto pactado asignación, el sistema mostrará una advertencia para que verifiques el acuerdo contractual.');
+        $response->assertSeeText('Los cálculos financieros asociados se actualizan al guardar.');
+        $response->assertSeeText('Usa Valor HH cuando el acuerdo considera una tarifa por cada hora de trabajo registrada.');
+        $response->assertSeeText('Usa Monto pactado de la asignación cuando existe un monto fijo para la participación o para un hito acordado.');
+        $response->assertSeeText('Un valor 0,00 significa que esa modalidad no se utilizará en la asignación.');
+        $response->assertSeeText('Si completas Valor HH y Monto pactado de la asignación, el sistema mostrará una advertencia para que revises el acuerdo contractual.');
+        $response->assertSeeText('Las fechas corresponden a la vigencia de la asignación y pueden diferir de las del proyecto, pero se advertirá si quedan fuera de su rango.');
+        $response->assertSeeText('Referencia del proyecto');
+        $response->assertSeeText('Venta neta proyecto: Seleccione un proyecto.');
+        $response->assertSeeText('Vigencia proyecto: Seleccione un proyecto.');
         $response->assertSee('data-project-start-date="2026-08-01"', false);
         $response->assertSee('data-project-end-date="2026-09-30"', false);
         $response->assertSee('syncAssignmentContext();', false);
         $response->assertSee('assignmentStartInput?.addEventListener(\'input\', syncAssignmentContext);', false);
         $response->assertSee('assignmentEndInput?.addEventListener(\'input\', syncAssignmentContext);', false);
+        $response->assertDontSee('data-assignments-warning-box', false);
     }
 
     public function test_assignments_bind_reactive_warnings_to_the_operational_form(): void
@@ -282,7 +292,7 @@ class OperationalUiTest extends TestCase
             'hourly_rate_unit_type' => 'UF',
             'hourly_value' => 0.5,
             'project_value' => 190,
-            'monthly_hours' => 1000,
+            'monthly_hours' => 160,
             'start_date' => '2026-08-01',
         ]);
 
@@ -297,12 +307,17 @@ class OperationalUiTest extends TestCase
         $create->assertSee('assignmentProjectSelect?.addEventListener(\'change\', syncAssignmentContext);', false);
         $create->assertSee('assignmentStartInput?.addEventListener(\'input\', syncAssignmentContext);', false);
         $create->assertSee('assignmentEndInput?.addEventListener(\'input\', syncAssignmentContext);', false);
+        $create->assertSee('data-assignments-tariff-warning-box', false);
+        $create->assertSee('data-assignments-vigency-warning-box', false);
+        $create->assertDontSee('data-assignments-warning-box', false);
 
         $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
         $edit->assertOk();
         $edit->assertSee('Se ingresó una tarifa por hora y un monto fijo.', false);
-        $edit->assertSee('El monto pactado de esta asignación supera la venta neta del proyecto.', false);
-        $edit->assertSee('data-assignments-warning-box', false);
+        $edit->assertSee('El monto pactado de la asignación supera la venta neta del proyecto.', false);
+        $edit->assertSee('data-assignments-tariff-warning-box', false);
+        $edit->assertSee('data-assignments-vigency-warning-box', false);
+        $edit->assertDontSee('data-assignments-warning-box', false);
     }
 
     public function test_assignments_validate_schema_limits_before_persisting_and_preserve_selected_project_context(): void
@@ -366,11 +381,12 @@ class OperationalUiTest extends TestCase
             ]);
 
         $response->assertOk();
-        $response->assertSee('Horas mensuales no puede superar 65535.');
+        $response->assertSee('Horas mensuales no puede superar 744.');
         $response->assertSee('value="000000"', false);
         $response->assertSee('Venta neta proyecto: UF 160,00');
-        $response->assertSee('Vigencia proyecto:', false);
+        $response->assertSee('Vigencia proyecto: No informada');
         $response->assertSee('<div class="d-none" data-assignments-warning-double>', false);
+        $response->assertSee('max="744"', false);
 
         $this->assertDatabaseMissing('project_assignments', [
             'company_id' => $company->id,
@@ -463,16 +479,15 @@ class OperationalUiTest extends TestCase
 
         $startEdit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $startOutside->id]));
         $startEdit->assertOk();
-        $startEdit->assertSee('La asignación inicia antes del proyecto seleccionado.');
+        $startEdit->assertSee('La vigencia de la asignación inicia antes de la vigencia del proyecto seleccionado.');
 
         $endEdit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $endOutside->id]));
         $endEdit->assertOk();
-        $endEdit->assertSee('La asignación termina después del proyecto seleccionado.');
+        $endEdit->assertSee('La vigencia de la asignación termina después de la vigencia del proyecto seleccionado.');
 
         $bothEdit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $bothOutside->id]));
         $bothEdit->assertOk();
-        $bothEdit->assertSee('La asignación inicia antes del proyecto seleccionado.');
-        $bothEdit->assertSee('La asignación termina después del proyecto seleccionado.');
+        $bothEdit->assertSee('La vigencia de la asignación inicia antes y termina después de la vigencia del proyecto seleccionado.');
     }
 
     public function test_assignments_reject_inverted_date_ranges_with_standard_validation(): void
@@ -528,7 +543,7 @@ class OperationalUiTest extends TestCase
         ]);
     }
 
-    public function test_assignments_accept_schema_maximum_supported_values(): void
+    public function test_assignments_accept_physical_monthly_hours_limit(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
 
@@ -568,7 +583,7 @@ class OperationalUiTest extends TestCase
             'hourly_rate_unit_type' => 'UF',
             'hourly_value' => '9999999999999999.99',
             'project_value' => '0',
-            'monthly_hours' => '65535',
+            'monthly_hours' => '744',
             'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
         ]);
 
@@ -577,7 +592,109 @@ class OperationalUiTest extends TestCase
         $this->assertDatabaseHas('project_assignments', [
             'company_id' => $company->id,
             'code' => 'ASI-LIMIT-OK',
-            'monthly_hours' => 65535,
+            'monthly_hours' => 744,
+        ]);
+    }
+
+    public function test_assignments_reject_monthly_hours_above_physical_limit(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-HOURS',
+            'legal_name' => 'Cliente Horas',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-HOURS',
+            'first_names' => 'Horas',
+            'paternal_surname' => 'Máximas',
+            'name' => 'Horas Máximas',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-HOURS',
+            'name' => 'Proyecto Horas',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        foreach (['745', '10000'] as $hours) {
+            $response = $this->actingAs($admin)
+                ->from(route('operational.create', 'assignments'))
+                ->post(route('operational.store', 'assignments'), [
+                    'code' => 'ASI-HOURS-'.$hours,
+                    'person_id' => $person->id,
+                    'client_id' => $client->id,
+                    'project_id' => $project->id,
+                    'hourly_rate_unit_type' => 'UF',
+                    'hourly_value' => '1.25',
+                    'project_value' => '0',
+                    'monthly_hours' => $hours,
+                    'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+                ]);
+
+            $response->assertSessionHasErrors([
+                'monthly_hours' => 'Horas mensuales no puede superar 744.',
+            ]);
+        }
+    }
+
+    public function test_assignments_allow_monthly_hours_as_reference_without_hourly_value(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-REF-HOURS',
+            'legal_name' => 'Cliente Referencia Horas',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REF-HOURS',
+            'first_names' => 'Referencia',
+            'paternal_surname' => 'Horas',
+            'name' => 'Referencia Horas',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-REF-HOURS',
+            'name' => 'Proyecto Referencia Horas',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'assignments'), [
+            'code' => 'ASI-REF-HOURS',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'project_value' => '0',
+            'monthly_hours' => '160',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $response->assertRedirect(route('operational.index', 'assignments'));
+
+        $this->assertDatabaseHas('project_assignments', [
+            'company_id' => $company->id,
+            'code' => 'ASI-REF-HOURS',
+            'monthly_hours' => 160,
         ]);
     }
 
@@ -632,6 +749,147 @@ class OperationalUiTest extends TestCase
             'person_id' => $person->id,
             'project_id' => $project->id,
             'code' => 'ASI-EXEC',
+        ]);
+    }
+
+    public function test_assignments_reject_projects_from_another_client_on_backend(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        [$clientA, $clientB, $projectA, $projectB] = $this->clientProjectFixtures($company->id);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-CLIENT',
+            'first_names' => 'Cliente',
+            'paternal_surname' => 'Inconsistente',
+            'name' => 'Cliente Inconsistente',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'assignments'), [
+            'code' => 'ASI-CLIENT-MISMATCH',
+            'person_id' => $person->id,
+            'client_id' => $clientA->id,
+            'project_id' => $projectB->id,
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $response->assertSessionHasErrors([
+            'project_id' => 'El proyecto seleccionado no pertenece al cliente indicado.',
+        ]);
+
+        $this->assertDatabaseMissing('project_assignments', [
+            'company_id' => $company->id,
+            'code' => 'ASI-CLIENT-MISMATCH',
+        ]);
+    }
+
+    public function test_assignments_show_project_reference_as_not_informed_when_dates_are_missing(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-NODATE',
+            'legal_name' => 'Cliente Sin Fechas',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-NODATE',
+            'first_names' => 'Sin',
+            'paternal_surname' => 'Fecha',
+            'name' => 'Sin Fecha',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-NODATE',
+            'name' => 'Proyecto Sin Fechas',
+            'sale_net' => 1,
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-NODATE',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+
+        $response->assertOk();
+        $response->assertSee('Referencia del proyecto');
+        $response->assertSee('Vigencia proyecto: No informada');
+    }
+
+    public function test_assignments_require_both_dates_when_one_is_informed(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-PARTIAL-DATE',
+            'legal_name' => 'Cliente Fecha Parcial',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-PARTIAL-DATE',
+            'first_names' => 'Fecha',
+            'paternal_surname' => 'Parcial',
+            'name' => 'Fecha Parcial',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-PARTIAL-DATE',
+            'name' => 'Proyecto Fecha Parcial',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $onlyStart = $this->actingAs($admin)->post(route('operational.store', 'assignments'), [
+            'code' => 'ASI-ONLY-START',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'start_date' => '10/08/2026',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $onlyStart->assertSessionHasErrors([
+            'end_date' => 'La fecha término es obligatoria cuando se informa la fecha inicio.',
+        ]);
+
+        $onlyEnd = $this->actingAs($admin)->post(route('operational.store', 'assignments'), [
+            'code' => 'ASI-ONLY-END',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'end_date' => '10/08/2026',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $onlyEnd->assertSessionHasErrors([
+            'start_date' => 'La fecha inicio es obligatoria cuando se informa la fecha término.',
         ]);
     }
 
@@ -845,7 +1103,7 @@ class OperationalUiTest extends TestCase
             'Proyecto',
         ]);
         $this->assertHorizontalRowLabels($assignCreate->getContent(), [
-            'Unidad valor HH',
+            'Unidad del valor HH',
             'Valor HH',
         ]);
 
@@ -856,7 +1114,7 @@ class OperationalUiTest extends TestCase
             'Proyecto',
         ]);
         $this->assertHorizontalRowLabels($assignEdit->getContent(), [
-            'Unidad valor HH',
+            'Unidad del valor HH',
             'Valor HH',
         ]);
     }

@@ -27,6 +27,7 @@
     $currentRouteName = request()->route()?->getName();
     $resourceConfig = $currentResource ? config("operational.$currentResource") : null;
     $resourceTitle = $resourceConfig['title'] ?? null;
+    $resourceSingularTitle = $resourceConfig['singular_title'] ?? null;
     $navigation = [
         [
             'title' => 'Dashboard',
@@ -180,8 +181,8 @@
         $breadcrumb = null;
     } elseif (str_starts_with((string) $currentRouteName, 'operational.') && $resourceTitle) {
         $action = match ($currentRouteName) {
-            'operational.create' => 'Nuevo',
-            'operational.edit' => 'Editar',
+            'operational.create' => $resourceSingularTitle ? 'Nueva '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Nuevo',
+            'operational.edit' => $resourceSingularTitle ? 'Editar '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Editar',
             'operational.show' => 'Detalle',
             default => null,
         };
