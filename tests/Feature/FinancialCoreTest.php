@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use App\Models\CashAccount;
 use App\Models\Afp;
 use App\Models\AfpRate;
+use App\Models\Activity;
 use App\Models\AuditLog;
+use App\Models\Client;
 use App\Models\Company;
 use App\Models\CompanySetting;
+use App\Models\ApprovalStatus;
 use App\Models\Currency;
 use App\Models\ExchangeRate;
 use App\Models\ContractType;
@@ -15,7 +18,12 @@ use App\Models\ExpenseDocument;
 use App\Models\LegalParameter;
 use App\Models\MonthlyClosure;
 use App\Models\Person;
+use App\Models\PayrollRecord;
+use App\Models\Project;
+use App\Models\ProjectAssignment;
+use App\Models\RecordStatus;
 use App\Models\SalesDocument;
+use App\Models\TimeEntry;
 use App\Models\UfValue;
 use App\Models\User;
 use App\Services\CashMovementService;
@@ -172,6 +180,123 @@ class FinancialCoreTest extends TestCase
 
         $this->assertSame(15250.0, $payroll['employee_retention']);
         $this->assertSame(84750.0, $payroll['net_pay']);
+    }
+
+    public function test_payroll_uses_approved_hours_and_assignment_sources_when_available(): void
+    {
+        $client = Client::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'CLI-PRL-01',
+            'legal_name' => 'Cliente Payroll',
+            'client_status_id' => $this->statusId('client', 'active'),
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $this->company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-PRL-01',
+            'name' => 'Proyecto Payroll',
+            'project_status_id' => $this->statusId('project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId('billing', 'pending'),
+        ]);
+
+        $person = $this->person([
+            'modality' => 'Dependiente por hora',
+            'hourly_value' => 0,
+            'monthly_value' => 0,
+        ]);
+
+        $assignmentStatus = RecordStatus::query()->create([
+            'company_id' => $this->company->id,
+            'domain' => 'assignment',
+            'code' => 'active',
+            'name' => 'Activo',
+            'active' => true,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $this->company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_status_id' => $assignmentStatus->id,
+            'code' => 'ASI-PRL-01',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+            'hourly_value' => 1.30,
+            'hourly_rate_unit_type' => 'UF',
+            'project_value' => 0,
+        ]);
+
+        $approvalStatus = ApprovalStatus::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'approved',
+            'name' => 'Aprobado',
+            'active' => true,
+        ]);
+
+        $activity = Activity::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'ACT-PRL-01',
+            'name' => 'Actividad Payroll',
+            'active' => true,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HRS-PRL-01',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-12',
+            'activity' => 'Actividad Payroll',
+            'activity_id' => $activity->id,
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 1.30,
+            'calculated_amount' => 10 * 1.30,
+            'approval_status_id' => $approvalStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id]);
+
+        $this->assertSame(10.0, $payroll['hours_approved']);
+        $this->assertGreaterThan(0, $payroll['base_salary']);
+        $this->assertSame('OK', $payroll['calculation_status']);
+
+        $record = PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'REM-PRL-01',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => $payroll['hours_approved'],
+            'hourly_value' => $payroll['hourly_value'],
+            'project_value' => $payroll['project_value'],
+            'base_salary' => $payroll['base_salary'],
+            'gross_amount' => $payroll['gross_amount'],
+            'taxable_amount' => $payroll['taxable_amount'],
+            'taxable_gross' => $payroll['taxable_gross'],
+            'employee_retention' => $payroll['employee_retention'],
+            'retention_rate' => $payroll['retention_rate'],
+            'employer_cost' => $payroll['employer_cost'],
+            'net_pay' => $payroll['net_pay'],
+            'calculation_status' => $payroll['calculation_status'],
+            'calculation_notes' => $payroll['calculation_notes'],
+            'legal_snapshot' => $payroll['legal_snapshot'],
+            'status' => 'Borrador',
+        ]);
+
+        $explanation = app(PayrollService::class)->explain($record);
+        $explanationJson = json_encode($explanation, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $this->assertSame('Costo empresa', $explanation['result']['label']);
+        $this->assertStringContainsString('Horas aprobadas automáticas', $explanationJson);
+        $this->assertStringContainsString('Tarifa automática', $explanationJson);
+        $this->assertStringContainsString('ASI-PRL-01 · Proyecto Payroll', $explanationJson);
+        $this->assertStringContainsString('UF 1,30 / HH', $explanationJson);
     }
 
     public function test_dependent_payroll_calculates_afp_health_afc_and_company_cost(): void
@@ -623,6 +748,23 @@ class FinancialCoreTest extends TestCase
             'payment_term_days' => 30,
             'status' => 'active',
         ])->id;
+    }
+
+    private function statusId(string $domain, string $code): int
+    {
+        return RecordStatus::query()
+            ->firstOrCreate(
+                [
+                    'company_id' => $this->company->id,
+                    'domain' => $domain,
+                    'code' => $code,
+                ],
+                [
+                    'name' => ucfirst(str_replace('_', ' ', strtolower($code))),
+                    'active' => true,
+                ]
+            )
+            ->id;
     }
 
     private function cashData(string $code, string $sourceType, string $sourceCode, string $date, float $income, float $expense): array

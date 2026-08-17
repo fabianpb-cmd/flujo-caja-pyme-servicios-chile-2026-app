@@ -323,18 +323,8 @@ class OperationalCrudController extends Controller
 
     private function payrollRecordDefaults(int $companyId, int $personId, Carbon $period, mixed $projectId): array
     {
-        $defaults = [
-            'project_id' => null,
-            'hours_approved' => null,
-            'monthly_value' => null,
-            'hourly_value' => null,
-            'project_value' => null,
-            'health_additional' => null,
-            'bonuses' => null,
-            'non_taxable_allowances' => null,
-            'advances' => null,
-            'other_deductions' => null,
-        ];
+        $person = Person::query()->forCompany($companyId)->findOrFail($personId);
+        $defaults = $this->payroll->payrollDefaultValues($person, $period, filled($projectId) ? (int) $projectId : null);
 
         $adjustments = PayrollAdjustment::query()
             ->forCompany($companyId)
@@ -354,27 +344,12 @@ class OperationalCrudController extends Controller
                 'OTHER_DEDUCTION' => $defaults['other_deductions'] = round((float) ($defaults['other_deductions'] ?? 0) + $amount, 2),
                 'HEALTH_ADDITIONAL' => $defaults['health_additional'] = round((float) ($defaults['health_additional'] ?? 0) + $amount, 2),
                 'HOURS_APPROVED' => $defaults['hours_approved'] = round((float) ($defaults['hours_approved'] ?? 0) + $quantity, 2),
-                'MONTHLY_VALUE' => $defaults['monthly_value'] = round($amount, 2),
-                'HOURLY_VALUE' => $defaults['hourly_value'] = round($amount, 2),
-                'PROJECT_VALUE' => $defaults['project_value'] = round($amount, 2),
-                default => null,
-            };
-        });
-
-        $defaults['project_id'] = $this->payrollAutoProjectId($companyId, $personId, $period, $projectId);
-
-        $person = Person::query()->forCompany($companyId)->find($personId);
-        if ($defaults['monthly_value'] === null && $person?->monthly_value !== null) {
-            $defaults['monthly_value'] = (float) $person->monthly_value;
-        }
-
-        if ($defaults['hourly_value'] === null && $person?->hourly_value !== null) {
-            $defaults['hourly_value'] = (float) $person->hourly_value;
-        }
-
-        if ($defaults['health_additional'] === null && $person?->additional_health_plan !== null) {
-            $defaults['health_additional'] = (float) $person->additional_health_plan;
-        }
+                    'MONTHLY_VALUE' => $defaults['monthly_value'] = round($amount, 2),
+                    'HOURLY_VALUE' => $defaults['hourly_value'] = round($amount, 2),
+                    'PROJECT_VALUE' => $defaults['project_value'] = round($amount, 2),
+                    default => null,
+                };
+            });
 
         return $defaults;
     }

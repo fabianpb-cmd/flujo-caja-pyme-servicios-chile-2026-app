@@ -41,6 +41,28 @@ class HourlyRateService
         );
     }
 
+    public function resolveAssignmentProjectValue(ProjectAssignment $assignment, CarbonInterface|string $date): float
+    {
+        return $this->resolve(
+            companyId: $assignment->company_id,
+            amount: $assignment->project_value,
+            unitType: $assignment->hourly_rate_unit_type,
+            currency: $assignment->hourlyRateCurrency,
+            date: $date,
+        );
+    }
+
+    public function resolveProjectRate(Project $project, CarbonInterface|string $date): float
+    {
+        return $this->resolve(
+            companyId: $project->company_id,
+            amount: $project->contracted_hourly_rate,
+            unitType: 'CURRENCY',
+            currency: $project->salesCurrency,
+            date: $date,
+        );
+    }
+
     public function resolveForTimeEntry(Person $person, Project $project, CarbonInterface|string $date): array
     {
         $assignment = $this->assignmentFor($person->company_id, $person->id, $project->id, $date);

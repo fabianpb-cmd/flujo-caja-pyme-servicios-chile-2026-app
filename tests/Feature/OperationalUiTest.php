@@ -2015,7 +2015,7 @@ class OperationalUiTest extends TestCase
         $response->assertSee('Salud adicional automática', false);
         $response->assertSee('Anticipos automáticos', false);
         $response->assertSee('Otros descuentos automáticos', false);
-        $response->assertSee('Tarifa hora automática', false);
+        $response->assertSee('Tarifa automática', false);
         $response->assertSee('Horas aprobadas automáticas', false);
     }
 

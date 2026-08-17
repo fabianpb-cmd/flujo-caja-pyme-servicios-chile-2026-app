@@ -6,7 +6,9 @@ use App\Models\CashMovement;
 use App\Models\PayrollAdjustment;
 use App\Models\Person;
 use App\Models\PayrollRecord;
+use App\Models\Project;
 use App\Models\ProjectAssignment;
+use App\Models\TimeEntry;
 use App\Support\UiFormatter;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -22,6 +24,185 @@ class PayrollService
     {
     }
 
+    public function payrollDefaultValues(Person $person, CarbonInterface|string $periodDate, ?int $projectId = null): array
+    {
+        $period = Carbon::parse($periodDate)->startOfMonth();
+        $context = $this->payrollContext($person, $period, $projectId);
+
+        return [
+            'project_id' => $context['project_id'],
+            'hours_approved' => $context['hours_approved_auto'],
+            'monthly_value' => $context['monthly_value_auto'],
+            'hourly_value' => $context['hourly_value_auto'],
+            'project_value' => $context['project_value_auto'],
+            'health_additional' => $context['health_additional_auto'],
+        ];
+    }
+
+    private function payrollContext(Person $person, Carbon $period, ?int $projectId = null): array
+    {
+        $person->loadMissing(['employmentMode', 'employmentContractType', 'afp', 'healthSystemCatalog']);
+
+        $companyId = $person->company_id;
+        $assignmentContext = $this->payrollAssignmentContext($companyId, $person->id, $period, $projectId);
+        $assignment = $assignmentContext['assignment'];
+        $project = $assignment?->project ?: ($projectId ? Project::query()->forCompany($companyId)->with('salesCurrency')->find($projectId) : null);
+        $timeEntries = $this->payrollApprovedTimeEntries($companyId, $person->id, $period, $project?->id);
+
+        $hoursApprovedAuto = round((float) $timeEntries->sum('hours_approved'), 2);
+        $notes = [];
+        $requiresReview = false;
+
+        if ($assignmentContext['ambiguous']) {
+            $notes[] = 'Existe más de una asignación vigente para la persona y el proyecto en el período.';
+            $requiresReview = true;
+        }
+
+        $monthlyValueAuto = $person->monthly_value !== null ? (float) $person->monthly_value : null;
+        $healthAdditionalAuto = $person->additional_health_plan !== null ? (float) $person->additional_health_plan : null;
+        $hourlyValueAuto = null;
+        $hourlyValueSource = null;
+        $projectValueAuto = null;
+        $projectValueSource = null;
+
+        if (! $assignmentContext['ambiguous']) {
+            if ($assignment && (float) $assignment->hourly_value > 0) {
+                $hourlyValueAuto = (float) $this->hourlyRates->resolveAssignmentRate($assignment, $period);
+                $hourlyValueSource = [
+                    'type' => 'assignment',
+                    'code' => $assignment->code,
+                    'project_name' => $assignment->project?->name ?: $project?->name,
+                    'rate_value' => $assignment->hourly_value,
+                    'rate_unit_type' => strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')),
+                    'currency' => $assignment->hourlyRateDisplayCurrency ?? 'CLP',
+                ];
+            } elseif ($project && (float) $project->contracted_hourly_rate > 0) {
+                $hourlyValueAuto = (float) $this->hourlyRates->resolveProjectRate($project, $period);
+                $hourlyValueSource = [
+                    'type' => 'project',
+                    'project_name' => $project->name,
+                    'project_code' => $project->code,
+                    'rate_value' => $project->contracted_hourly_rate,
+                    'rate_unit_type' => 'CURRENCY',
+                    'currency' => $project->salesCurrency?->code ?: 'CLP',
+                ];
+            } elseif ((float) $person->hourly_value > 0) {
+                $hourlyValueAuto = (float) $this->hourlyRates->resolvePersonRate($person, $period);
+                $hourlyValueSource = [
+                    'type' => 'person',
+                    'person_name' => $person->full_name,
+                    'rate_value' => $person->hourly_value,
+                    'rate_unit_type' => strtoupper((string) ($person->hourly_rate_unit_type ?: 'CURRENCY')),
+                    'currency' => $person->hourlyRateDisplayCurrency ?? 'CLP',
+                ];
+            }
+
+            if ($assignment && (float) $assignment->project_value > 0) {
+                $projectValueAuto = (float) $this->hourlyRates->resolveAssignmentProjectValue($assignment, $period);
+                $projectValueSource = [
+                    'type' => 'assignment',
+                    'code' => $assignment->code,
+                    'project_name' => $assignment->project?->name ?: $project?->name,
+                    'rate_value' => $assignment->project_value,
+                    'rate_unit_type' => strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')),
+                    'currency' => $assignment->hourlyRateDisplayCurrency ?? 'CLP',
+                ];
+            }
+        }
+
+        return [
+            'assignment' => $assignment,
+            'assignment_context' => $assignmentContext,
+            'project' => $project,
+            'project_id' => $project?->id,
+            'time_entries' => $timeEntries,
+            'hours_approved_auto' => $hoursApprovedAuto,
+            'monthly_value_auto' => $monthlyValueAuto,
+            'hourly_value_auto' => $hourlyValueAuto,
+            'hourly_value_source' => $hourlyValueSource,
+            'project_value_auto' => $projectValueAuto,
+            'project_value_source' => $projectValueSource,
+            'health_additional_auto' => $healthAdditionalAuto,
+            'notes' => $notes,
+            'requires_review' => $requiresReview,
+        ];
+    }
+
+    private function payrollAssignmentContext(int $companyId, int $personId, Carbon $period, ?int $projectId = null): array
+    {
+        $periodEnd = $period->copy()->endOfMonth();
+
+        $query = ProjectAssignment::query()
+            ->where('company_id', $companyId)
+            ->where('person_id', $personId)
+            ->whereHas('assignmentStatus', fn ($builder) => $builder->where('code', 'active'))
+            ->where(function ($builder) use ($periodEnd) {
+                $builder->whereNull('start_date')->orWhereDate('start_date', '<=', $periodEnd);
+            })
+            ->where(function ($builder) use ($period) {
+                $builder->whereNull('end_date')->orWhereDate('end_date', '>=', $period->toDateString());
+            })
+            ->with(['project.client', 'assignmentStatus:id,code', 'hourlyRateCurrency:id,code,symbol,minor_units', 'costCenter:id,name'])
+            ->orderBy('start_date')
+            ->orderBy('id');
+
+        if ($projectId !== null) {
+            $query->where('project_id', $projectId);
+        }
+
+        $assignments = $query->get();
+
+        return [
+            'assignment' => $assignments->count() === 1 ? $assignments->first() : null,
+            'assignments' => $assignments,
+            'ambiguous' => $assignments->count() > 1,
+        ];
+    }
+
+    private function payrollApprovedTimeEntries(int $companyId, int $personId, Carbon $period, ?int $projectId = null): \Illuminate\Support\Collection
+    {
+        $query = TimeEntry::query()
+            ->forCompany($companyId)
+            ->with(['approvalStatus', 'project.client', 'assignment.project', 'assignment.assignmentStatus'])
+            ->where('person_id', $personId)
+            ->whereBetween('entry_date', [$period->toDateString(), $period->copy()->endOfMonth()->toDateString()])
+            ->where('hours_approved', '>', 0);
+
+        if ($projectId !== null) {
+            $query->where('project_id', $projectId);
+        }
+
+        return $query->get()->filter(fn (TimeEntry $entry): bool => $this->isApproved($entry))->values();
+    }
+
+    private function isApproved(TimeEntry $entry): bool
+    {
+        $code = strtolower((string) ($entry->approvalStatus?->code ?: $entry->approval_status));
+
+        return in_array($code, ['approved', 'aprobado'], true);
+    }
+
+    private function payrollNumericValue(mixed $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $normalized = str_replace(',', '.', preg_replace('/\s+/', '', (string) $value));
+
+        return is_numeric($normalized) ? (float) $normalized : null;
+    }
+
+    private function payrollEffectiveNumeric(mixed $override, ?float $automatic): ?float
+    {
+        $parsed = $this->payrollNumericValue($override);
+        if ($parsed !== null) {
+            return $parsed;
+        }
+
+        return $automatic;
+    }
+
     public function calculate(Person $person, CarbonInterface|string $periodDate, array $data = []): array
     {
         $period = Carbon::parse($periodDate)->startOfMonth();
@@ -31,20 +212,61 @@ class PayrollService
         $modality = mb_strtolower((string) ($modeCode ?: $person->modality));
         $monthDays = $period->daysInMonth;
         $workedDays = null;
-        $hoursApproved = isset($data['hours_approved']) ? (float) $data['hours_approved'] : null;
         $amountBasis = strtoupper((string) ($data['amount_basis'] ?? 'GROSS')) === 'NET' ? 'NET' : 'GROSS';
+        $projectId = isset($data['project_id']) && $data['project_id'] !== '' ? (int) $data['project_id'] : null;
+        $context = $this->payrollContext($person, $period, $projectId);
+        $hoursApprovedAuto = $context['hours_approved_auto'];
+        $hoursApproved = $this->payrollEffectiveNumeric($data['hours_approved'] ?? null, $hoursApprovedAuto) ?? 0.0;
+        $monthlyValue = $this->payrollEffectiveNumeric($data['monthly_value'] ?? null, $context['monthly_value_auto']);
+        $hourlyValue = $this->payrollEffectiveNumeric($data['hourly_value'] ?? null, $context['hourly_value_auto']);
+        $projectValue = $this->payrollEffectiveNumeric($data['project_value'] ?? null, $context['project_value_auto']);
+        $healthAdditional = $this->payrollEffectiveNumeric($data['health_additional'] ?? null, $context['health_additional_auto']);
+        $notes = array_values(array_filter($context['notes']));
+        $requiresReview = (bool) $context['requires_review'];
 
         $isDependent = $this->isDependent($modeCode, $contractCode, $modality);
         $isHourly = $this->isHourly($modeCode, $modality);
         $isProject = $this->isProject($modeCode, $modality);
 
+        if ($isHourly && $hoursApproved <= 0) {
+            $notes[] = 'Sin horas aprobadas en el período.';
+        }
+
+        if ($isHourly && ($hourlyValue === null || $hourlyValue <= 0)) {
+            $notes[] = 'Tarifa HH no configurada para la asignación vigente.';
+            $requiresReview = true;
+        }
+
+        if ($isProject && ($projectValue === null || $projectValue <= 0)) {
+            $notes[] = 'Valor proyecto/hito no configurado para la asignación vigente.';
+            $requiresReview = true;
+        }
+
+        if ($isDependent && ! $isHourly && ($monthlyValue === null || $monthlyValue <= 0)) {
+            $notes[] = 'Base mensual no configurada para el período.';
+            $requiresReview = true;
+        }
+
+        if ($context['assignment_context']['ambiguous']) {
+            $hourlyValue = 0.0;
+            $projectValue = 0.0;
+        }
+
+        $data['hours_approved'] = $hoursApproved;
+        $data['monthly_value'] = $monthlyValue;
+        $data['hourly_value'] = $hourlyValue;
+        $data['project_value'] = $projectValue;
+        $data['health_additional'] = $healthAdditional;
+        $calculationNotes = array_values(array_unique(array_filter($notes)));
+        $calculationStatus = $requiresReview ? 'REQUIERE_REVISION' : 'OK';
+
         if ($isDependent) {
             $workedDays = $this->workedDaysInMonth($person, $period);
             $base = $isHourly
-                ? round((float) ($hoursApproved ?? 0) * (float) ($data['hourly_value'] ?? $this->hourlyRates->resolvePersonRate($person, $period)), 2)
-                : $this->monthlySalaryForPeriod((float) $person->monthly_value, $workedDays, $monthDays);
+                ? round($hoursApproved * (float) ($hourlyValue ?? 0), 2)
+                : $this->monthlySalaryForPeriod((float) ($monthlyValue ?? 0), $workedDays, $monthDays);
 
-            return $this->dependentCalculation($person, $period, $monthDays, $workedDays, $base, $data);
+            return $this->dependentCalculation($person, $period, $monthDays, $workedDays, $base, $data, $calculationStatus, $calculationNotes);
         }
 
         $gross = $this->honorariosGross($person, $period, $data, $hoursApproved, $isHourly, $isProject);
@@ -78,12 +300,12 @@ class PayrollService
                 'mode' => $modeCode ?: $person->modality,
                 'honorarios_retention_rate' => $retentionRate,
             ],
-            'calculation_status' => 'OK',
-            'calculation_notes' => null,
+            'calculation_status' => $calculationStatus,
+            'calculation_notes' => ! empty($calculationNotes) ? implode(' ', $calculationNotes) : null,
         ] + $this->zeroDependentFields();
     }
 
-    private function dependentCalculation(Person $person, Carbon $period, int $monthDays, int $workedDays, float $base, array $data): array
+    private function dependentCalculation(Person $person, Carbon $period, int $monthDays, int $workedDays, float $base, array $data, string $calculationStatus, array $calculationNotes): array
     {
         $companyId = $person->company_id;
         $bonuses = round((float) ($data['bonuses'] ?? 0), 2);
@@ -96,6 +318,11 @@ class PayrollService
             return [
                 'worked_days' => $workedDays,
                 'month_days' => $monthDays,
+                'hours_approved' => (float) ($data['hours_approved'] ?? 0),
+                'hourly_value' => isset($data['hourly_value']) ? (float) $data['hourly_value'] : null,
+                'project_value' => isset($data['project_value']) ? (float) $data['project_value'] : null,
+                'monthly_value' => isset($data['monthly_value']) ? (float) $data['monthly_value'] : null,
+                'health_additional' => (float) ($data['health_additional'] ?? $person->additional_health_plan ?? 0),
                 'base_salary' => $base,
                 'gross_amount' => $taxableGross,
                 'bonuses' => $bonuses,
@@ -105,8 +332,8 @@ class PayrollService
                 'employer_cost' => 0.0,
                 'net_pay' => 0.0,
                 'legal_snapshot' => ['period' => $period->toDateString()],
-                'calculation_status' => 'OK',
-                'calculation_notes' => null,
+                'calculation_status' => $calculationStatus,
+                'calculation_notes' => ! empty($calculationNotes) ? implode(' ', array_values(array_unique(array_filter($calculationNotes)))) : null,
             ] + $this->zeroDependentFields();
         }
 
@@ -171,6 +398,11 @@ class PayrollService
         return [
             'worked_days' => $workedDays,
             'month_days' => $monthDays,
+            'hours_approved' => (float) ($data['hours_approved'] ?? 0),
+            'hourly_value' => isset($data['hourly_value']) ? (float) $data['hourly_value'] : null,
+            'project_value' => isset($data['project_value']) ? (float) $data['project_value'] : null,
+            'monthly_value' => isset($data['monthly_value']) ? (float) $data['monthly_value'] : null,
+            'health_additional' => (float) ($data['health_additional'] ?? $person->additional_health_plan ?? 0),
             'amount_basis' => 'GROSS',
             'base_salary' => $base,
             'gross_amount' => $taxableGross,
@@ -228,8 +460,13 @@ class PayrollService
                 'iusc_factor' => $iusc['iusc_factor'],
                 'iusc_rebate' => $iusc['iusc_rebate'],
             ],
-            'calculation_status' => 'OK',
-            'calculation_notes' => $person->afp ? null : 'AFP no configurada; comisión AFP calculada en 0.',
+            'calculation_status' => $calculationStatus,
+            'calculation_notes' => ! empty($calculationNotes)
+                ? implode(' ', array_values(array_unique(array_filter(array_merge(
+                    $calculationNotes,
+                    $person->afp ? [] : ['AFP no configurada; comisión AFP calculada en 0.'],
+                )))))
+                : ($person->afp ? null : 'AFP no configurada; comisión AFP calculada en 0.'),
         ];
     }
 
@@ -371,6 +608,47 @@ class PayrollService
         ]));
         $adjustments = $this->payrollAdjustmentTotals($record);
         $assignment = $this->payrollAssignmentForRecord($record);
+        $context = $record->person && $record->period_date
+            ? $this->payrollContext($record->person, Carbon::parse($record->period_date)->startOfMonth(), $record->project_id)
+            : [
+                'assignment' => null,
+                'assignment_context' => ['ambiguous' => false],
+                'project' => $record->project,
+                'project_id' => $record->project_id,
+                'time_entries' => collect(),
+                'hours_approved_auto' => 0.0,
+                'monthly_value_auto' => $record->person?->monthly_value !== null ? (float) $record->person->monthly_value : null,
+                'hourly_value_auto' => null,
+                'hourly_value_source' => null,
+                'project_value_auto' => null,
+                'project_value_source' => null,
+                'health_additional_auto' => $record->person?->additional_health_plan !== null ? (float) $record->person->additional_health_plan : null,
+                'notes' => [],
+                'requires_review' => false,
+            ];
+
+        $formatPayrollSource = function (?array $source, bool $hours = false): string {
+            if (! $source) {
+                return '—';
+            }
+
+            $amount = $source['rate_value'] ?? null;
+            if ($amount === null || $amount === '') {
+                return '—';
+            }
+
+            $currency = $source['currency'] ?? (($source['rate_unit_type'] ?? null) === 'UF' ? 'UF' : 'CLP');
+            $formatted = UiFormatter::formatMoney($amount, $currency);
+
+            $label = match ($source['type'] ?? null) {
+                'assignment' => trim((string) (($source['code'] ?? 'ASI').' · '.($source['project_name'] ?? 'No informado'))),
+                'project' => 'Proyecto · '.trim((string) ($source['project_name'] ?? 'No informado')),
+                'person' => 'Ficha de Personal · Costo hora referencial',
+                default => 'No configurado',
+            };
+
+            return $hours ? ($formatted.' / HH · '.$label) : ($formatted.' · '.$label);
+        };
 
         $isHonorarios = str_contains(mb_strtolower((string) $record->person?->modality), 'honorarios')
             || (($record->employee_retention ?? 0) > 0 && (float) $record->afp_mandatory === 0.0 && (float) $record->health_employee === 0.0);
@@ -381,18 +659,21 @@ class PayrollService
             ['label' => 'Cliente', 'value' => $record->project?->client?->legal_name ?? '—'],
             ['label' => 'Asignación', 'value' => $assignment?->code ? trim((string) ($assignment->code.' · '.($assignment->project?->name ?: $record->project?->name ?: 'No informado'))) : 'No configurada'],
             ['label' => 'Vigencia asignación', 'value' => $this->payrollAssignmentRangeLabel($assignment)],
-            ['label' => 'Tarifa de asignación', 'value' => $this->payrollSourceDisplay($assignment?->hourly_value, $assignment?->hourly_value !== null ? 'Asignación' : null, false, $assignment?->hourlyRateDisplayCurrency ?? 'CLP').($assignment?->hourly_value !== null ? ' / HH' : '')],
-            ['label' => 'Valor proyecto/hito de asignación', 'value' => $this->payrollSourceDisplay($assignment?->project_value, $assignment?->project_value !== null ? 'Asignación' : null, false, $assignment?->hourlyRateDisplayCurrency ?? 'CLP')],
-            ['label' => 'Base mensual automática', 'value' => $this->payrollSourceDisplay($adjustments['monthly_value'] ?? $record->person?->monthly_value, ($adjustments['monthly_value'] ?? null) !== null ? 'Novedades remuneración' : ($record->person?->monthly_value !== null ? 'Ficha de Personal' : null), false, 'CLP')],
-            ['label' => 'Base mensual aplicada', 'value' => UiFormatter::formatMoney($record->monthly_value, 'CLP')],
-            ['label' => 'Tarifa hora automática', 'value' => $this->payrollSourceDisplay($adjustments['hourly_value'] ?? $record->person?->hourly_value, ($adjustments['hourly_value'] ?? null) !== null ? 'Novedades remuneración' : ($record->person?->hourly_value !== null ? 'Ficha de Personal' : null), false, $record->person?->hourlyRateDisplayCurrency ?? 'CLP').(($adjustments['hourly_value'] !== null || $record->person?->hourly_value !== null) ? ' / HH' : '')],
-            ['label' => 'Tarifa hora aplicada', 'value' => $record->hourly_value !== null ? UiFormatter::formatMoney($record->hourly_value, $record->person?->hourlyRateDisplayCurrency ?? 'CLP').' / HH' : '—'],
-            ['label' => 'Horas aprobadas automáticas', 'value' => $adjustments['hours_approved'] !== null ? UiFormatter::formatHours($adjustments['hours_approved']).' · Novedades remuneración' : '—'],
-            ['label' => 'Horas aprobadas aplicadas', 'value' => UiFormatter::formatHours($record->hours_approved)],
-            ['label' => 'Valor proyecto/hito automático', 'value' => $adjustments['project_value'] !== null ? UiFormatter::formatMoney($adjustments['project_value']).' · Novedades remuneración' : '—'],
-            ['label' => 'Valor proyecto/hito aplicado', 'value' => UiFormatter::formatMoney($record->project_value, 'CLP')],
-            ['label' => 'Salud adicional automática', 'value' => $adjustments['health_additional'] !== null ? UiFormatter::formatMoney($adjustments['health_additional']).' · Novedades remuneración' : ($record->person?->additional_health_plan !== null ? UiFormatter::formatMoney($record->person?->additional_health_plan).' · Ficha de Personal' : '—')],
-            ['label' => 'Salud adicional aplicada', 'value' => UiFormatter::formatMoney($record->health_additional, 'CLP')],
+            ['label' => 'Horas aprobadas automáticas', 'value' => UiFormatter::formatHours($context['hours_approved_auto']).' · Horas'],
+            ['label' => 'Horas aprobadas override', 'value' => $adjustments['hours_approved'] !== null ? UiFormatter::formatHours($adjustments['hours_approved']).' · Novedades remuneración' : '—'],
+            ['label' => 'Horas aprobadas efectivas', 'value' => UiFormatter::formatHours($record->hours_approved)],
+            ['label' => 'Tarifa automática', 'value' => $formatPayrollSource($context['hourly_value_source'], true)],
+            ['label' => 'Tarifa override', 'value' => $adjustments['hourly_value'] !== null ? UiFormatter::formatMoney($adjustments['hourly_value'], 'CLP').' / HH · Novedades remuneración' : '—'],
+            ['label' => 'Tarifa efectiva', 'value' => UiFormatter::formatMoney($record->hourly_value, 'CLP').' / HH'],
+            ['label' => 'Valor proyecto/hito automático', 'value' => $formatPayrollSource($context['project_value_source'])],
+            ['label' => 'Valor proyecto/hito override', 'value' => $adjustments['project_value'] !== null ? UiFormatter::formatMoney($adjustments['project_value'], 'CLP').' · Novedades remuneración' : '—'],
+            ['label' => 'Valor proyecto/hito efectivo', 'value' => UiFormatter::formatMoney($record->project_value, 'CLP')],
+            ['label' => 'Base mensual automática', 'value' => $record->person?->monthly_value !== null ? UiFormatter::formatMoney($record->person?->monthly_value, 'CLP').' · Ficha de Personal' : '—'],
+            ['label' => 'Base mensual override', 'value' => $adjustments['monthly_value'] !== null ? UiFormatter::formatMoney($adjustments['monthly_value'], 'CLP').' · Novedades remuneración' : '—'],
+            ['label' => 'Base mensual efectiva', 'value' => UiFormatter::formatMoney($record->monthly_value, 'CLP')],
+            ['label' => 'Salud adicional automática', 'value' => $record->person?->additional_health_plan !== null ? UiFormatter::formatMoney($record->person?->additional_health_plan, 'CLP').' · Ficha de Personal' : '—'],
+            ['label' => 'Salud adicional override', 'value' => $adjustments['health_additional'] !== null ? UiFormatter::formatMoney($adjustments['health_additional']).' · Novedades remuneración' : '—'],
+            ['label' => 'Salud adicional efectiva', 'value' => UiFormatter::formatMoney($record->health_additional, 'CLP')],
             ['label' => 'Bonos automáticos', 'value' => $adjustments['bonuses'] !== null ? UiFormatter::formatMoney($adjustments['bonuses']).' · Novedades remuneración' : '—'],
             ['label' => 'Bonos aplicados', 'value' => UiFormatter::formatMoney($record->bonuses, 'CLP')],
             ['label' => 'Asignaciones no imponibles automáticas', 'value' => $adjustments['non_taxable_allowances'] !== null ? UiFormatter::formatMoney($adjustments['non_taxable_allowances']).' · Novedades remuneración' : '—'],
@@ -418,7 +699,9 @@ class PayrollService
                 'result' => [
                     'label' => 'Líquido honorarios',
                     'value' => UiFormatter::formatMoney($record->net_pay),
-                    'note' => ($snapshot['period'] ?? null) ? 'Cálculo confirmado con parámetros del período. Los valores automáticos provienen de la ficha de Personal, Novedades remuneración y la asignación vigente cuando existe.' : null,
+                    'note' => ($snapshot['period'] ?? null)
+                        ? 'Cálculo confirmado con parámetros del período. Los valores automáticos provienen de Horas, Novedades remuneración, la asignación vigente cuando existe y la ficha de Personal como referencia.'
+                        : null,
                 ],
                 'warnings' => $warnings,
                 'sections' => [
@@ -492,7 +775,9 @@ class PayrollService
             'result' => [
                 'label' => 'Costo empresa',
                 'value' => UiFormatter::formatMoney($record->employer_cost),
-                'note' => ($snapshot['period'] ?? null) ? 'Cálculo confirmado con parámetros del período. Los valores automáticos provienen de la ficha de Personal, Novedades remuneración y la asignación vigente cuando existe.' : null,
+                'note' => ($snapshot['period'] ?? null)
+                    ? 'Cálculo confirmado con parámetros del período. Los valores automáticos provienen de Horas, Novedades remuneración, la asignación vigente cuando existe y la ficha de Personal como referencia.'
+                    : null,
             ],
             'warnings' => $warnings,
             'sections' => [
