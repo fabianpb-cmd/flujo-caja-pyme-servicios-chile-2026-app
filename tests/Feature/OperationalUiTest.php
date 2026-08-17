@@ -13,6 +13,7 @@ use App\Models\ExpenseCategory;
 use App\Models\ExpenseSubcategory;
 use App\Models\LegalParameter;
 use App\Models\Person;
+use App\Models\PayrollAdjustment;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
@@ -1815,11 +1816,15 @@ class OperationalUiTest extends TestCase
         $response = $this->actingAs($admin)->get(route('operational.create', 'payroll-records'));
 
         $response->assertOk();
+        $response->assertSee('Nueva remuneración');
         $response->assertSee('¿Cómo usar esta pantalla?', false);
         $response->assertSee('Ver detalle de conceptos', false);
         $response->assertSee('payroll-help-shell', false);
         $response->assertSee('id="payrollUsageHelp"', false);
         $response->assertSee('class="collapse mt-3"', false);
+        $response->assertSee('Fecha prevista o real de pago del período. El estado se recalcula según este dato y los pagos registrados.');
+        $response->assertSee('Los campos marcados como override reemplazan la referencia automática del período. Déjelos vacíos solo cuando corresponda usar el valor base.');
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Nueva remuneración/s', $response->getContent());
         $response->assertSee('data-bs-toggle="tooltip"', false);
         $response->assertSee('Días remunerados', false);
         $response->assertSee('Provisión vacaciones', false);
@@ -1861,11 +1866,157 @@ class OperationalUiTest extends TestCase
         $response = $this->actingAs($admin)->get(route('operational.edit', ['payroll-records', $payroll->id]));
 
         $response->assertOk();
+        $response->assertSee('Editar remuneración');
         $response->assertSee('Pedro González Rojas');
         $response->assertSee('Honorarios mensual');
         $response->assertSee('$ 100.000');
         $response->assertSee('$ 15.250');
         $response->assertSee('$ 84.750');
+    }
+
+    public function test_payroll_show_breakdown_exposes_automatic_sources_and_assignment_context(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REM-03',
+            'first_names' => 'María',
+            'paternal_surname' => 'Lagos',
+            'maternal_surname' => 'Díaz',
+            'name' => 'María Lagos Díaz',
+            'modality' => 'Dependiente por hora',
+            'hourly_value' => 1300,
+            'additional_health_plan' => 12000,
+            'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-REM-03',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-07-01',
+            'end_date' => '2026-07-31',
+            'hourly_value' => 1300,
+            'project_value' => 50000,
+        ]);
+
+        $approvedId = ApprovalStatus::query()
+            ->where('company_id', $company->id)
+            ->where('code', 'approved')
+            ->valueOrFail('id');
+
+        $activity = Activity::query()->create([
+            'company_id' => $company->id,
+            'code' => 'ACT-REM-03-'.uniqid(),
+            'name' => 'Análisis rem '.uniqid(),
+            'active' => true,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HRS-REM-03',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-07-15',
+            'activity' => 'Análisis rem',
+            'activity_id' => $activity->id,
+            'hours_worked' => 8,
+            'hours_approved' => 8,
+            'hourly_value' => 1300,
+            'calculated_amount' => 10400,
+            'approval_status_id' => $approvedId,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+            'cost_center_id' => null,
+        ]);
+
+        PayrollAdjustment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'period_date' => '2026-07-01',
+            'type' => 'MONTHLY_VALUE',
+            'amount' => 200000,
+            'quantity' => null,
+            'description' => 'Base mensual automática',
+            'active' => true,
+        ]);
+        PayrollAdjustment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'period_date' => '2026-07-01',
+            'type' => 'HEALTH_ADDITIONAL',
+            'amount' => 12000,
+            'quantity' => null,
+            'description' => 'Salud adicional automática',
+            'active' => true,
+        ]);
+        PayrollAdjustment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'period_date' => '2026-07-01',
+            'type' => 'ADVANCE',
+            'amount' => 10000,
+            'quantity' => null,
+            'description' => 'Anticipo automático',
+            'active' => true,
+        ]);
+        PayrollAdjustment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'period_date' => '2026-07-01',
+            'type' => 'OTHER_DEDUCTION',
+            'amount' => 5000,
+            'quantity' => null,
+            'description' => 'Otro descuento automático',
+            'active' => true,
+        ]);
+
+        $payroll = \App\Models\PayrollRecord::query()->create([
+            'company_id' => $company->id,
+            'code' => 'REM-UI-03',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-07-01',
+            'payment_date' => '2026-07-20',
+            'amount_basis' => 'GROSS',
+            'hours_approved' => 8,
+            'monthly_value' => 200000,
+            'hourly_value' => 1300,
+            'project_value' => 50000,
+            'health_additional' => 12000,
+            'bonuses' => 0,
+            'non_taxable_allowances' => 0,
+            'advances' => 10000,
+            'other_deductions' => 5000,
+            'base_salary' => 200000,
+            'taxable_gross' => 200000,
+            'employer_cost' => 220000,
+            'net_pay' => 180000,
+            'calculation_status' => 'OK',
+            'legal_snapshot' => ['period' => '2026-07-01'],
+            'status' => 'Pendiente',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('operational.show', ['payroll-records', $payroll->id]));
+
+        $response->assertOk();
+        $response->assertSee('Fuentes aplicadas', false);
+        $response->assertSee('Cliente', false);
+        $response->assertSee('ASI-REM-03 · Proyecto A', false);
+        $response->assertSee('Base mensual automática', false);
+        $response->assertSee('Salud adicional automática', false);
+        $response->assertSee('Anticipos automáticos', false);
+        $response->assertSee('Otros descuentos automáticos', false);
+        $response->assertSee('Tarifa hora automática', false);
+        $response->assertSee('Horas aprobadas automáticas', false);
     }
 
     public function test_clients_and_projects_generate_immutable_codes_when_omitted(): void

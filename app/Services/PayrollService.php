@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\CashMovement;
+use App\Models\PayrollAdjustment;
 use App\Models\Person;
 use App\Models\PayrollRecord;
+use App\Models\ProjectAssignment;
 use App\Support\UiFormatter;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -360,16 +362,46 @@ class PayrollService
 
     public function explain(PayrollRecord $record): array
     {
-        $record->loadMissing('person');
+        $record->loadMissing(['person', 'project.client']);
         $snapshot = is_array($record->legal_snapshot ?? null) ? $record->legal_snapshot : [];
         $period = $record->period_date ? UiFormatter::formatDate($record->period_date) : '—';
         $warnings = array_values(array_filter([
             $record->calculation_notes ?? null,
             $record->calculation_status && $record->calculation_status !== 'OK' ? $record->calculation_status : null,
         ]));
+        $adjustments = $this->payrollAdjustmentTotals($record);
+        $assignment = $this->payrollAssignmentForRecord($record);
 
         $isHonorarios = str_contains(mb_strtolower((string) $record->person?->modality), 'honorarios')
             || (($record->employee_retention ?? 0) > 0 && (float) $record->afp_mandatory === 0.0 && (float) $record->health_employee === 0.0);
+
+        $sourceRows = [
+            ['label' => 'Persona', 'value' => $record->person?->full_name ?? '—'],
+            ['label' => 'Proyecto', 'value' => $record->project ? trim((string) ($record->project->code ?: $record->project->name)) : '—'],
+            ['label' => 'Cliente', 'value' => $record->project?->client?->legal_name ?? '—'],
+            ['label' => 'Asignación', 'value' => $assignment?->code ? trim((string) ($assignment->code.' · '.($assignment->project?->name ?: $record->project?->name ?: 'No informado'))) : 'No configurada'],
+            ['label' => 'Vigencia asignación', 'value' => $this->payrollAssignmentRangeLabel($assignment)],
+            ['label' => 'Tarifa de asignación', 'value' => $this->payrollSourceDisplay($assignment?->hourly_value, $assignment?->hourly_value !== null ? 'Asignación' : null, false, $assignment?->hourlyRateDisplayCurrency ?? 'CLP').($assignment?->hourly_value !== null ? ' / HH' : '')],
+            ['label' => 'Valor proyecto/hito de asignación', 'value' => $this->payrollSourceDisplay($assignment?->project_value, $assignment?->project_value !== null ? 'Asignación' : null, false, $assignment?->hourlyRateDisplayCurrency ?? 'CLP')],
+            ['label' => 'Base mensual automática', 'value' => $this->payrollSourceDisplay($adjustments['monthly_value'] ?? $record->person?->monthly_value, ($adjustments['monthly_value'] ?? null) !== null ? 'Novedades remuneración' : ($record->person?->monthly_value !== null ? 'Ficha de Personal' : null), false, 'CLP')],
+            ['label' => 'Base mensual aplicada', 'value' => UiFormatter::formatMoney($record->monthly_value, 'CLP')],
+            ['label' => 'Tarifa hora automática', 'value' => $this->payrollSourceDisplay($adjustments['hourly_value'] ?? $record->person?->hourly_value, ($adjustments['hourly_value'] ?? null) !== null ? 'Novedades remuneración' : ($record->person?->hourly_value !== null ? 'Ficha de Personal' : null), false, $record->person?->hourlyRateDisplayCurrency ?? 'CLP').(($adjustments['hourly_value'] !== null || $record->person?->hourly_value !== null) ? ' / HH' : '')],
+            ['label' => 'Tarifa hora aplicada', 'value' => $record->hourly_value !== null ? UiFormatter::formatMoney($record->hourly_value, $record->person?->hourlyRateDisplayCurrency ?? 'CLP').' / HH' : '—'],
+            ['label' => 'Horas aprobadas automáticas', 'value' => $adjustments['hours_approved'] !== null ? UiFormatter::formatHours($adjustments['hours_approved']).' · Novedades remuneración' : '—'],
+            ['label' => 'Horas aprobadas aplicadas', 'value' => UiFormatter::formatHours($record->hours_approved)],
+            ['label' => 'Valor proyecto/hito automático', 'value' => $adjustments['project_value'] !== null ? UiFormatter::formatMoney($adjustments['project_value']).' · Novedades remuneración' : '—'],
+            ['label' => 'Valor proyecto/hito aplicado', 'value' => UiFormatter::formatMoney($record->project_value, 'CLP')],
+            ['label' => 'Salud adicional automática', 'value' => $adjustments['health_additional'] !== null ? UiFormatter::formatMoney($adjustments['health_additional']).' · Novedades remuneración' : ($record->person?->additional_health_plan !== null ? UiFormatter::formatMoney($record->person?->additional_health_plan).' · Ficha de Personal' : '—')],
+            ['label' => 'Salud adicional aplicada', 'value' => UiFormatter::formatMoney($record->health_additional, 'CLP')],
+            ['label' => 'Bonos automáticos', 'value' => $adjustments['bonuses'] !== null ? UiFormatter::formatMoney($adjustments['bonuses']).' · Novedades remuneración' : '—'],
+            ['label' => 'Bonos aplicados', 'value' => UiFormatter::formatMoney($record->bonuses, 'CLP')],
+            ['label' => 'Asignaciones no imponibles automáticas', 'value' => $adjustments['non_taxable_allowances'] !== null ? UiFormatter::formatMoney($adjustments['non_taxable_allowances']).' · Novedades remuneración' : '—'],
+            ['label' => 'Asignaciones no imponibles aplicadas', 'value' => UiFormatter::formatMoney($record->non_taxable_allowances, 'CLP')],
+            ['label' => 'Anticipos automáticos', 'value' => $adjustments['advances'] !== null ? UiFormatter::formatMoney($adjustments['advances']).' · Novedades remuneración' : '—'],
+            ['label' => 'Anticipos aplicados', 'value' => UiFormatter::formatMoney($record->advances, 'CLP')],
+            ['label' => 'Otros descuentos automáticos', 'value' => $adjustments['other_deductions'] !== null ? UiFormatter::formatMoney($adjustments['other_deductions']).' · Novedades remuneración' : '—'],
+            ['label' => 'Otros descuentos aplicados', 'value' => UiFormatter::formatMoney($record->other_deductions, 'CLP')],
+        ];
 
         if ($isHonorarios) {
             $parameters = [];
@@ -386,10 +418,14 @@ class PayrollService
                 'result' => [
                     'label' => 'Líquido honorarios',
                     'value' => UiFormatter::formatMoney($record->net_pay),
-                    'note' => ($snapshot['period'] ?? null) ? 'Cálculo confirmado con parámetros del período.' : null,
+                    'note' => ($snapshot['period'] ?? null) ? 'Cálculo confirmado con parámetros del período. Los valores automáticos provienen de la ficha de Personal, Novedades remuneración y la asignación vigente cuando existe.' : null,
                 ],
                 'warnings' => $warnings,
                 'sections' => [
+                    [
+                        'title' => 'Fuentes aplicadas',
+                        'rows' => $sourceRows,
+                    ],
                     [
                         'title' => 'Honorarios',
                         'rows' => [
@@ -456,10 +492,14 @@ class PayrollService
             'result' => [
                 'label' => 'Costo empresa',
                 'value' => UiFormatter::formatMoney($record->employer_cost),
-                'note' => ($snapshot['period'] ?? null) ? 'Cálculo confirmado con parámetros del período.' : null,
+                'note' => ($snapshot['period'] ?? null) ? 'Cálculo confirmado con parámetros del período. Los valores automáticos provienen de la ficha de Personal, Novedades remuneración y la asignación vigente cuando existe.' : null,
             ],
             'warnings' => $warnings,
             'sections' => [
+                [
+                    'title' => 'Fuentes aplicadas',
+                    'rows' => $sourceRows,
+                ],
                 [
                     'title' => 'Remuneración',
                     'rows' => [
@@ -487,6 +527,127 @@ class PayrollService
             ],
             'parameters' => $parameters,
         ];
+    }
+
+    private function payrollAdjustmentTotals(PayrollRecord $record): array
+    {
+        if (! $record->period_date) {
+            return [
+                'hours_approved' => null,
+                'monthly_value' => null,
+                'hourly_value' => null,
+                'project_value' => null,
+                'health_additional' => null,
+                'bonuses' => null,
+                'non_taxable_allowances' => null,
+                'advances' => null,
+                'other_deductions' => null,
+            ];
+        }
+
+        $totals = [
+            'hours_approved' => null,
+            'monthly_value' => null,
+            'hourly_value' => null,
+            'project_value' => null,
+            'health_additional' => null,
+            'bonuses' => null,
+            'non_taxable_allowances' => null,
+            'advances' => null,
+            'other_deductions' => null,
+        ];
+
+        PayrollAdjustment::query()
+            ->forCompany($record->company_id)
+            ->where('person_id', $record->person_id)
+            ->whereDate('period_date', optional($record->period_date)->toDateString() ?: null)
+            ->where('active', true)
+            ->get()
+            ->each(function (PayrollAdjustment $adjustment) use (&$totals): void {
+                $amount = (float) ($adjustment->amount ?? 0);
+                $quantity = (float) ($adjustment->quantity ?? 0);
+
+                match (strtoupper((string) $adjustment->type)) {
+                    'HOURS_APPROVED' => $totals['hours_approved'] = round((float) ($totals['hours_approved'] ?? 0) + $quantity, 2),
+                    'MONTHLY_VALUE' => $totals['monthly_value'] = round($amount, 2),
+                    'HOURLY_VALUE' => $totals['hourly_value'] = round($amount, 2),
+                    'PROJECT_VALUE' => $totals['project_value'] = round($amount, 2),
+                    'HEALTH_ADDITIONAL' => $totals['health_additional'] = round((float) ($totals['health_additional'] ?? 0) + $amount, 2),
+                    'BONUS_TAXABLE' => $totals['bonuses'] = round((float) ($totals['bonuses'] ?? 0) + $amount, 2),
+                    'NON_TAXABLE_ALLOWANCE' => $totals['non_taxable_allowances'] = round((float) ($totals['non_taxable_allowances'] ?? 0) + $amount, 2),
+                    'ADVANCE' => $totals['advances'] = round((float) ($totals['advances'] ?? 0) + $amount, 2),
+                    'OTHER_DEDUCTION' => $totals['other_deductions'] = round((float) ($totals['other_deductions'] ?? 0) + $amount, 2),
+                    default => null,
+                };
+            });
+
+        return $totals;
+    }
+
+    private function payrollAssignmentForRecord(PayrollRecord $record): ?ProjectAssignment
+    {
+        if (! $record->period_date) {
+            return null;
+        }
+
+        $query = ProjectAssignment::query()
+            ->where('company_id', $record->company_id)
+            ->where('person_id', $record->person_id)
+            ->whereHas('assignmentStatus', fn ($query) => $query->where('code', 'active'))
+            ->where(function ($query) use ($record) {
+                $query->whereNull('start_date')->orWhereDate('start_date', '<=', optional($record->period_date)->copy()->endOfMonth()->toDateString());
+            })
+            ->where(function ($query) use ($record) {
+                $query->whereNull('end_date')->orWhereDate('end_date', '>=', optional($record->period_date)->toDateString());
+            })
+            ->with(['project', 'hourlyRateCurrency:id,code,symbol,minor_units'])
+            ->orderBy('start_date')
+            ->orderBy('id');
+
+        if ($record->project_id) {
+            $assignments = $query->where('project_id', $record->project_id)->get();
+
+            return $assignments->count() === 1 ? $assignments->first() : null;
+        }
+
+        $assignments = $query->get();
+
+        return $assignments->count() === 1 ? $assignments->first() : null;
+    }
+
+    private function payrollAssignmentRangeLabel(?ProjectAssignment $assignment): string
+    {
+        if (! $assignment) {
+            return 'No configurada';
+        }
+
+        $start = $assignment->start_date ? UiFormatter::formatDate($assignment->start_date) : 'sin inicio informado';
+        $end = $assignment->end_date ? UiFormatter::formatDate($assignment->end_date) : 'sin término informado';
+
+        if ($assignment->start_date && $assignment->end_date) {
+            return $start.' al '.$end;
+        }
+
+        if ($assignment->start_date) {
+            return 'desde '.$start;
+        }
+
+        if ($assignment->end_date) {
+            return 'hasta '.$end;
+        }
+
+        return 'No informada';
+    }
+
+    private function payrollSourceDisplay(mixed $value, ?string $source = null, bool $hours = false, mixed $currency = 'CLP'): string
+    {
+        if ($value === null || $value === '') {
+            return '—';
+        }
+
+        $formatted = $hours ? UiFormatter::formatHours($value) : UiFormatter::formatMoney($value, $currency);
+
+        return $source ? $formatted.' · '.$source : $formatted;
     }
 
     public function deriveStatus(PayrollRecord $record, CarbonInterface|string|null $asOf = null): string

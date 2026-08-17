@@ -174,6 +174,13 @@ class CrudResourceRequest extends FormRequest
         foreach ($checkboxes as $field) {
             $this->merge([$field => $this->boolean($field)]);
         }
+
+        if ($this->route('resource') === 'payroll-records' && filled($this->input('period_date'))) {
+            $period = UiFormatter::parseDateInput($this->input('period_date'));
+            if ($period) {
+                $this->merge(['period_date' => $period->copy()->startOfMonth()->toDateString()]);
+            }
+        }
     }
 
     public function withValidator(Validator $validator): void
@@ -479,6 +486,16 @@ class CrudResourceRequest extends FormRequest
                 'hourly_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('hourly_value', 'El valor HH')],
                 'project_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('project_value', 'El monto pactado de la asignación')],
                 'monthly_hours' => ['type' => 'unsignedSmallInteger', 'max' => 65535, 'label' => $labels('monthly_hours', 'Las horas mensuales')],
+            ],
+            'payroll-records' => [
+                'hours_approved' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'label' => $labels('hours_approved', 'Las horas aprobadas')],
+                'monthly_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('monthly_value', 'El valor mensual')],
+                'hourly_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('hourly_value', 'La tarifa por hora')],
+                'project_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('project_value', 'El valor proyecto/hito')],
+                'bonuses' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('bonuses', 'Los bonos imponibles')],
+                'non_taxable_allowances' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('non_taxable_allowances', 'Las asignaciones no imponibles')],
+                'advances' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('advances', 'Los anticipos')],
+                'other_deductions' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('other_deductions', 'Los otros descuentos')],
             ],
             'time-entries' => [
                 'hours_worked' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'label' => $labels('hours_worked', 'Las horas trabajadas')],

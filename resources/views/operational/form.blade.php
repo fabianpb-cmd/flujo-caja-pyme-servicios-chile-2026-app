@@ -25,16 +25,17 @@
     };
 })
 @php($payrollHelp = [
-    'person_id' => 'Trabajador o prestador al que corresponde esta remuneración.',
-    'period_date' => 'Mes al que pertenece la remuneración. Define tasas legales, UF y topes aplicables.',
-    'amount_basis' => 'Indica si el monto contractual está expresado como bruto o líquido.',
-    'project_id' => 'Proyecto asociado, cuando la remuneración depende de una asignación o ejecución concreta.',
-    'hours_approved' => 'Solo se consideran horas aprobadas correspondientes al período.',
-    'monthly_value' => 'Valor contractual de referencia obtenido desde la ficha de la persona o asignación.',
-    'hourly_value' => 'Tarifa aplicable según asignación o ficha de la persona.',
-    'project_value' => 'Monto asociado al proyecto o hito que origina el pago.',
-    'bonuses' => 'Bonos que forman parte de la base imponible para cotizaciones.',
-    'non_taxable_allowances' => 'Montos que no forman parte de la base imponible, cuando legalmente corresponda.',
+    'person_id' => 'Persona o prestador al que corresponde la remuneración. Su ficha aporta la referencia base de cálculo.',
+    'period_date' => 'Mes al que pertenece la remuneración. El sistema normaliza el valor al primer día del mes para mantener el período contable.',
+    'payment_date' => 'Fecha prevista o real de pago del período. El estado se recalcula según este dato y los pagos registrados.',
+    'amount_basis' => 'Indica si el monto pactado se interpreta como bruto o líquido para el cálculo.',
+    'project_id' => 'Proyecto asociado a la asignación vigente del período, cuando exista.',
+    'hours_approved' => 'Horas aprobadas del período. Déjelo vacío solo si corresponde usar la referencia automática.',
+    'monthly_value' => 'Valor mensual override. Déjelo vacío para usar el valor base de la persona o de la novedad automática del período. Si ingresa 0,00, el período queda con base mensual en cero.',
+    'hourly_value' => 'Tarifa hora override. Déjelo vacío para usar la tarifa base de la persona o de la novedad automática del período. Si ingresa 0,00, el período queda sin tarifa por hora.',
+    'project_value' => 'Monto fijo del proyecto o hito. Déjelo vacío para usar la referencia automática del período cuando exista. Si ingresa 0,00, el período queda sin monto fijo.',
+    'bonuses' => 'Bonos imponibles del período. Si provienen de Novedades remuneración, el sistema los toma como referencia automática.',
+    'non_taxable_allowances' => 'Asignaciones no imponibles del período. Si provienen de Novedades remuneración, el sistema los toma como referencia automática.',
     'base_salary' => 'Sueldo proporcional o base honorarios calculada automáticamente.',
     'taxable_gross' => 'Base sobre la cual se calculan cotizaciones, sujeta a topes legales.',
     'pension_health_base' => 'Base previsional afecta a AFP y salud, considerando el tope legal vigente del período.',
@@ -45,8 +46,8 @@
     'health_employee' => 'Cotización legal de salud calculada sobre la base previsional.',
     'afc_employee' => 'Seguro de Cesantía de cargo del trabajador cuando corresponde según tipo de contrato.',
     'iusc_amount' => 'Impuesto Único de Segunda Categoría calculado según tabla SII vigente y base tributaria.',
-    'advances' => 'Dato de ingreso manual. Ingrese solo si corresponde al período.',
-    'other_deductions' => 'Dato de ingreso manual. Ingrese solo si corresponde al período.',
+    'advances' => 'Dato de ingreso manual para el período. Déjelo vacío si no corresponde un anticipo.',
+    'other_deductions' => 'Dato de ingreso manual para el período. Déjelo vacío si no corresponde otro descuento.',
     'net_pay' => 'Monto líquido a pagar después de descuentos legales y manuales.',
     'afc_employer' => 'Seguro de Cesantía de cargo del empleador según tipo de contrato.',
     'employer_pension' => 'Cotización adicional de cargo del empleador según la vigencia legal del período.',
@@ -151,7 +152,7 @@
         ],
     ],
     'assignments' => [
-        'title' => '¿Cómo completar la asignación?',
+    'title' => '¿Cómo completar la asignación?',
         'bullets' => [
             'Define cómo se remunera la participación de esta persona y durante qué período aplica en el proyecto.',
             'Usa Valor HH cuando el acuerdo considera una tarifa por cada hora de trabajo registrada.',
@@ -439,8 +440,8 @@
 @php($selectedPayrollExtras = collect([
     is_array($selectedPayrollPerson) && !empty($selectedPayrollPerson['payroll_afp_label']) ? 'AFP '.$selectedPayrollPerson['payroll_afp_label'] : null,
     is_array($selectedPayrollPerson) && !empty($selectedPayrollPerson['payroll_health_label']) ? 'Salud '.$selectedPayrollPerson['payroll_health_label'] : null,
-    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_monthly_value'] ?? null) ? 'Mensual '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_monthly_value']) : null,
-    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? 'Hora '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP') : null,
+    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_monthly_value'] ?? null) ? 'Base mensual '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_monthly_value']) : null,
+    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? 'Tarifa hora base '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP').' / HH' : null,
 ])->filter()->implode(' · '))
 @if ($isPayroll)
     @if (($item->calculation_status ?? null) && $item->calculation_status !== 'OK')
@@ -477,15 +478,15 @@
 
         <div class="collapse mt-3" id="payrollUsageHelp">
             <ul class="small text-muted mb-3 ps-3">
-                <li>Seleccione Persona y Período primero.</li>
-                <li>El sistema obtiene automáticamente modalidad, contrato, AFP, salud y parámetros legales vigentes.</li>
-                <li>Los campos con ícono de cálculo son automáticos y no deben editarse.</li>
-                <li>Complete solo bonos, asignaciones, anticipos u otros conceptos extraordinarios cuando correspondan.</li>
-                <li>Para honorarios, Base, tasa de retención, retención y líquido se calculan automáticamente.</li>
-                <li>Para dependientes, AFP, salud, AFC, IUSC y aportes del empleador se calculan según período.</li>
-                <li>La provisión de vacaciones afecta costo/rentabilidad, no el líquido ni la caja real.</li>
-                <li>Use “Recalcular” antes de confirmar si cambió algún dato base.</li>
-                <li>Una remuneración confirmada o de período cerrado no debe modificarse sin el flujo correspondiente.</li>
+                <li>Seleccione Persona, Proyecto y Período primero. El sistema completa la referencia base y valida la asignación vigente del mes.</li>
+                <li>Los campos marcados como override reemplazan un valor automático del período; déjelos vacíos cuando quiera usar la referencia base.</li>
+                <li>La modalidad, el contrato, AFP, salud y la tarifa base provienen de la ficha de Personal o de las novedades del período.</li>
+                <li>Las novedades de remuneración alimentan horas aprobadas, bonos, asignaciones no imponibles, anticipos y otros descuentos cuando existen.</li>
+                <li>Para honorarios, Base, retención y líquido se calculan automáticamente según el período.</li>
+                <li>Para dependientes, AFP, salud, AFC, IUSC y aportes del empleador se calculan según el período legal vigente.</li>
+                <li>La provisión de vacaciones afecta costo y análisis financiero, no el líquido ni la caja real.</li>
+                <li>Use “Recalcular” antes de confirmar si cambió algún dato base del período.</li>
+                <li>Una remuneración confirmada o cerrada no debe modificarse sin el flujo correspondiente.</li>
                 <li>Revise siempre el bloque “Costo empresa” antes de confirmar.</li>
             </ul>
             <div class="payroll-help-legend small">
@@ -518,6 +519,9 @@
             <div class="payroll-person-title">{{ $selectedPayrollTitle ?: 'Seleccione una persona' }}</div>
             <div class="payroll-person-meta">{{ $selectedPayrollSegments ?: 'La modalidad, contrato, AFP, salud y valores base se obtienen desde la ficha de Personal.' }}</div>
             <div class="payroll-person-extra">{{ $selectedPayrollExtras ?: 'Luego revise el período y complete solo conceptos extraordinarios si corresponde.' }}</div>
+        </div>
+        <div class="small text-muted mt-2">
+            Los campos marcados como override reemplazan la referencia automática del período. Déjelos vacíos solo cuando corresponda usar el valor base.
         </div>
     </div>
 @endif

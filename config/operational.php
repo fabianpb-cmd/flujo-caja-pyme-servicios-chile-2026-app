@@ -434,6 +434,9 @@ return [
     ],
     'payroll-records' => [
         'title' => 'Remuneraciones',
+        'singular_title' => 'Remuneración',
+        'create_title' => 'Nueva remuneración',
+        'edit_title' => 'Editar remuneración',
         'section' => 'Operación',
         'model' => PayrollRecord::class,
         'display' => 'code',
@@ -447,7 +450,7 @@ return [
             'hours_approved' => ['label' => 'Horas aprobadas', 'type' => 'number'],
             'monthly_value' => ['label' => 'Valor mensual override', 'type' => 'money'],
             'hourly_value' => ['label' => 'Valor hora override', 'type' => 'money'],
-            'project_value' => ['label' => 'Valor proyecto/hito', 'type' => 'money'],
+            'project_value' => ['label' => 'Valor proyecto/hito override', 'type' => 'money'],
             'bonuses' => ['label' => 'Bonos imponibles', 'type' => 'money'],
             'non_taxable_allowances' => ['label' => 'Asignaciones no imponibles', 'type' => 'money'],
             'advances' => ['label' => 'Anticipos', 'type' => 'money'],

@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CrudResourceRequest;
 use App\Models\ExpenseDocument;
 use App\Models\Currency;
+use App\Models\PayrollAdjustment;
 use App\Models\Person;
 use App\Models\PayrollRecord;
+use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\SalesDocument;
 use App\Policies\CompanyOwnedPolicy;
@@ -26,6 +28,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -297,12 +300,117 @@ class OperationalCrudController extends Controller
         }
 
         if ($resource === 'payroll-records') {
-            $person = Person::query()->findOrFail($data['person_id']);
-            $data = array_merge($data, $this->payroll->calculate($person, $data['period_date'], $data));
+            $period = Carbon::parse((string) $data['period_date'])->startOfMonth();
+            $data['period_date'] = $period->toDateString();
+
+            $person = Person::query()->forCompany($data['company_id'])->findOrFail($data['person_id']);
+            $derived = $this->payrollRecordDefaults($data['company_id'], $person->id, $period, $data['project_id'] ?? null);
+
+            foreach ($derived as $field => $value) {
+                if (! array_key_exists($field, $data) || $data[$field] === null || $data[$field] === '') {
+                    if ($value !== null) {
+                        $data[$field] = $value;
+                    }
+                }
+            }
+
+            $data = array_merge($data, $this->payroll->calculate($person, $period, $data));
             $data['status'] = 'Pendiente';
         }
 
         return $data;
+    }
+
+    private function payrollRecordDefaults(int $companyId, int $personId, Carbon $period, mixed $projectId): array
+    {
+        $defaults = [
+            'project_id' => null,
+            'hours_approved' => null,
+            'monthly_value' => null,
+            'hourly_value' => null,
+            'project_value' => null,
+            'health_additional' => null,
+            'bonuses' => null,
+            'non_taxable_allowances' => null,
+            'advances' => null,
+            'other_deductions' => null,
+        ];
+
+        $adjustments = PayrollAdjustment::query()
+            ->forCompany($companyId)
+            ->where('person_id', $personId)
+            ->whereDate('period_date', $period->toDateString())
+            ->where('active', true)
+            ->get();
+
+        $adjustments->each(function (PayrollAdjustment $adjustment) use (&$defaults): void {
+            $amount = (float) ($adjustment->amount ?? 0);
+            $quantity = (float) ($adjustment->quantity ?? 0);
+
+            match (strtoupper((string) $adjustment->type)) {
+                'BONUS_TAXABLE' => $defaults['bonuses'] = round((float) ($defaults['bonuses'] ?? 0) + $amount, 2),
+                'NON_TAXABLE_ALLOWANCE' => $defaults['non_taxable_allowances'] = round((float) ($defaults['non_taxable_allowances'] ?? 0) + $amount, 2),
+                'ADVANCE' => $defaults['advances'] = round((float) ($defaults['advances'] ?? 0) + $amount, 2),
+                'OTHER_DEDUCTION' => $defaults['other_deductions'] = round((float) ($defaults['other_deductions'] ?? 0) + $amount, 2),
+                'HEALTH_ADDITIONAL' => $defaults['health_additional'] = round((float) ($defaults['health_additional'] ?? 0) + $amount, 2),
+                'HOURS_APPROVED' => $defaults['hours_approved'] = round((float) ($defaults['hours_approved'] ?? 0) + $quantity, 2),
+                'MONTHLY_VALUE' => $defaults['monthly_value'] = round($amount, 2),
+                'HOURLY_VALUE' => $defaults['hourly_value'] = round($amount, 2),
+                'PROJECT_VALUE' => $defaults['project_value'] = round($amount, 2),
+                default => null,
+            };
+        });
+
+        $defaults['project_id'] = $this->payrollAutoProjectId($companyId, $personId, $period, $projectId);
+
+        $person = Person::query()->forCompany($companyId)->find($personId);
+        if ($defaults['monthly_value'] === null && $person?->monthly_value !== null) {
+            $defaults['monthly_value'] = (float) $person->monthly_value;
+        }
+
+        if ($defaults['hourly_value'] === null && $person?->hourly_value !== null) {
+            $defaults['hourly_value'] = (float) $person->hourly_value;
+        }
+
+        if ($defaults['health_additional'] === null && $person?->additional_health_plan !== null) {
+            $defaults['health_additional'] = (float) $person->additional_health_plan;
+        }
+
+        return $defaults;
+    }
+
+    private function payrollAutoProjectId(int $companyId, int $personId, Carbon $period, mixed $projectId): ?int
+    {
+        if (filled($projectId)) {
+            return (int) $projectId;
+        }
+
+        $assignments = $this->payrollAssignmentsForPeriod($companyId, $personId, $period, null);
+
+        return $assignments->count() === 1 ? (int) $assignments->first()->project_id : null;
+    }
+
+    private function payrollAssignmentsForPeriod(int $companyId, int $personId, Carbon $period, ?int $projectId): \Illuminate\Support\Collection
+    {
+        $periodEnd = $period->copy()->endOfMonth();
+
+        $query = ProjectAssignment::query()
+            ->where('company_id', $companyId)
+            ->where('person_id', $personId)
+            ->whereHas('assignmentStatus', fn ($builder) => $builder->where('code', 'active'))
+            ->where(function ($builder) use ($periodEnd) {
+                $builder->whereNull('start_date')->orWhereDate('start_date', '<=', $periodEnd);
+            })
+            ->where(function ($builder) use ($period) {
+                $builder->whereNull('end_date')->orWhereDate('end_date', '>=', $period->toDateString());
+            })
+            ->with(['project.client', 'assignmentStatus:id,code', 'hourlyRateCurrency:id,code,symbol,minor_units', 'costCenter:id,name']);
+
+        if ($projectId !== null) {
+            $query->where('project_id', $projectId);
+        }
+
+        return $query->orderBy('start_date')->orderBy('id')->get();
     }
 
     private function baseCurrencyId(int $companyId): ?int
@@ -477,16 +585,30 @@ class OperationalCrudController extends Controller
                 }
 
                 if ($resource === 'payroll-records' && $field === 'project_id') {
+                    $record->loadMissing(['client', 'salesCurrency']);
                     $ranges = \App\Models\ProjectAssignment::query()
                         ->where('company_id', $record->company_id)
                         ->where('project_id', $record->id)
-                        ->with('assignmentStatus:id,code')
+                        ->with(['assignmentStatus:id,code', 'person:id,name', 'hourlyRateCurrency:id,code,symbol,minor_units', 'costCenter:id,name'])
                         ->get()
                         ->filter(fn ($assignment) => strtolower((string) $assignment->assignmentStatus?->code) === 'active')
                         ->map(fn ($assignment) => [
+                            'id' => $assignment->id,
+                            'code' => $assignment->code,
                             'person_id' => $assignment->person_id,
+                            'person_name' => $assignment->person?->name,
                             'start_date' => optional($assignment->start_date)->format('Y-m-d'),
                             'end_date' => optional($assignment->end_date)->format('Y-m-d'),
+                            'hourly_value' => $assignment->hourly_value,
+                            'project_value' => $assignment->project_value,
+                            'hourly_rate_unit_type' => strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')),
+                            'currency_code' => $assignment->hourlyRateCurrency?->code,
+                            'currency_symbol' => $assignment->hourlyRateCurrency?->symbol,
+                            'currency_minor_units' => $assignment->hourlyRateCurrency?->minor_units,
+                            'cost_center_name' => $assignment->costCenter?->name,
+                            'project_name' => $record->name,
+                            'client_name' => $record->client?->legal_name,
+                            'source_label' => trim((string) (($assignment->code ?: 'Asignación').' · '.($record->name ?: 'No informado'))),
                         ])->values()->all();
 
                     $payload['assignment_ranges'] = $ranges;
