@@ -457,6 +457,8 @@ class OperationalCrudController extends Controller
                         'project_sale_currency_code' => $record->salesCurrency?->code ?: 'CLP',
                         'project_sale_currency_symbol' => $record->salesCurrency?->symbol ?: '$',
                         'project_sale_minor_units' => $record->salesCurrency?->minor_units ?? 0,
+                        'project_start_date' => optional($record->start_date)->format('Y-m-d'),
+                        'project_end_date' => optional($record->end_date)->format('Y-m-d'),
                     ];
                 }
 

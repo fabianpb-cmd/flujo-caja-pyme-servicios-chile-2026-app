@@ -153,10 +153,11 @@
     'assignments' => [
         'title' => '¿Cómo completar la asignación?',
         'bullets' => [
-            'Define cómo se remunera la participación de esta persona en el proyecto.',
-            'Si el acuerdo es por hora, completa Valor HH.',
-            'Si existe un monto fijo por toda la participación o por un hito, completa Monto pactado asignación.',
-            'Normalmente se utiliza una modalidad u otra. Si completas ambas, revisa que corresponda al acuerdo contractual.',
+            'Define cómo se remunera la participación de esta persona y durante qué período aplica.',
+            'Usa Valor HH cuando el acuerdo se paga por hora registrada al proyecto.',
+            'Usa Monto pactado asignación cuando existe un monto fijo para toda la participación o para un hito.',
+            'Si dejas un monto en 0,00 el sistema lo interpreta como cero y no como una segunda modalidad activa.',
+            'Si completas Valor HH y Monto pactado asignación, el sistema mostrará una advertencia para que verifiques el acuerdo contractual.',
         ],
     ],
 ])
@@ -193,12 +194,12 @@
     'assignments' => [
         'person_id' => 'Persona que quedará asociada al proyecto durante la vigencia indicada.',
         'project_id' => 'Proyecto al que se asigna la persona.',
-        'start_date' => 'Inicio de vigencia de la asignación.',
-        'end_date' => 'Déjela vacía mientras la asignación permanezca vigente.',
-        'hourly_rate_unit_type' => 'Moneda o unidad utilizada para valorizar la hora de esta persona en el proyecto.',
-        'hourly_value' => 'Valor pactado por cada hora imputada al proyecto.',
-        'project_value' => 'Monto fijo pactado con esta persona por su participación en el proyecto. No corresponde al valor de venta del proyecto.',
-        'monthly_hours' => 'Horas mensuales estimadas o comprometidas para esta asignación.',
+        'start_date' => 'Fecha desde la cual esta persona participa en el proyecto. Puede ser distinta a la del proyecto, pero si queda fuera de su vigencia se mostrará una advertencia.',
+        'end_date' => 'Fecha hasta la cual aplica esta asignación. Déjela vacía mientras siga vigente. Si supera la vigencia del proyecto, el sistema lo advertirá antes de guardar.',
+        'hourly_rate_unit_type' => 'Unidad usada para expresar Valor HH. Define si la tarifa por hora se ingresa en UF o en una moneda.',
+        'hourly_value' => 'Tarifa pactada por cada hora imputada al proyecto. Úsela cuando el acuerdo de pago sea por horas. Si ingresa 0,00, el sistema lo considera sin tarifa por hora activa.',
+        'project_value' => 'Monto fijo pactado con esta persona por su participación en el proyecto o por un hito. No corresponde al valor de venta del proyecto. Si ingresa 0,00, el sistema lo considera sin monto fijo activo.',
+        'monthly_hours' => 'Horas mensuales de referencia para esta asignación. Se usan como base referencial de capacidad cuando corresponde; no equivalen por sí solas a una remuneración.',
     ],
     'time-entries' => [
         'person_id' => 'Persona que registra las horas.',
@@ -265,6 +266,8 @@
 @php($assignmentProjectSaleCurrencyCode = data_get($assignmentSelectedProject, 'project_sale_currency_code', 'CLP'))
 @php($assignmentProjectSaleCurrencySymbol = data_get($assignmentSelectedProject, 'project_sale_currency_symbol', '$'))
 @php($assignmentProjectSaleMinorUnits = (int) data_get($assignmentSelectedProject, 'project_sale_minor_units', 0))
+@php($assignmentProjectStartDate = data_get($assignmentSelectedProject, 'project_start_date'))
+@php($assignmentProjectEndDate = data_get($assignmentSelectedProject, 'project_end_date'))
 @php($assignmentProjectSaleDisplay = $assignmentSelectedProject !== null && $assignmentProjectSaleNet !== null
     ? \App\Support\UiFormatter::formatMoney($assignmentProjectSaleNet, $assignmentProjectSaleCurrencyCode)
     : null)
@@ -272,6 +275,18 @@
 @php($assignmentProjectValue = old('project_value', $item->project_value ?? null))
 @php($assignmentHasBothValues = is_numeric($assignmentHourlyValue) && (float) $assignmentHourlyValue > 0 && is_numeric($assignmentProjectValue) && (float) $assignmentProjectValue > 0)
 @php($assignmentProjectExceedsSale = $assignmentProjectSaleNet !== null && is_numeric($assignmentProjectValue) && (float) $assignmentProjectValue > (float) $assignmentProjectSaleNet)
+@php($assignmentStartDate = old('start_date', optional($item->start_date)->format('d/m/Y')))
+@php($assignmentEndDate = old('end_date', optional($item->end_date)->format('d/m/Y')))
+@php($assignmentProjectVigencyDisplay = match (true) {
+    filled($assignmentProjectStartDate) && filled($assignmentProjectEndDate) => 'Vigencia proyecto: '.\App\Support\UiFormatter::formatDate($assignmentProjectStartDate).' al '.\App\Support\UiFormatter::formatDate($assignmentProjectEndDate),
+    filled($assignmentProjectStartDate) => 'Vigencia proyecto desde '.\App\Support\UiFormatter::formatDate($assignmentProjectStartDate),
+    filled($assignmentProjectEndDate) => 'Vigencia proyecto hasta '.\App\Support\UiFormatter::formatDate($assignmentProjectEndDate),
+    default => null,
+})
+@php($assignmentVigencyWarnings = collect([
+    filled($assignmentProjectStartDate) && filled($assignmentStartDate) && (\App\Support\UiFormatter::parseDateInput($assignmentStartDate)?->lt(\Illuminate\Support\Carbon::parse($assignmentProjectStartDate))) ? 'La asignación inicia antes del proyecto seleccionado.' : null,
+    filled($assignmentProjectEndDate) && filled($assignmentEndDate) && (\App\Support\UiFormatter::parseDateInput($assignmentEndDate)?->gt(\Illuminate\Support\Carbon::parse($assignmentProjectEndDate))) ? 'La asignación termina después del proyecto seleccionado.' : null,
+])->filter()->values()->all())
 @php($payrollDependentOnly = $payrollViewMeta['dependent_only_fields'] ?? [])
 @php($payrollHonorariosOnly = $payrollViewMeta['honorarios_only_fields'] ?? [])
 @php($payrollDisplayValue = function (string $field, array $definition, mixed $value) use ($item) {
@@ -758,6 +773,8 @@
                                                 data-project-sale-currency-code="{{ $option['project_sale_currency_code'] ?? '' }}"
                                                 data-project-sale-currency-symbol="{{ $option['project_sale_currency_symbol'] ?? '' }}"
                                                 data-project-sale-minor-units="{{ $option['project_sale_minor_units'] ?? '' }}"
+                                                data-project-start-date="{{ $option['project_start_date'] ?? '' }}"
+                                                data-project-end-date="{{ $option['project_end_date'] ?? '' }}"
                                             @endif
                                         >{{ $label }}</option>
                                     @endforeach
@@ -765,12 +782,18 @@
                                 <div class="small mt-1 text-muted" data-assignments-project-sale-net>
                                     {{ $assignmentProjectSaleDisplay ? 'Venta neta proyecto: '.$assignmentProjectSaleDisplay : 'Seleccione un proyecto para ver la venta neta de referencia.' }}
                                 </div>
-                                <div class="mt-2 {{ $assignmentHasBothValues || $assignmentProjectExceedsSale ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-assignments-warning-box>
+                                <div class="small mt-1 text-muted {{ $assignmentProjectVigencyDisplay ? '' : 'd-none' }}" data-assignments-project-vigency>
+                                    {{ $assignmentProjectVigencyDisplay ?? 'Seleccione un proyecto para revisar su vigencia de referencia.' }}
+                                </div>
+                                <div class="mt-2 {{ $assignmentHasBothValues || $assignmentProjectExceedsSale || ! empty($assignmentVigencyWarnings) ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-assignments-warning-box>
                                     <div class="{{ $assignmentHasBothValues ? '' : 'd-none' }}" data-assignments-warning-double>
                                         Se ingresó una tarifa por hora y un monto fijo. Verifique que ambas condiciones correspondan al acuerdo para evitar duplicidad en la remuneración.
                                     </div>
                                     <div class="{{ $assignmentProjectExceedsSale ? '' : 'd-none' }} mt-1" data-assignments-warning-sale>
                                         El monto pactado de esta asignación supera la venta neta del proyecto. Revise el impacto económico antes de guardar.
+                                    </div>
+                                    <div class="{{ ! empty($assignmentVigencyWarnings) ? 'mt-1' : 'd-none' }}" data-assignments-warning-vigency>
+                                        {{ implode(' ', $assignmentVigencyWarnings) }}
                                     </div>
                                 </div>
                             @elseif ($resource === 'time-entries' && $field === 'person_id')
@@ -1316,11 +1339,15 @@
 
         const assignmentProjectSelect = form.querySelector('[data-assignments-project-select="true"]');
         const assignmentProjectSaleNet = form.querySelector('[data-assignments-project-sale-net]');
+        const assignmentProjectVigency = form.querySelector('[data-assignments-project-vigency]');
         const assignmentWarningBox = form.querySelector('[data-assignments-warning-box]');
         const assignmentWarningDouble = form.querySelector('[data-assignments-warning-double]');
         const assignmentWarningSale = form.querySelector('[data-assignments-warning-sale]');
+        const assignmentWarningVigency = form.querySelector('[data-assignments-warning-vigency]');
         const assignmentHourlyInput = form.querySelector('#hourly_value');
         const assignmentProjectInput = form.querySelector('#project_value');
+        const assignmentStartInput = form.querySelector('#start_date');
+        const assignmentEndInput = form.querySelector('#end_date');
 
         const parseAssignmentNumber = (value) => {
             if (value === null || value === undefined || value === '') {
@@ -1351,6 +1378,35 @@
             }).format(Number(value))}`;
         };
 
+        const formatAssignmentDate = (value) => {
+            const date = value ? new Date(`${value}T00:00:00`) : null;
+            if (!date || Number.isNaN(date.getTime())) {
+                return '';
+            }
+
+            return new Intl.DateTimeFormat('es-CL', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            }).format(date);
+        };
+
+        const projectVigencyText = (startDate, endDate) => {
+            if (startDate && endDate) {
+                return `Vigencia proyecto: ${formatAssignmentDate(startDate)} al ${formatAssignmentDate(endDate)}`;
+            }
+
+            if (startDate) {
+                return `Vigencia proyecto desde ${formatAssignmentDate(startDate)}`;
+            }
+
+            if (endDate) {
+                return `Vigencia proyecto hasta ${formatAssignmentDate(endDate)}`;
+            }
+
+            return '';
+        };
+
         const syncAssignmentContext = () => {
             if (!assignmentProjectSelect || !assignmentProjectSaleNet || !assignmentWarningBox) {
                 return;
@@ -1359,19 +1415,38 @@
             const option = assignmentProjectSelect.options[assignmentProjectSelect.selectedIndex];
             const saleNetRaw = option?.dataset?.projectSaleNet || '';
             const saleCurrencyCode = option?.dataset?.projectSaleCurrencyCode || 'CLP';
-            const saleCurrencySymbol = option?.dataset?.projectSaleCurrencySymbol || (saleCurrencyCode === 'CLP' ? '$' : saleCurrencyCode);
             const saleMinorUnits = Number.parseInt(option?.dataset?.projectSaleMinorUnits || '0', 10);
             const saleNet = parseAssignmentNumber(saleNetRaw);
+            const projectStartDate = option?.dataset?.projectStartDate || '';
+            const projectEndDate = option?.dataset?.projectEndDate || '';
             const saleText = saleNet !== null
                 ? `Venta neta proyecto: ${formatAssignmentMoney(saleNet, saleCurrencyCode, Number.isNaN(saleMinorUnits) ? 0 : saleMinorUnits)}`
                 : 'Seleccione un proyecto para ver la venta neta de referencia.';
 
-            assignmentProjectSaleNet.textContent = saleNet !== null ? saleText : saleText;
+            assignmentProjectSaleNet.textContent = saleText;
+
+            const vigencyText = projectVigencyText(projectStartDate, projectEndDate);
+            if (assignmentProjectVigency) {
+                assignmentProjectVigency.textContent = vigencyText || 'Seleccione un proyecto para revisar su vigencia de referencia.';
+                assignmentProjectVigency.classList.toggle('d-none', !vigencyText);
+            }
 
             const hourlyValue = parseAssignmentNumber(assignmentHourlyInput?.value);
             const projectValue = parseAssignmentNumber(assignmentProjectInput?.value);
+            const assignmentStartDate = parseChileanDate(assignmentStartInput?.value || '');
+            const assignmentEndDate = parseChileanDate(assignmentEndInput?.value || '');
+            const projectStart = projectStartDate ? new Date(`${projectStartDate}T00:00:00`) : null;
+            const projectEnd = projectEndDate ? new Date(`${projectEndDate}T00:00:00`) : null;
             const hasBothValues = (hourlyValue ?? 0) > 0 && (projectValue ?? 0) > 0;
             const exceedsSaleNet = saleNet !== null && projectValue !== null && projectValue > saleNet;
+            const vigencyWarnings = [
+                projectStart && assignmentStartDate && assignmentStartDate < projectStart
+                    ? 'La asignación inicia antes del proyecto seleccionado.'
+                    : null,
+                projectEnd && assignmentEndDate && assignmentEndDate > projectEnd
+                    ? 'La asignación termina después del proyecto seleccionado.'
+                    : null,
+            ].filter(Boolean);
 
             if (assignmentWarningDouble) {
                 assignmentWarningDouble.classList.toggle('d-none', !hasBothValues);
@@ -1381,7 +1456,13 @@
                 assignmentWarningSale.classList.toggle('d-none', !exceedsSaleNet);
             }
 
-            assignmentWarningBox.classList.toggle('d-none', !hasBothValues && !exceedsSaleNet);
+            if (assignmentWarningVigency) {
+                assignmentWarningVigency.textContent = vigencyWarnings.join(' ');
+                assignmentWarningVigency.classList.toggle('d-none', vigencyWarnings.length === 0);
+                assignmentWarningVigency.classList.toggle('mt-1', vigencyWarnings.length > 0);
+            }
+
+            assignmentWarningBox.classList.toggle('d-none', !hasBothValues && !exceedsSaleNet && vigencyWarnings.length === 0);
         };
 
         assignmentProjectSelect?.addEventListener('change', syncAssignmentContext);
@@ -1389,6 +1470,12 @@
         assignmentHourlyInput?.addEventListener('change', syncAssignmentContext);
         assignmentProjectInput?.addEventListener('input', syncAssignmentContext);
         assignmentProjectInput?.addEventListener('change', syncAssignmentContext);
+        assignmentStartInput?.addEventListener('input', syncAssignmentContext);
+        assignmentStartInput?.addEventListener('change', syncAssignmentContext);
+        assignmentStartInput?.addEventListener('blur', syncAssignmentContext);
+        assignmentEndInput?.addEventListener('input', syncAssignmentContext);
+        assignmentEndInput?.addEventListener('change', syncAssignmentContext);
+        assignmentEndInput?.addEventListener('blur', syncAssignmentContext);
         syncAssignmentContext();
     })();
 </script>
