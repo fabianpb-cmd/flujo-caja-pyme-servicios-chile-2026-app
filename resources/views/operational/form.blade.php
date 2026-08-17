@@ -132,8 +132,8 @@
     'time-entries' => [
         'title' => '¿Cómo registrar horas?',
         'bullets' => [
-            'Seleccione la persona y un proyecto válido según su asignación vigente.',
-            'Indique la fecha, la actividad realizada y las horas efectivamente trabajadas ese día.',
+            'Seleccione primero la persona y la fecha. El sistema mostrará los proyectos con una asignación vigente para ese día y completará automáticamente el cliente, la tarifa y la referencia de la asignación.',
+            'Indique la actividad realizada y las horas efectivamente trabajadas ese día.',
             'Las horas aprobadas representan la cantidad finalmente validada para control, cálculo y procesos posteriores.',
             'La tarifa aplicable y el cliente se obtienen automáticamente desde la asignación o el proyecto correspondiente.',
         ],
@@ -266,6 +266,7 @@
 @php($timeEntryRatePreviewAmount = data_get($timeEntryRatePreview, 'amount'))
 @php($timeEntryRatePreviewDisplay = $timeEntryRatePreviewAmount !== null ? \App\Support\UiFormatter::formatNumber($timeEntryRatePreviewAmount, $timeEntryRatePreviewDecimals) : null)
 @php($timeEntryRatePreviewSource = data_get($timeEntryRatePreview, 'source_label'))
+@php($timeEntryRatePreviewProjectName = data_get($timeEntryRatePreview, 'project_name'))
 @php($assignmentSelectedProjectId = $resource === 'assignments' ? old('project_id', $item->project_id ?? null) : null)
 @php($assignmentSelectedProject = $assignmentSelectedProjectId !== null ? ($options['project_id'][$assignmentSelectedProjectId] ?? null) : null)
 @php($assignmentProjectSaleNet = data_get($assignmentSelectedProject, 'project_sale_net'))
@@ -346,6 +347,12 @@
     $timeEntrySelectedProject === null => 'Asignación: Seleccione una persona y un proyecto.',
     $timeEntryPersonRanges->isNotEmpty() => 'Asignación: Revise la vigencia de la asignación para la fecha indicada.',
     default => 'Asignación: No existe una asignación válida para esta persona y proyecto.',
+})
+@php($timeEntryAssignmentProjectLabel = match (true) {
+    $resource !== 'time-entries' => null,
+    $timeEntrySelectedRange !== null => 'Proyecto: '.($timeEntrySelectedRange['project_name'] ?? data_get($timeEntrySelectedProject, 'label') ?? 'No informado'),
+    $timeEntrySelectedProject !== null => 'Proyecto: '.(data_get($timeEntrySelectedProject, 'project_name') ?: data_get($timeEntrySelectedProject, 'label') ?: 'No informado'),
+    default => 'Proyecto: Seleccione una persona y una fecha.',
 })
 @php($timeEntryAssignmentVigencyLabel = match (true) {
     $resource !== 'time-entries' => null,
@@ -837,6 +844,7 @@
                                             @if(is_array($option))
                                                 data-client-id="{{ $option['client_id'] ?? '' }}"
                                                 data-client-label="{{ $option['client_label'] ?? '' }}"
+                                                data-project-name="{{ $option['project_name'] ?? $label }}"
                                                 data-project-rate-amount="{{ $option['project_rate_amount'] ?? '' }}"
                                                 data-project-rate-unit-type="{{ $option['project_rate_unit_type'] ?? '' }}"
                                                 data-project-rate-currency-code="{{ $option['project_rate_currency_code'] ?? '' }}"
@@ -850,6 +858,7 @@
                                 <div class="app-panel bg-light border-0 p-2 mt-2" data-time-entry-assignment-context>
                                     <div class="small fw-semibold text-muted mb-1">Referencia de la asignación</div>
                                     <div class="small text-muted" data-time-entry-assignment-label>{{ $timeEntryAssignmentLabel }}</div>
+                                    <div class="small text-muted" data-time-entry-assignment-project>{{ $timeEntryAssignmentProjectLabel }}</div>
                                     <div class="small text-muted" data-time-entry-assignment-vigency>{{ $timeEntryAssignmentVigencyLabel }}</div>
                                     <div class="small text-muted" data-time-entry-assignment-client>{{ $timeEntryContextClient }}</div>
                                     <div class="small text-muted" data-time-entry-assignment-rate>
@@ -1280,6 +1289,7 @@
         const timeEntryRatePrefix = form.querySelector('[data-time-entry-rate-prefix]');
         const timeEntryRateMessage = form.querySelector('[data-time-entry-rate-message]');
         const timeEntryAssignmentLabel = form.querySelector('[data-time-entry-assignment-label]');
+        const timeEntryAssignmentProject = form.querySelector('[data-time-entry-assignment-project]');
         const timeEntryAssignmentVigency = form.querySelector('[data-time-entry-assignment-vigency]');
         const timeEntryAssignmentClient = form.querySelector('[data-time-entry-assignment-client]');
         const timeEntryAssignmentRate = form.querySelector('[data-time-entry-assignment-rate]');
@@ -1445,8 +1455,8 @@
                 ? (unitType === 'UF' ? 2 : (currencyCode === 'CLP' ? 0 : 2))
                 : parseInt(projectOption.dataset.projectRateMinorUnits || '0', 10);
             const sourceLabel = sourceType === 'assignment'
-                ? (matchedRange?.source_label || 'Asignación')
-                : projectOption.textContent.trim();
+                ? (matchedRange?.source_label || `Asignación · ${projectOption.dataset.projectName || projectOption.textContent.trim()}`)
+                : `Proyecto · ${projectOption.dataset.projectName || projectOption.textContent.trim()}`;
 
             return {
                 amount,
@@ -1489,7 +1499,7 @@
                 placeholder.textContent = 'Seleccione una persona primero';
             } else if (!timeEntryDateInput?.value) {
                 timeEntryProjectSelect.disabled = true;
-                placeholder.textContent = 'Seleccione la fecha primero';
+                placeholder.textContent = 'Seleccione una fecha primero';
             } else if (visibleOptions === 0) {
                 timeEntryProjectSelect.disabled = true;
                 placeholder.textContent = 'No existen proyectos asignados para esta persona en la fecha indicada.';
@@ -1536,7 +1546,15 @@
             if (timeEntryAssignmentLabel) {
                 timeEntryAssignmentLabel.textContent = resolution.matchedRange
                     ? `Asignación: ${resolution.matchedRange.code || resolution.matchedRange.source_label || 'Asignación vigente'}`
-                    : (projectOption?.value ? 'Asignación: Revise la vigencia de la asignación para la fecha indicada.' : 'Asignación: Seleccione una persona y un proyecto.');
+                    : (projectOption?.value ? 'Asignación: Revise la vigencia de la asignación para la fecha indicada.' : 'Asignación: Seleccione una persona y una fecha.');
+            }
+
+            if (timeEntryAssignmentProject) {
+                const projectName = resolution.matchedRange?.project_name
+                    || projectOption?.dataset.projectName
+                    || projectOption?.textContent?.trim()
+                    || 'No informado';
+                timeEntryAssignmentProject.textContent = `Proyecto: ${projectName}`;
             }
 
             if (timeEntryAssignmentVigency) {

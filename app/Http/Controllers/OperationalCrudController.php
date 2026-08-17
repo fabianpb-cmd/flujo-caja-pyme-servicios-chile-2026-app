@@ -447,12 +447,14 @@ class OperationalCrudController extends Controller
                             'currency_minor_units' => $assignment->hourlyRateCurrency?->minor_units,
                             'cost_center_id' => $assignment->cost_center_id,
                             'cost_center_name' => $assignment->costCenter?->name,
-                            'source_label' => trim((string) ($assignment->code ?: $assignment->project?->name ?: 'Asignación')),
+                            'project_name' => $assignment->project?->name ?: $record->name,
+                            'source_label' => trim((string) (($assignment->code ?: 'Asignación').' · '.($assignment->project?->name ?: $record->name ?: 'No informado'))),
                         ])->values()->all();
 
                     $payload += [
                         'client_id' => $record->client_id,
                         'client_label' => $record->client?->legal_name,
+                        'project_name' => $record->name,
                         'project_rate_amount' => $record->contracted_hourly_rate,
                         'project_rate_unit_type' => 'CURRENCY',
                         'project_rate_currency_code' => $record->salesCurrency?->code ?: 'CLP',

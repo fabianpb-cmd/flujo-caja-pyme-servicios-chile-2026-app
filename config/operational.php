@@ -270,9 +270,9 @@ return [
         'fields' => [
             'code' => ['label' => 'Código', 'type' => 'text', 'col' => 'col-12 col-md-6 col-xl-3'],
             'person_id' => ['label' => 'Persona', 'type' => 'relation', 'model' => Person::class, 'display' => 'name', 'col' => 'col-12 col-md-6 col-xl-4'],
+            'entry_date' => ['label' => 'Fecha', 'type' => 'date', 'col' => 'col-12 col-md-6 col-xl-3'],
             'project_id' => ['label' => 'Proyecto', 'type' => 'relation', 'model' => Project::class, 'display' => 'name', 'col' => 'col-12 col-md-6 col-xl-4'],
             'client_id' => ['label' => 'Cliente', 'type' => 'relation', 'model' => Client::class, 'display' => 'legal_name', 'col' => 'col-12 col-md-6 col-xl-4'],
-            'entry_date' => ['label' => 'Fecha', 'type' => 'date', 'col' => 'col-12 col-md-6 col-xl-3'],
             'activity_id' => ['label' => 'Actividad', 'type' => 'relation', 'model' => Activity::class, 'display' => 'name', 'relation_name' => 'activityCatalog', 'col' => 'col-12 col-md-6 col-xl-4'],
             'hours_worked' => ['label' => 'Horas trabajadas', 'type' => 'decimal', 'presentation' => 'hours', 'col' => 'col-12 col-md-6 col-xl-3'],
             'hours_approved' => ['label' => 'Horas aprobadas', 'type' => 'decimal', 'presentation' => 'hours', 'col' => 'col-12 col-md-6 col-xl-3'],

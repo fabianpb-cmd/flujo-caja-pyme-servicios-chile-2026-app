@@ -1080,8 +1080,10 @@ class OperationalUiTest extends TestCase
         $create->assertDontSee('Nuevo Horas');
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
         $create->assertSee('¿Cómo registrar horas?');
-        $create->assertSee('Las horas aprobadas representan la cantidad finalmente validada para control, cálculo y procesos posteriores.');
+        $create->assertSee('Seleccione primero la persona y la fecha. El sistema mostrará los proyectos con una asignación vigente para ese día y completará automáticamente el cliente, la tarifa y la referencia de la asignación.');
+        $create->assertSee('Indique la actividad realizada y las horas efectivamente trabajadas ese día.');
         $create->assertSee('Referencia de la asignación');
+        $create->assertSee('data-time-entry-assignment-project', false);
         $create->assertSee('data-time-entry-assignment-context', false);
         $create->assertSee('data-time-entry-context-warning-box', false);
         $create->assertSee('data-time-entry-approved-warning-box', false);
@@ -1170,6 +1172,8 @@ class OperationalUiTest extends TestCase
         $this->assertDatabaseMissing('time_entries', [
             'code' => 'HOR-TIME-VAL',
         ]);
+        $create = $this->actingAs($admin)->get(route('operational.create', 'time-entries'));
+        $create->assertSee('Seleccione una fecha primero');
     }
 
     public function test_time_entries_validate_daily_total_and_status_consistency_and_autofill_cost_center(): void
