@@ -58,6 +58,11 @@
             $inputExtraAttributes .= ' placeholder="+56 9 1234 5678"';
         }
 
+        if ($resource === 'time-entries' && in_array($field, ['hours_worked', 'hours_approved'], true)) {
+            $inputType = 'number';
+            $inputExtraAttributes .= ' step="0.01" min="'.e($field === 'hours_worked' ? '0.01' : '0').'" max="24" inputmode="decimal"';
+        }
+
         $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="'.e($inputType).'" class="form-control'.e($fieldErrorClass).'" value="'.e($displayValue).'"'.$inputExtraAttributes.'>';
     }
 @endphp

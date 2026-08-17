@@ -3,10 +3,12 @@
 namespace App\Http\Requests;
 
 use App\Rules\ValidChileanRut;
+use App\Models\ApprovalStatus;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
+use App\Models\TimeEntry;
 use App\Models\Currency;
 use App\Support\ChileanRut;
 use App\Support\UiFormatter;
@@ -125,6 +127,11 @@ class CrudResourceRequest extends FormRequest
                 'end_date.after_or_equal' => 'La fecha término debe ser igual o posterior a la fecha inicio.',
                 'monthly_hours.max' => 'Horas mensuales no puede superar 744.',
             ],
+            'time-entries' => [
+                'hours_worked.gt' => 'Las horas trabajadas deben ser mayores que 0.',
+                'hours_worked.max' => 'Las horas trabajadas no pueden superar 24 en un mismo registro.',
+                'hours_approved.max' => 'Las horas aprobadas no pueden superar 24 en un mismo registro.',
+            ],
             default => [],
         };
     }
@@ -210,9 +217,7 @@ class CrudResourceRequest extends FormRequest
             }
 
             if ($resource === 'time-entries' && filled($this->input('project_id')) && filled($this->input('person_id')) && filled($this->input('entry_date'))) {
-                if (! $this->timeEntryProjectAssignmentExists()) {
-                    $validator->errors()->add('project_id', 'La persona no se encuentra asignada al proyecto seleccionado para la fecha indicada.');
-                }
+                $this->validateTimeEntryIntegrity($validator);
             }
 
             $this->validateTechnicalFieldLimits($validator, $resource, $config);
@@ -475,8 +480,173 @@ class CrudResourceRequest extends FormRequest
                 'project_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('project_value', 'El monto pactado de la asignación')],
                 'monthly_hours' => ['type' => 'unsignedSmallInteger', 'max' => 65535, 'label' => $labels('monthly_hours', 'Las horas mensuales')],
             ],
+            'time-entries' => [
+                'hours_worked' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'label' => $labels('hours_worked', 'Las horas trabajadas')],
+                'hours_approved' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'label' => $labels('hours_approved', 'Las horas aprobadas')],
+                'hourly_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('hourly_value', 'La tarifa aplicable')],
+            ],
             default => [],
         };
+    }
+
+    private function validateTimeEntryIntegrity(Validator $validator): void
+    {
+        $entryDate = UiFormatter::parseDateInput($this->input('entry_date'));
+        if (! $entryDate) {
+            return;
+        }
+
+        $project = Project::query()
+            ->where('company_id', $this->user()->company_id)
+            ->find($this->input('project_id'));
+
+        if (! $project) {
+            return;
+        }
+
+        if (filled($this->input('client_id')) && (string) $project->client_id !== (string) $this->input('client_id')) {
+            $validator->errors()->add('client_id', 'El cliente del registro debe coincidir con el cliente del proyecto seleccionado.');
+        }
+
+        $assignments = $this->timeEntryAssignmentsForProject($entryDate, false);
+        $matchingAssignments = $this->timeEntryAssignmentsForProject($entryDate, true);
+
+        if ($matchingAssignments->isEmpty()) {
+            $validator->errors()->add('project_id', $this->timeEntryAssignmentMissingMessage($assignments));
+        }
+
+        if ($matchingAssignments->count() > 1 && ! $this->currentTimeEntryUsesAssignment($matchingAssignments)) {
+            $validator->errors()->add('project_id', 'Existe más de una asignación vigente para esta persona y proyecto en la fecha indicada. Revise la asignación correspondiente antes de registrar horas.');
+        }
+
+        $workedHours = $this->numericInput($this->input('hours_worked'));
+        $approvedHours = $this->numericInput($this->input('hours_approved'));
+
+        if ($workedHours !== null) {
+            $dailyHours = TimeEntry::query()
+                ->where('company_id', $this->user()->company_id)
+                ->where('person_id', $this->input('person_id'))
+                ->whereDate('entry_date', $entryDate->toDateString())
+                ->when($this->route('record'), fn ($query) => $query->whereKeyNot($this->route('record')))
+                ->sum('hours_worked');
+
+            if (round((float) $dailyHours + $workedHours, 2) > 24) {
+                $validator->errors()->add('hours_worked', 'La suma diaria de horas trabajadas para esta persona no puede superar 24.');
+            }
+        }
+
+        if ($workedHours !== null && $approvedHours !== null && $approvedHours > $workedHours) {
+            $validator->errors()->add('hours_approved', 'Las horas aprobadas no pueden superar las horas trabajadas.');
+        }
+
+        $approvalCode = $this->approvalStatusCode();
+        if ($approvalCode === 'approved' && $approvedHours !== null && $approvedHours <= 0) {
+            $validator->errors()->add('hours_approved', 'Cuando la aprobación es Aprobado, las horas aprobadas deben ser mayores que 0.');
+        }
+
+        if ($approvalCode === 'rejected' && $approvedHours !== null && $approvedHours > 0) {
+            $validator->errors()->add('hours_approved', 'Cuando la aprobación es Rechazado, las horas aprobadas deben ser 0.');
+        }
+
+        $paymentStatus = strtolower(trim((string) $this->input('payment_status')));
+        if ($paymentStatus === 'paid' && $approvalCode !== 'approved') {
+            $validator->errors()->add('payment_status', 'Un registro solo puede marcarse como pagado cuando su aprobación está en estado Aprobado.');
+        }
+    }
+
+    private function timeEntryAssignmentsForProject(Carbon $entryDate, bool $applyDateWindow): \Illuminate\Support\Collection
+    {
+        $query = ProjectAssignment::query()
+            ->where('company_id', $this->user()->company_id)
+            ->where('person_id', $this->input('person_id'))
+            ->where('project_id', $this->input('project_id'))
+            ->whereHas('assignmentStatus', fn ($query) => $query->where('code', 'active'));
+
+        if ($applyDateWindow) {
+            $query
+                ->where(function ($query) use ($entryDate) {
+                    $query->whereNull('start_date')->orWhereDate('start_date', '<=', $entryDate->toDateString());
+                })
+                ->where(function ($query) use ($entryDate) {
+                    $query->whereNull('end_date')->orWhereDate('end_date', '>=', $entryDate->toDateString());
+                });
+        }
+
+        return $query->orderBy('start_date')->orderBy('id')->get();
+    }
+
+    private function currentTimeEntryUsesAssignment(\Illuminate\Support\Collection $matchingAssignments): bool
+    {
+        $recordId = $this->route('record');
+        if (! $recordId) {
+            return false;
+        }
+
+        $assignmentId = TimeEntry::query()->whereKey($recordId)->value('assignment_id');
+
+        return $assignmentId !== null && $matchingAssignments->contains(fn (ProjectAssignment $assignment): bool => (int) $assignment->id === (int) $assignmentId);
+    }
+
+    private function timeEntryAssignmentMissingMessage(\Illuminate\Support\Collection $assignments): string
+    {
+        if ($assignments->count() === 1) {
+            $assignment = $assignments->first();
+
+            return sprintf(
+                'La fecha registrada está fuera de la vigencia de la asignación (%s).',
+                $this->timeEntryAssignmentDateRangeLabel($assignment)
+            );
+        }
+
+        if ($assignments->isNotEmpty()) {
+            return 'La fecha registrada está fuera de la vigencia de la asignación seleccionada.';
+        }
+
+        return 'La persona no se encuentra asignada al proyecto seleccionado para la fecha indicada.';
+    }
+
+    private function timeEntryAssignmentDateRangeLabel(ProjectAssignment $assignment): string
+    {
+        $start = $assignment->start_date ? UiFormatter::formatDate($assignment->start_date) : 'sin inicio informado';
+        $end = $assignment->end_date ? UiFormatter::formatDate($assignment->end_date) : 'sin término informado';
+
+        if ($assignment->start_date && $assignment->end_date) {
+            return $start.' al '.$end;
+        }
+
+        if ($assignment->start_date) {
+            return 'desde '.$start;
+        }
+
+        if ($assignment->end_date) {
+            return 'hasta '.$end;
+        }
+
+        return 'sin vigencia informada';
+    }
+
+    private function numericInput(mixed $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $normalized = str_replace(',', '.', preg_replace('/\s+/', '', (string) $value));
+
+        return is_numeric($normalized) ? (float) $normalized : null;
+    }
+
+    private function approvalStatusCode(): ?string
+    {
+        $approvalStatusId = $this->input('approval_status_id');
+        if (! filled($approvalStatusId)) {
+            return null;
+        }
+
+        return strtolower((string) ApprovalStatus::query()
+            ->where('company_id', $this->user()->company_id)
+            ->whereKey($approvalStatusId)
+            ->value('code'));
     }
 
     private function fitsDecimalColumn(string $value, int $precision, int $scale): bool

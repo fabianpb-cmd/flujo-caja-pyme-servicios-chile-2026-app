@@ -132,10 +132,10 @@
     'time-entries' => [
         'title' => '¿Cómo registrar horas?',
         'bullets' => [
-            'Seleccione persona, proyecto y fecha de trabajo.',
-            'Registre horas trabajadas y aprobadas según corresponda.',
-            'La aprobación y el estado ayudan a controlar facturación y cálculo.',
-            'Use observaciones solo cuando haga falta aclarar el registro.',
+            'Seleccione la persona y un proyecto válido según su asignación vigente.',
+            'Indique la fecha, la actividad realizada y las horas efectivamente trabajadas ese día.',
+            'Las horas aprobadas representan la cantidad finalmente validada para control, cálculo y procesos posteriores.',
+            'La tarifa aplicable y el cliente se obtienen automáticamente desde la asignación o el proyecto correspondiente.',
         ],
     ],
     'projects' => [
@@ -203,12 +203,17 @@
         'monthly_hours' => 'Cantidad de horas de esta asignación consideradas por mes. Se usan como capacidad referencial cuando el sistema necesita estimar horas vigentes.',
     ],
     'time-entries' => [
-        'person_id' => 'Persona que registra las horas.',
-        'project_id' => 'Solo se muestran proyectos válidos según las asignaciones correspondientes.',
-        'entry_date' => 'Fecha en que se trabajaron las horas.',
-        'hours_worked' => 'Cantidad de horas registradas para la fecha y proyecto seleccionados.',
-        'hours_approved' => 'Cantidad de horas aprobadas para facturación o cálculo.',
-        'approval_status_id' => 'Estado de revisión que puede afectar facturación o cálculo.',
+        'person_id' => 'Persona a la que corresponde este registro de horas.',
+        'project_id' => 'Proyecto asociado a una asignación válida para la persona y la fecha seleccionadas.',
+        'client_id' => 'Cliente derivado automáticamente desde el proyecto seleccionado.',
+        'entry_date' => 'Fecha en que se trabajaron las horas. Debe quedar dentro de la vigencia de la asignación aplicable.',
+        'activity_id' => 'Actividad registrada para identificar el trabajo realizado.',
+        'hours_worked' => 'Horas efectivamente registradas para esta persona, proyecto y fecha. Cada registro diario debe ser mayor que 0 y no puede superar 24 horas.',
+        'hours_approved' => 'Horas finalmente aprobadas para control, cálculo y procesos posteriores. No pueden superar las horas trabajadas.',
+        'hourly_value' => 'Tarifa por hora obtenida automáticamente desde la asignación vigente o, cuando corresponda, desde el proyecto.',
+        'cost_center_id' => 'Centro de costo asociado al registro. Si la asignación ya lo define, se propone automáticamente como referencia.',
+        'approval_status_id' => 'Estado actual de revisión del registro de horas.',
+        'payment_status' => 'Estado manual de pago del registro. Solo corresponde marcarlo como pagado cuando la aprobación ya está resuelta.',
     ],
 ])
 @php($resourceLayoutOverrides = [
@@ -305,9 +310,78 @@
         => 'La vigencia de la asignación termina después de la vigencia del proyecto seleccionado.',
     default => null,
 })
-@php($assignmentFormTitle = $resource === 'assignments'
-    ? ($editing ? 'Editar asignación' : 'Nueva asignación')
-    : (($editing ? 'Editar' : 'Nuevo').' '.$config['title']))
+@php($formTitle = match ($resource) {
+    'assignments' => $editing ? 'Editar asignación' : 'Nueva asignación',
+    default => $editing ? ($config['edit_title'] ?? ('Editar '.$config['title'])) : ($config['create_title'] ?? ('Nuevo '.$config['title'])),
+})
+@php($formSubtitle = match ($resource) {
+    'time-entries' => 'La asignación vigente, el cliente y la tarifa aplicable se validan y actualizan automáticamente antes de guardar.',
+    default => 'Los cálculos financieros asociados se actualizan al guardar.',
+})
+@php($timeEntrySelectedPersonId = $resource === 'time-entries' ? old('person_id', $item->person_id ?? null) : null)
+@php($timeEntrySelectedProjectId = $resource === 'time-entries' ? old('project_id', $item->project_id ?? null) : null)
+@php($timeEntrySelectedProject = $resource === 'time-entries' && $timeEntrySelectedProjectId !== null ? ($options['project_id'][$timeEntrySelectedProjectId] ?? null) : null)
+@php($timeEntrySelectedProjectRanges = collect(data_get($timeEntrySelectedProject, 'assignment_ranges', [])))
+@php($timeEntryEntryDate = $resource === 'time-entries' ? old('entry_date', optional($item->entry_date)->format('d/m/Y')) : null)
+@php($timeEntryEntryDateParsed = $resource === 'time-entries' ? \App\Support\UiFormatter::parseDateInput($timeEntryEntryDate) : null)
+@php($timeEntryMatchingRanges = $timeEntrySelectedProjectRanges->filter(function (array $range) use ($timeEntrySelectedPersonId, $timeEntryEntryDateParsed) {
+    if ((string) ($range['person_id'] ?? '') !== (string) $timeEntrySelectedPersonId) {
+        return false;
+    }
+
+    if (! $timeEntryEntryDateParsed) {
+        return false;
+    }
+
+    $start = ! empty($range['start_date']) ? \Illuminate\Support\Carbon::parse($range['start_date']) : null;
+    $end = ! empty($range['end_date']) ? \Illuminate\Support\Carbon::parse($range['end_date']) : null;
+
+    return (! $start || $start->lte($timeEntryEntryDateParsed)) && (! $end || $end->gte($timeEntryEntryDateParsed));
+}))
+@php($timeEntrySelectedRange = $timeEntryMatchingRanges->count() === 1 ? $timeEntryMatchingRanges->first() : null)
+@php($timeEntryPersonRanges = $timeEntrySelectedProjectRanges->filter(fn (array $range) => (string) ($range['person_id'] ?? '') === (string) $timeEntrySelectedPersonId)->values())
+@php($timeEntryAssignmentLabel = match (true) {
+    $resource !== 'time-entries' => null,
+    $timeEntrySelectedRange !== null => 'Asignación: '.($timeEntrySelectedRange['code'] ?? $timeEntrySelectedRange['source_label'] ?? 'Asignación vigente'),
+    $timeEntrySelectedProject === null => 'Asignación: Seleccione una persona y un proyecto.',
+    $timeEntryPersonRanges->isNotEmpty() => 'Asignación: Revise la vigencia de la asignación para la fecha indicada.',
+    default => 'Asignación: No existe una asignación válida para esta persona y proyecto.',
+})
+@php($timeEntryAssignmentVigencyLabel = match (true) {
+    $resource !== 'time-entries' => null,
+    $timeEntrySelectedRange !== null && ! empty($timeEntrySelectedRange['start_date']) && ! empty($timeEntrySelectedRange['end_date']) => 'Vigencia: '.\App\Support\UiFormatter::formatDate($timeEntrySelectedRange['start_date']).' al '.\App\Support\UiFormatter::formatDate($timeEntrySelectedRange['end_date']),
+    $timeEntrySelectedRange !== null && ! empty($timeEntrySelectedRange['start_date']) => 'Vigencia: desde '.\App\Support\UiFormatter::formatDate($timeEntrySelectedRange['start_date']),
+    $timeEntrySelectedRange !== null && ! empty($timeEntrySelectedRange['end_date']) => 'Vigencia: hasta '.\App\Support\UiFormatter::formatDate($timeEntrySelectedRange['end_date']),
+    $resource === 'time-entries' && $timeEntrySelectedProject !== null => 'Vigencia: No informada',
+    default => 'Vigencia: Seleccione una persona y un proyecto.',
+})
+@php($timeEntryContextClient = match (true) {
+    $resource !== 'time-entries' => null,
+    $timeEntrySelectedProject !== null && filled(data_get($timeEntrySelectedProject, 'client_label')) => 'Cliente: '.data_get($timeEntrySelectedProject, 'client_label'),
+    $timeEntrySelectedProject !== null => 'Cliente: No informado',
+    default => 'Cliente: Se completará automáticamente.',
+})
+@php($timeEntryContextCostCenter = match (true) {
+    $resource !== 'time-entries' => null,
+    $timeEntrySelectedRange !== null && filled($timeEntrySelectedRange['cost_center_name'] ?? null) => 'Centro de costo: '.($timeEntrySelectedRange['cost_center_name'] ?? ''),
+    default => null,
+})
+@php($timeEntryOutOfRange = $resource === 'time-entries' && $timeEntrySelectedProject !== null && $timeEntryPersonRanges->count() === 1 && $timeEntryMatchingRanges->isEmpty())
+@php($timeEntryOutOfRangeStart = $timeEntryOutOfRange && ! empty($timeEntryPersonRanges->first()['start_date']) ? \App\Support\UiFormatter::formatDate($timeEntryPersonRanges->first()['start_date']) : null)
+@php($timeEntryOutOfRangeEnd = $timeEntryOutOfRange && ! empty($timeEntryPersonRanges->first()['end_date']) ? \App\Support\UiFormatter::formatDate($timeEntryPersonRanges->first()['end_date']) : null)
+@php($timeEntryOutOfRangeLabel = match (true) {
+    $timeEntryOutOfRangeStart && $timeEntryOutOfRangeEnd => $timeEntryOutOfRangeStart.' al '.$timeEntryOutOfRangeEnd,
+    $timeEntryOutOfRangeStart => 'desde '.$timeEntryOutOfRangeStart,
+    $timeEntryOutOfRangeEnd => 'hasta '.$timeEntryOutOfRangeEnd,
+    $timeEntryOutOfRange => 'sin vigencia informada',
+    default => null,
+})
+@php($timeEntryContextWarning = match (true) {
+    $resource !== 'time-entries' => null,
+    $timeEntryMatchingRanges->count() > 1 => 'Existe más de una asignación vigente para esta persona y proyecto en la fecha indicada. Revise la asignación correspondiente antes de registrar horas.',
+    $timeEntryOutOfRange => 'La fecha registrada está fuera de la vigencia de la asignación ('.$timeEntryOutOfRangeLabel.').',
+    default => null,
+})
 @php($payrollDependentOnly = $payrollViewMeta['dependent_only_fields'] ?? [])
 @php($payrollHonorariosOnly = $payrollViewMeta['honorarios_only_fields'] ?? [])
 @php($payrollDisplayValue = function (string $field, array $definition, mixed $value) use ($item) {
@@ -371,8 +445,8 @@
 @endif
 <div class="page-header">
     <div>
-        <h1 class="page-title">{{ $assignmentFormTitle }}</h1>
-        <div class="page-subtitle">Los cálculos financieros asociados se actualizan al guardar.</div>
+        <h1 class="page-title">{{ $formTitle }}</h1>
+        <div class="page-subtitle">{{ $formSubtitle }}</div>
     </div>
     <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Volver</a>
 </div>
@@ -720,7 +794,7 @@
                                 <input type="hidden" id="client_id" name="client_id" value="{{ old('client_id', $item->client_id ?? '') }}" data-time-entry-client-id>
                                 <input
                                     id="client_id_display"
-                                    class="form-control"
+                                    class="form-control @error($field) is-invalid @enderror"
                                     value="{{ $clientDisplay ?: '—' }}"
                                     readonly
                                     aria-readonly="true"
@@ -732,9 +806,9 @@
                                     <span class="input-group-text rate-unit-chip" data-time-entry-rate-prefix>{{ $timeEntryRatePreviewPrefix }}</span>
                                     <input
                                         id="hourly_value_display"
-                                        class="form-control"
+                                        class="form-control @error($field) is-invalid @enderror"
                                         value="{{ $timeEntryRatePreviewDisplay ?? '' }}"
-                                        placeholder="{{ $timeEntryRatePreviewAmount === null ? 'No configurada' : '' }}"
+                                        placeholder="{{ $timeEntryRatePreviewAmount === null ? 'No aplica / No configurada' : '' }}"
                                         readonly
                                         aria-readonly="true"
                                         data-time-entry-rate-display
@@ -742,14 +816,14 @@
                                     <span class="input-group-text">/ HH</span>
                                 </div>
                                 <div class="small mt-1 {{ $timeEntryRatePreviewAmount === null ? 'text-warning' : 'text-muted' }}" data-time-entry-rate-message>
-                                    {{ $timeEntryRatePreviewAmount === null ? 'Tarifa HH no configurada para esta persona/proyecto.' : ($timeEntryRatePreviewSource ? 'Origen: '.$timeEntryRatePreviewSource : 'Tarifa obtenida automáticamente.') }}
+                                    {{ $timeEntryRatePreviewAmount === null ? 'No existe una tarifa HH aplicable para esta combinación de persona, proyecto y fecha.' : ($timeEntryRatePreviewSource ? 'Origen: '.$timeEntryRatePreviewSource : 'Tarifa obtenida automáticamente.') }}
                                 </div>
                             @elseif ($resource === 'time-entries' && $field === 'project_id')
                                 @php($projectValue = old('project_id', $item->project_id ?? ''))
                                 <select
                                     id="{{ $field }}"
                                     name="{{ $field }}"
-                                    class="form-select"
+                                    class="form-select @error($field) is-invalid @enderror"
                                     data-time-entry-project-select="true"
                                 >
                                     <option value="">Seleccione</option>
@@ -773,6 +847,19 @@
                                         >{{ $label }}</option>
                                     @endforeach
                                 </select>
+                                <div class="app-panel bg-light border-0 p-2 mt-2" data-time-entry-assignment-context>
+                                    <div class="small fw-semibold text-muted mb-1">Referencia de la asignación</div>
+                                    <div class="small text-muted" data-time-entry-assignment-label>{{ $timeEntryAssignmentLabel }}</div>
+                                    <div class="small text-muted" data-time-entry-assignment-vigency>{{ $timeEntryAssignmentVigencyLabel }}</div>
+                                    <div class="small text-muted" data-time-entry-assignment-client>{{ $timeEntryContextClient }}</div>
+                                    <div class="small text-muted" data-time-entry-assignment-rate>
+                                        Tarifa: {{ $timeEntryRatePreviewAmount !== null ? trim($timeEntryRatePreviewPrefix.' '.($timeEntryRatePreviewDisplay ?? '')).' / HH' : 'No aplica / No configurada' }}
+                                    </div>
+                                    <div class="small text-muted {{ $timeEntryContextCostCenter ? '' : 'd-none' }}" data-time-entry-assignment-cost-center>{{ $timeEntryContextCostCenter }}</div>
+                                </div>
+                                <div class="mt-2 {{ $timeEntryContextWarning ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-time-entry-context-warning-box>
+                                    <div class="{{ $timeEntryContextWarning ? '' : 'd-none' }}" data-time-entry-context-warning>{{ $timeEntryContextWarning }}</div>
+                                </div>
                             @elseif ($resource === 'assignments' && $field === 'project_id')
                                 @php($assignmentProjectValue = old('project_id', $item->project_id ?? ''))
                                 <select
@@ -813,7 +900,7 @@
                                 <select
                                     id="{{ $field }}"
                                     name="{{ $field }}"
-                                    class="form-select"
+                                    class="form-select @error($field) is-invalid @enderror"
                                     data-time-entry-person-select="true"
                                 >
                                     <option value="">Seleccione</option>
@@ -827,12 +914,15 @@
                                     id="{{ $field }}"
                                     name="{{ $field }}"
                                     type="text"
-                                    class="form-control"
+                                    class="form-control @error($field) is-invalid @enderror"
                                     value="{{ $value ? \App\Support\UiFormatter::formatDate($value) : '' }}"
                                     placeholder="dd/mm/yyyy"
                                     inputmode="numeric"
                                     data-time-entry-date-input="true"
                                 >
+                                <div class="mt-2 d-none" data-time-entry-date-validation-box>
+                                    <div class="small text-danger" data-time-entry-date-validation></div>
+                                </div>
                             @elseif ($sharedRateUnitFields && $field === 'hourly_rate_unit_type')
                                 <div class="d-flex flex-wrap align-items-end gap-2">
                                     <div class="flex-grow-1" style="min-width: 220px;">
@@ -861,6 +951,11 @@
                             @error($field)
                                 <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror
+                            @if ($resource === 'time-entries' && $field === 'hours_approved')
+                                <div class="mt-2 d-none" data-time-entry-approved-warning-box>
+                                    <div class="small text-danger" data-time-entry-approved-warning></div>
+                                </div>
+                            @endif
                             @if ($resource === 'assignments' && $field === 'monthly_hours')
                                 <div class="mt-2 {{ $assignmentHasBothValues || $assignmentProjectExceedsSale ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-assignments-tariff-warning-box>
                                     <div class="{{ $assignmentHasBothValues ? '' : 'd-none' }}" data-assignments-warning-double>
@@ -1184,6 +1279,22 @@
         const timeEntryRateDisplay = form.querySelector('[data-time-entry-rate-display]');
         const timeEntryRatePrefix = form.querySelector('[data-time-entry-rate-prefix]');
         const timeEntryRateMessage = form.querySelector('[data-time-entry-rate-message]');
+        const timeEntryAssignmentLabel = form.querySelector('[data-time-entry-assignment-label]');
+        const timeEntryAssignmentVigency = form.querySelector('[data-time-entry-assignment-vigency]');
+        const timeEntryAssignmentClient = form.querySelector('[data-time-entry-assignment-client]');
+        const timeEntryAssignmentRate = form.querySelector('[data-time-entry-assignment-rate]');
+        const timeEntryAssignmentCostCenter = form.querySelector('[data-time-entry-assignment-cost-center]');
+        const timeEntryContextWarningBox = form.querySelector('[data-time-entry-context-warning-box]');
+        const timeEntryContextWarning = form.querySelector('[data-time-entry-context-warning]');
+        const timeEntryDateValidationBox = form.querySelector('[data-time-entry-date-validation-box]');
+        const timeEntryDateValidation = form.querySelector('[data-time-entry-date-validation]');
+        const timeEntryWorkedInput = form.querySelector('#hours_worked');
+        const timeEntryApprovedInput = form.querySelector('#hours_approved');
+        const timeEntryApprovedWarningBox = form.querySelector('[data-time-entry-approved-warning-box]');
+        const timeEntryApprovedWarning = form.querySelector('[data-time-entry-approved-warning]');
+        const timeEntryApprovalStatusSelect = form.querySelector('#approval_status_id');
+        const timeEntryPaymentStatusSelect = form.querySelector('#payment_status');
+        const timeEntryCostCenterSelect = form.querySelector('#cost_center_id');
 
         const parseChileanDate = (value) => {
             if (!value) {
@@ -1224,32 +1335,80 @@
             }).format(Number(value));
         };
 
-        const timeEntryProjectVisible = (option) => {
-            if (!timeEntryPersonSelect || !timeEntryDateInput) {
-                return true;
+        const parseTimeEntryNumber = (value) => {
+            if (value === null || value === undefined || value === '') {
+                return null;
             }
 
-            if (!timeEntryPersonSelect.value || !timeEntryDateInput.value) {
-                return false;
+            const normalized = String(value).replace(/\s+/g, '').replace(',', '.');
+            const parsed = Number(normalized);
+
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const timeEntryProjectRanges = (option) => {
+            if (!option) {
+                return [];
             }
 
-            const periodDate = parseChileanDate(timeEntryDateInput.value);
+            try {
+                return JSON.parse(option.dataset.assignmentRanges || '[]');
+            } catch (error) {
+                return [];
+            }
+        };
+
+        const timeEntryRangesForPerson = (option) => {
+            const personId = String(timeEntryPersonSelect?.value || '');
+
+            return timeEntryProjectRanges(option).filter((range) => String(range.person_id) === personId);
+        };
+
+        const timeEntryMatchingRanges = (option) => {
+            const periodDate = parseChileanDate(timeEntryDateInput?.value || '');
             if (!periodDate) {
-                return false;
+                return [];
             }
 
-            const ranges = JSON.parse(option.dataset.assignmentRanges || '[]');
-
-            return ranges.some((range) => {
-                if (String(range.person_id) !== String(timeEntryPersonSelect.value)) {
-                    return false;
-                }
-
+            return timeEntryRangesForPerson(option).filter((range) => {
                 const start = range.start_date ? new Date(`${range.start_date}T00:00:00`) : null;
                 const end = range.end_date ? new Date(`${range.end_date}T00:00:00`) : null;
 
                 return (!start || start <= periodDate) && (!end || end >= periodDate);
             });
+        };
+
+        const formatTimeEntryDate = (value) => {
+            const date = value ? new Date(`${value}T00:00:00`) : null;
+            if (!date || Number.isNaN(date.getTime())) {
+                return '';
+            }
+
+            return new Intl.DateTimeFormat('es-CL', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+            }).format(date);
+        };
+
+        const assignmentRangeDateLabel = (range) => {
+            if (!range) {
+                return 'Vigencia: No informada';
+            }
+
+            if (range.start_date && range.end_date) {
+                return `Vigencia: ${formatTimeEntryDate(range.start_date)} al ${formatTimeEntryDate(range.end_date)}`;
+            }
+
+            if (range.start_date) {
+                return `Vigencia: desde ${formatTimeEntryDate(range.start_date)}`;
+            }
+
+            if (range.end_date) {
+                return `Vigencia: hasta ${formatTimeEntryDate(range.end_date)}`;
+            }
+
+            return 'Vigencia: No informada';
         };
 
         const selectedTimeEntryProjectOption = () => {
@@ -1263,15 +1422,11 @@
         const resolveTimeEntryRate = () => {
             const projectOption = selectedTimeEntryProjectOption();
             if (!projectOption) {
-                return { amount: null, prefix: '—', decimals: 2, source: null, clientId: '', clientLabel: '' };
+                return { amount: null, prefix: '—', decimals: 2, source: null, clientId: '', clientLabel: '', matchedRange: null, projectOption: null };
             }
 
-            const ranges = JSON.parse(projectOption.dataset.assignmentRanges || '[]');
-            const periodDate = parseChileanDate(timeEntryDateInput?.value || '');
-            const personId = String(timeEntryPersonSelect?.value || '');
-            const matchedRange = periodDate
-                ? ranges.find((range) => String(range.person_id) === personId && (!range.start_date || new Date(`${range.start_date}T00:00:00`) <= periodDate) && (!range.end_date || new Date(`${range.end_date}T00:00:00`) >= periodDate))
-                : null;
+            const matchedRanges = timeEntryMatchingRanges(projectOption);
+            const matchedRange = matchedRanges.length === 1 ? matchedRanges[0] : null;
 
             const sourceType = matchedRange && Number(matchedRange.hourly_value) > 0 ? 'assignment' : 'project';
             const amount = sourceType === 'assignment'
@@ -1300,35 +1455,9 @@
                 source: amount ? sourceLabel : null,
                 clientId: projectOption.dataset.clientId || '',
                 clientLabel: projectOption.dataset.clientLabel || '',
+                matchedRange,
+                projectOption,
             };
-        };
-
-        const syncTimeEntryRate = () => {
-            if (!timeEntryRateRaw || !timeEntryRateDisplay || !timeEntryRatePrefix) {
-                return;
-            }
-
-            const resolution = resolveTimeEntryRate();
-            if (resolution.amount === null || resolution.amount === '') {
-                timeEntryRateRaw.value = '';
-                timeEntryRateDisplay.value = '';
-                timeEntryRateDisplay.placeholder = 'No configurada';
-                timeEntryRatePrefix.textContent = '—';
-                timeEntryRateMessage.textContent = 'Tarifa HH no configurada para esta persona/proyecto.';
-                timeEntryRateMessage.className = 'small mt-1 text-warning';
-            } else {
-                timeEntryRateRaw.value = resolution.amount;
-                timeEntryRateDisplay.value = formatRateValue(resolution.amount, resolution.decimals);
-                timeEntryRateDisplay.placeholder = '';
-                timeEntryRatePrefix.textContent = resolution.prefix || '—';
-                timeEntryRateMessage.textContent = resolution.source ? `Origen: ${resolution.source}` : 'Tarifa obtenida automáticamente.';
-                timeEntryRateMessage.className = 'small mt-1 text-muted';
-            }
-
-            if (timeEntryClientHidden && timeEntryClientDisplay) {
-                timeEntryClientHidden.value = resolution.clientId || '';
-                timeEntryClientDisplay.value = resolution.clientLabel || '—';
-            }
         };
 
         const syncTimeEntryProjects = () => {
@@ -1338,7 +1467,6 @@
 
             const placeholder = timeEntryProjectSelect.options[0];
             let visibleOptions = 0;
-            let selectedVisible = false;
 
             Array.from(timeEntryProjectSelect.options).forEach((option, index) => {
                 if (index === 0) {
@@ -1346,20 +1474,15 @@
                     return;
                 }
 
-                const visible = timeEntryProjectVisible(option);
-                option.hidden = !visible;
-                option.disabled = !visible;
+                const visible = timeEntryMatchingRanges(option).length > 0;
+                const preserveSelected = option.selected && !visible;
+
+                option.hidden = !visible && !preserveSelected;
+                option.disabled = !visible && !preserveSelected;
                 if (visible) {
                     visibleOptions++;
                 }
-                if (visible && option.selected) {
-                    selectedVisible = true;
-                }
             });
-
-            if (!selectedVisible) {
-                timeEntryProjectSelect.value = '';
-            }
 
             if (!timeEntryPersonSelect?.value) {
                 timeEntryProjectSelect.disabled = true;
@@ -1374,15 +1497,140 @@
                 timeEntryProjectSelect.disabled = false;
                 placeholder.textContent = 'Seleccione';
             }
-
-            syncTimeEntryRate();
         };
 
-        timeEntryPersonSelect?.addEventListener('change', syncTimeEntryProjects);
-        timeEntryProjectSelect?.addEventListener('change', syncTimeEntryRate);
-        timeEntryDateInput?.addEventListener('change', syncTimeEntryProjects);
-        timeEntryDateInput?.addEventListener('blur', syncTimeEntryProjects);
-        syncTimeEntryProjects();
+        const syncTimeEntryContext = () => {
+            syncTimeEntryProjects();
+
+            const resolution = resolveTimeEntryRate();
+            const projectOption = resolution.projectOption;
+            const matchedRanges = timeEntryMatchingRanges(projectOption);
+            const personRanges = timeEntryRangesForPerson(projectOption);
+            const workedHours = parseTimeEntryNumber(timeEntryWorkedInput?.value);
+            const approvedHours = parseTimeEntryNumber(timeEntryApprovedInput?.value);
+            const approvalCode = String(timeEntryApprovalStatusSelect?.selectedOptions?.[0]?.textContent || '').trim().toLowerCase();
+
+            if (timeEntryRateRaw && timeEntryRateDisplay && timeEntryRatePrefix && timeEntryRateMessage) {
+                if (resolution.amount === null || resolution.amount === '') {
+                    timeEntryRateRaw.value = '';
+                    timeEntryRateDisplay.value = '';
+                    timeEntryRateDisplay.placeholder = 'No aplica / No configurada';
+                    timeEntryRatePrefix.textContent = '—';
+                    timeEntryRateMessage.textContent = 'No existe una tarifa HH aplicable para esta combinación de persona, proyecto y fecha.';
+                    timeEntryRateMessage.className = 'small mt-1 text-warning';
+                } else {
+                    timeEntryRateRaw.value = resolution.amount;
+                    timeEntryRateDisplay.value = formatRateValue(resolution.amount, resolution.decimals);
+                    timeEntryRateDisplay.placeholder = '';
+                    timeEntryRatePrefix.textContent = resolution.prefix || '—';
+                    timeEntryRateMessage.textContent = resolution.source ? `Origen: ${resolution.source}` : 'Tarifa obtenida automáticamente.';
+                    timeEntryRateMessage.className = 'small mt-1 text-muted';
+                }
+            }
+
+            if (timeEntryClientHidden && timeEntryClientDisplay) {
+                timeEntryClientHidden.value = resolution.clientId || '';
+                timeEntryClientDisplay.value = resolution.clientLabel || '—';
+            }
+
+            if (timeEntryAssignmentLabel) {
+                timeEntryAssignmentLabel.textContent = resolution.matchedRange
+                    ? `Asignación: ${resolution.matchedRange.code || resolution.matchedRange.source_label || 'Asignación vigente'}`
+                    : (projectOption?.value ? 'Asignación: Revise la vigencia de la asignación para la fecha indicada.' : 'Asignación: Seleccione una persona y un proyecto.');
+            }
+
+            if (timeEntryAssignmentVigency) {
+                timeEntryAssignmentVigency.textContent = assignmentRangeDateLabel(resolution.matchedRange || personRanges[0] || null);
+            }
+
+            if (timeEntryAssignmentClient) {
+                timeEntryAssignmentClient.textContent = `Cliente: ${resolution.clientLabel || 'Se completará automáticamente.'}`;
+            }
+
+            if (timeEntryAssignmentRate) {
+                timeEntryAssignmentRate.textContent = `Tarifa: ${resolution.amount !== null && resolution.amount !== '' ? `${resolution.prefix || '—'} ${formatRateValue(resolution.amount, resolution.decimals)} / HH` : 'No aplica / No configurada'}`;
+            }
+
+            if (timeEntryAssignmentCostCenter) {
+                const costCenterName = resolution.matchedRange?.cost_center_name || '';
+                timeEntryAssignmentCostCenter.textContent = costCenterName ? `Centro de costo: ${costCenterName}` : '';
+                timeEntryAssignmentCostCenter.classList.toggle('d-none', costCenterName === '');
+            }
+
+            if (timeEntryCostCenterSelect && !timeEntryCostCenterSelect.value && resolution.matchedRange?.cost_center_id) {
+                timeEntryCostCenterSelect.value = String(resolution.matchedRange.cost_center_id);
+            }
+
+            let contextWarning = '';
+            if (matchedRanges.length > 1) {
+                contextWarning = 'Existe más de una asignación vigente para esta persona y proyecto en la fecha indicada. Revise la asignación correspondiente antes de registrar horas.';
+            } else if (projectOption?.value && personRanges.length === 1 && matchedRanges.length === 0 && timeEntryDateInput?.value) {
+                const firstRange = personRanges[0];
+                const startLabel = firstRange.start_date ? formatTimeEntryDate(firstRange.start_date) : 'sin inicio informado';
+                const endLabel = firstRange.end_date ? formatTimeEntryDate(firstRange.end_date) : 'sin término informado';
+                contextWarning = `La fecha registrada está fuera de la vigencia de la asignación (${firstRange.start_date && firstRange.end_date ? `${startLabel} al ${endLabel}` : (firstRange.start_date ? `desde ${startLabel}` : (firstRange.end_date ? `hasta ${endLabel}` : 'sin vigencia informada'))}).`;
+            }
+
+            if (timeEntryContextWarningBox && timeEntryContextWarning) {
+                timeEntryContextWarning.textContent = contextWarning;
+                timeEntryContextWarning.classList.toggle('d-none', contextWarning === '');
+                timeEntryContextWarningBox.classList.toggle('d-none', contextWarning === '');
+            }
+
+            if (timeEntryDateValidationBox && timeEntryDateValidation) {
+                timeEntryDateValidation.textContent = contextWarning;
+                timeEntryDateValidationBox.classList.toggle('d-none', contextWarning === '');
+            }
+
+            let approvedWarning = '';
+            if (workedHours !== null && approvedHours !== null && approvedHours > workedHours) {
+                approvedWarning = 'Las horas aprobadas no pueden superar las horas trabajadas.';
+            } else if (approvalCode.includes('aprobado') && approvedHours !== null && approvedHours <= 0) {
+                approvedWarning = 'Si la aprobación es Aprobado, ingrese horas aprobadas mayores que 0.';
+            } else if (approvalCode.includes('rechazado') && approvedHours !== null && approvedHours > 0) {
+                approvedWarning = 'Si la aprobación es Rechazado, las horas aprobadas deben ser 0.';
+            } else if (String(timeEntryPaymentStatusSelect?.value || '') === 'paid' && !approvalCode.includes('aprobado')) {
+                approvedWarning = 'Un registro solo puede marcarse como pagado cuando su aprobación ya está resuelta como Aprobado.';
+            }
+
+            if (timeEntryApprovedWarningBox && timeEntryApprovedWarning) {
+                timeEntryApprovedWarning.textContent = approvedWarning;
+                timeEntryApprovedWarning.classList.toggle('d-none', approvedWarning === '');
+                timeEntryApprovedWarningBox.classList.toggle('d-none', approvedWarning === '');
+            }
+        };
+
+        const timeEntryReactiveFieldIds = new Set([
+            'person_id',
+            'project_id',
+            'entry_date',
+            'hours_worked',
+            'hours_approved',
+            'approval_status_id',
+            'payment_status',
+        ]);
+
+        const syncTimeEntryContextOnEvent = (event) => {
+            if (!timeEntryReactiveFieldIds.has(event.target?.id || '')) {
+                return;
+            }
+
+            syncTimeEntryContext();
+        };
+
+        form.addEventListener('input', syncTimeEntryContextOnEvent);
+        form.addEventListener('change', syncTimeEntryContextOnEvent);
+
+        timeEntryPersonSelect?.addEventListener('change', syncTimeEntryContext);
+        timeEntryProjectSelect?.addEventListener('change', syncTimeEntryContext);
+        timeEntryDateInput?.addEventListener('input', syncTimeEntryContext);
+        timeEntryDateInput?.addEventListener('change', syncTimeEntryContext);
+        timeEntryDateInput?.addEventListener('blur', syncTimeEntryContext);
+        timeEntryWorkedInput?.addEventListener('input', syncTimeEntryContext);
+        timeEntryApprovedInput?.addEventListener('input', syncTimeEntryContext);
+        timeEntryApprovalStatusSelect?.addEventListener('change', syncTimeEntryContext);
+        timeEntryPaymentStatusSelect?.addEventListener('change', syncTimeEntryContext);
+        syncTimeEntryContext();
 
         const assignmentProjectSelect = form.querySelector('[data-assignments-project-select="true"]');
         const assignmentProjectSaleNet = form.querySelector('[data-assignments-project-sale-net]');

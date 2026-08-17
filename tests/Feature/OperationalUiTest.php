@@ -1022,6 +1022,314 @@ class OperationalUiTest extends TestCase
         $this->assertSame(70000.0, (float) $projectEntry->calculated_amount);
     }
 
+    public function test_time_entries_show_clarified_titles_help_and_assignment_context(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-UX',
+            'legal_name' => 'Cliente Horas UX',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $uf = Currency::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'UF'],
+            ['name' => 'Unidad de Fomento', 'symbol' => 'UF', 'minor_units' => 2, 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-UX',
+            'first_names' => 'Paula',
+            'paternal_surname' => 'Horas',
+            'name' => 'Paula Horas',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-TIME-UX',
+            'name' => 'Proyecto Horas UX',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-UX',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.50,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+        ]);
+
+        $create = $this->actingAs($admin)->get(route('operational.create', 'time-entries'));
+
+        $create->assertOk();
+        $create->assertSee('Registrar horas');
+        $create->assertSee('Operación / Horas / Registrar horas');
+        $create->assertDontSee('Nuevo Horas');
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
+        $create->assertSee('¿Cómo registrar horas?');
+        $create->assertSee('Las horas aprobadas representan la cantidad finalmente validada para control, cálculo y procesos posteriores.');
+        $create->assertSee('Referencia de la asignación');
+        $create->assertSee('data-time-entry-assignment-context', false);
+        $create->assertSee('data-time-entry-context-warning-box', false);
+        $create->assertSee('data-time-entry-approved-warning-box', false);
+        $create->assertSee('data-time-entry-date-validation-box', false);
+    }
+
+    public function test_time_entries_validate_assignment_date_hours_and_client_integrity(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $clientA = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-A',
+            'legal_name' => 'Cliente A Horas',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $clientB = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-B',
+            'legal_name' => 'Cliente B Horas',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-VAL',
+            'first_names' => 'María',
+            'paternal_surname' => 'Valida',
+            'name' => 'María Valida',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $clientA->id,
+            'code' => 'PRY-TIME-VAL',
+            'name' => 'Proyecto Validación Horas',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $clientA->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-VAL',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-VAL'],
+            ['name' => 'Actividad Validación Horas', 'active' => true, 'sort_order' => 1]
+        );
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $response = $this->actingAs($admin)->from(route('operational.create', 'time-entries'))->post(route('operational.store', 'time-entries'), [
+            'code' => 'HOR-TIME-VAL',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'client_id' => $clientB->id,
+            'entry_date' => '31/07/2026',
+            'activity_id' => $activity->id,
+            'hours_worked' => 25,
+            'hours_approved' => 26,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+        ]);
+
+        $response->assertRedirect(route('operational.create', 'time-entries'));
+        $response->assertSessionHasErrors([
+            'client_id' => 'El cliente del registro debe coincidir con el cliente del proyecto seleccionado.',
+            'project_id' => 'La fecha registrada está fuera de la vigencia de la asignación (01/08/2026 al 30/09/2026).',
+            'hours_worked' => 'Las horas trabajadas no pueden superar 24 en un mismo registro.',
+            'hours_approved' => 'Las horas aprobadas no pueden superar las horas trabajadas.',
+        ]);
+        $this->assertDatabaseMissing('time_entries', [
+            'code' => 'HOR-TIME-VAL',
+        ]);
+    }
+
+    public function test_time_entries_validate_daily_total_and_status_consistency_and_autofill_cost_center(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-DAY',
+            'legal_name' => 'Cliente Día Horas',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $costCenter = \App\Models\CostCenter::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CC-TIME',
+            'name' => 'Centro Tiempo',
+            'active' => true,
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-DAY',
+            'first_names' => 'Pedro',
+            'paternal_surname' => 'Diario',
+            'name' => 'Pedro Diario',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-DAY',
+            'name' => 'Proyecto Día Horas',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-DAY',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.50,
+            'cost_center_id' => $costCenter->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-DAY'],
+            ['name' => 'Actividad Día Horas', 'active' => true, 'sort_order' => 1]
+        );
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+        $rejectedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'rejected'],
+            ['name' => 'Rechazado', 'active' => true, 'sort_order' => 2]
+        );
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HOR-TIME-BASE',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-10',
+            'activity_id' => $activity->id,
+            'activity' => 'Actividad Día Horas',
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'approval_status_id' => $approvedStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+            'cost_center_id' => $costCenter->id,
+            'cost_center' => $costCenter->name,
+        ]);
+
+        $dailyLimit = $this->actingAs($admin)->from(route('operational.create', 'time-entries'))->post(route('operational.store', 'time-entries'), [
+            'code' => 'HOR-TIME-LIMIT',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'client_id' => $client->id,
+            'entry_date' => '10/08/2026',
+            'activity_id' => $activity->id,
+            'hours_worked' => 15,
+            'hours_approved' => 5,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+        ]);
+
+        $dailyLimit->assertSessionHasErrors([
+            'hours_worked' => 'La suma diaria de horas trabajadas para esta persona no puede superar 24.',
+        ]);
+
+        $rejected = $this->actingAs($admin)->from(route('operational.create', 'time-entries'))->post(route('operational.store', 'time-entries'), [
+            'code' => 'HOR-TIME-REJECT',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'client_id' => $client->id,
+            'entry_date' => '11/08/2026',
+            'activity_id' => $activity->id,
+            'hours_worked' => 5,
+            'hours_approved' => 2,
+            'approval_status_id' => $rejectedStatus->id,
+            'payment_status' => 'paid',
+        ]);
+
+        $rejected->assertSessionHasErrors([
+            'hours_approved' => 'Cuando la aprobación es Rechazado, las horas aprobadas deben ser 0.',
+            'payment_status' => 'Un registro solo puede marcarse como pagado cuando su aprobación está en estado Aprobado.',
+        ]);
+
+        $valid = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'code' => 'HOR-TIME-OK',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'client_id' => '',
+            'entry_date' => '12/08/2026',
+            'activity_id' => $activity->id,
+            'hours_worked' => 8.5,
+            'hours_approved' => 8.5,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'cost_center_id' => '',
+        ]);
+
+        $valid->assertRedirect(route('operational.index', 'time-entries'));
+        $this->assertDatabaseHas('time_entries', [
+            'code' => 'HOR-TIME-OK',
+            'client_id' => $client->id,
+            'assignment_id' => $assignment->id,
+            'cost_center_id' => $costCenter->id,
+            'hours_worked' => 8.5,
+            'hours_approved' => 8.5,
+        ]);
+
+        $editEntry = TimeEntry::query()->where('code', 'HOR-TIME-OK')->firstOrFail();
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $editEntry->id]));
+        $edit->assertOk();
+        $edit->assertSee('Editar registro de horas');
+        $edit->assertSee('Operación / Horas / Editar registro de horas');
+        $edit->assertSee('Asignación: ASI-TIME-DAY');
+        $edit->assertSee('Vigencia: 01/08/2026 al 30/09/2026');
+        $edit->assertSee('Cliente: Cliente Día Horas');
+        $edit->assertSee('Centro de costo: Centro Tiempo');
+        $edit->assertSee('Tarifa:');
+        $edit->assertSee('UF');
+        $edit->assertSee('/ HH');
+    }
+
     public function test_people_and_assignments_rate_rows_keep_horizontal_dom_structure(): void
     {
         [$company, $admin] = $this->companyWithAdmin();

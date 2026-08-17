@@ -7,6 +7,7 @@ use App\Models\ExpenseDocument;
 use App\Models\Currency;
 use App\Models\Person;
 use App\Models\PayrollRecord;
+use App\Models\ProjectAssignment;
 use App\Models\SalesDocument;
 use App\Policies\CompanyOwnedPolicy;
 use App\Services\AuditService;
@@ -268,6 +269,12 @@ class OperationalCrudController extends Controller
 
             $data['client_id'] = (int) $project->client_id;
             $data['assignment_id'] = $resolution['assignment_id'] ?? $data['assignment_id'] ?? null;
+            if (empty($data['cost_center_id']) && ! empty($data['assignment_id'])) {
+                $data['cost_center_id'] = ProjectAssignment::query()
+                    ->where('company_id', $data['company_id'])
+                    ->whereKey($data['assignment_id'])
+                    ->value('cost_center_id');
+            }
             $data['hourly_value'] = $resolution['amount'] ?? null;
             $data['calculated_amount'] = round((float) $data['hours_approved'] * (float) ($data['hourly_value'] ?? 0), 2);
         }
@@ -424,10 +431,12 @@ class OperationalCrudController extends Controller
                     $assignmentRanges = \App\Models\ProjectAssignment::query()
                         ->where('company_id', $record->company_id)
                         ->where('project_id', $record->id)
-                        ->with(['assignmentStatus:id,code', 'hourlyRateCurrency:id,code,symbol,minor_units'])
+                        ->with(['assignmentStatus:id,code', 'hourlyRateCurrency:id,code,symbol,minor_units', 'costCenter:id,name'])
                         ->get()
                         ->filter(fn ($assignment) => strtolower((string) $assignment->assignmentStatus?->code) === 'active')
                         ->map(fn ($assignment) => [
+                            'id' => $assignment->id,
+                            'code' => $assignment->code,
                             'person_id' => $assignment->person_id,
                             'start_date' => optional($assignment->start_date)->format('Y-m-d'),
                             'end_date' => optional($assignment->end_date)->format('Y-m-d'),
@@ -435,6 +444,9 @@ class OperationalCrudController extends Controller
                             'hourly_rate_unit_type' => strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')),
                             'currency_code' => $assignment->hourlyRateCurrency?->code,
                             'currency_symbol' => $assignment->hourlyRateCurrency?->symbol,
+                            'currency_minor_units' => $assignment->hourlyRateCurrency?->minor_units,
+                            'cost_center_id' => $assignment->cost_center_id,
+                            'cost_center_name' => $assignment->costCenter?->name,
                             'source_label' => trim((string) ($assignment->code ?: $assignment->project?->name ?: 'Asignación')),
                         ])->values()->all();
 

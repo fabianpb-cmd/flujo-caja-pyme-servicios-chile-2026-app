@@ -181,8 +181,8 @@
         $breadcrumb = null;
     } elseif (str_starts_with((string) $currentRouteName, 'operational.') && $resourceTitle) {
         $action = match ($currentRouteName) {
-            'operational.create' => $resourceSingularTitle ? 'Nueva '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Nuevo',
-            'operational.edit' => $resourceSingularTitle ? 'Editar '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Editar',
+            'operational.create' => $resourceConfig['create_title'] ?? ($resourceSingularTitle ? 'Nueva '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Nuevo'),
+            'operational.edit' => $resourceConfig['edit_title'] ?? ($resourceSingularTitle ? 'Editar '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Editar'),
             'operational.show' => 'Detalle',
             default => null,
         };
