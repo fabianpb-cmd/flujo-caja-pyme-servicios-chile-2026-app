@@ -476,7 +476,7 @@
     </div>
 @endif
 
-<form method="POST" action="{{ $editing ? route('operational.update', [$resource, $item->id]) : route('operational.store', $resource) }}" class="app-panel p-4">
+<form method="POST" action="{{ $editing ? route('operational.update', [$resource, $item->id]) : route('operational.store', $resource) }}" class="app-panel p-4" data-operational-form="true">
     @csrf
     @if ($editing)
         @method('PUT')
@@ -842,7 +842,7 @@
 @push('scripts')
 <script nonce="{{ $cspNonce ?? '' }}">
     (() => {
-        const form = document.querySelector('form');
+        const form = document.querySelector('[data-operational-form="true"]');
         const childSelects = document.querySelectorAll('[data-dependent-select="true"]');
         const isPayroll = @json($isPayroll);
 
@@ -1386,7 +1386,9 @@
 
         assignmentProjectSelect?.addEventListener('change', syncAssignmentContext);
         assignmentHourlyInput?.addEventListener('input', syncAssignmentContext);
+        assignmentHourlyInput?.addEventListener('change', syncAssignmentContext);
         assignmentProjectInput?.addEventListener('input', syncAssignmentContext);
+        assignmentProjectInput?.addEventListener('change', syncAssignmentContext);
         syncAssignmentContext();
     })();
 </script>

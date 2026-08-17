@@ -183,6 +183,69 @@ class OperationalUiTest extends TestCase
         $response->assertDontSee('Moneda valor HH');
     }
 
+    public function test_assignments_bind_reactive_warnings_to_the_operational_form(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-WARN',
+            'legal_name' => 'Cliente Warning',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-WARN',
+            'first_names' => 'Warning',
+            'paternal_surname' => 'Reactive',
+            'name' => 'Warning Reactive',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-WARN',
+            'name' => 'Proyecto Warning',
+            'sale_net' => 160,
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-WARN',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.5,
+            'project_value' => 190,
+            'monthly_hours' => 1000,
+            'start_date' => '2026-08-01',
+        ]);
+
+        $create = $this->actingAs($admin)->get(route('operational.create', 'assignments'));
+        $create->assertOk();
+        $create->assertSee('data-operational-form="true"', false);
+        $create->assertSee('document.querySelector(\'[data-operational-form="true"]\')', false);
+        $create->assertSee('assignmentHourlyInput?.addEventListener(\'input\', syncAssignmentContext);', false);
+        $create->assertSee('assignmentHourlyInput?.addEventListener(\'change\', syncAssignmentContext);', false);
+        $create->assertSee('assignmentProjectInput?.addEventListener(\'input\', syncAssignmentContext);', false);
+        $create->assertSee('assignmentProjectInput?.addEventListener(\'change\', syncAssignmentContext);', false);
+        $create->assertSee('assignmentProjectSelect?.addEventListener(\'change\', syncAssignmentContext);', false);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+        $edit->assertOk();
+        $edit->assertSee('Se ingresó una tarifa por hora y un monto fijo.', false);
+        $edit->assertSee('El monto pactado de esta asignación supera la venta neta del proyecto.', false);
+        $edit->assertSee('data-assignments-warning-box', false);
+    }
+
     public function test_assignments_accept_projects_in_execution_for_the_selected_client(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
