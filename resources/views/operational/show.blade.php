@@ -17,6 +17,7 @@
 </div>
 
 <div class="app-panel p-4">
+    @php($payrollHoursApprovedDisplay = $resource === 'payroll-records' && filled(data_get($payrollHourlyCost ?? [], 'worked_hours')) ? \App\Support\UiFormatter::formatHours(data_get($payrollHourlyCost, 'worked_hours')) : null)
 @if ($resource === 'payroll-records' && ! empty($payrollHourlyCost))
         <div class="app-panel p-3 mb-4">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -102,8 +103,10 @@
             @endif
         @endif
         <div class="row mb-3">
-            <dt class="col-sm-4">{{ $definition['label'] }}</dt>
-            @php($display = \App\Support\UiFormatter::display($item, $field, $definition))
+            <dt class="col-sm-4">{{ $resource === 'payroll-records' && $field === 'hours_approved' ? 'Horas aprobadas sistema' : $definition['label'] }}</dt>
+            @php($display = $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay)
+                ? $payrollHoursApprovedDisplay
+                : \App\Support\UiFormatter::display($item, $field, $definition))
             <dd class="col-sm-8 mb-0 {{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-sm-end amount-cell' : '' }}">
                 @if (str_contains(mb_strtolower($definition['label']), 'estado') || in_array($field, ['status', 'payment_status', 'approval_status', 'project_status', 'billing_status'], true))
                     <x-status-badge :status="$display" />

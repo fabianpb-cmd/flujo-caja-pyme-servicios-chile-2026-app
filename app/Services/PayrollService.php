@@ -626,6 +626,13 @@ class PayrollService
                 'notes' => [],
                 'requires_review' => false,
             ];
+        $hoursApprovedEffective = $adjustments['hours_approved'] !== null
+            ? round((float) $adjustments['hours_approved'], 2)
+            : round((float) ($context['hours_approved_auto'] ?? 0), 2);
+
+        if ($adjustments['hours_approved'] === null && abs((float) ($record->hours_approved ?? 0) - $hoursApprovedEffective) > 0.00001) {
+            $warnings[] = 'Las horas aprobadas almacenadas difieren de la fuente de Horas del período. Recalcule la remuneración.';
+        }
 
         $formatPayrollSource = function (?array $source, bool $hours = false): string {
             if (! $source) {
@@ -661,7 +668,7 @@ class PayrollService
             ['label' => 'Vigencia asignación', 'value' => $this->payrollAssignmentRangeLabel($assignment)],
             ['label' => 'Horas aprobadas automáticas', 'value' => UiFormatter::formatHours($context['hours_approved_auto']).' · Horas'],
             ['label' => 'Horas aprobadas override', 'value' => $adjustments['hours_approved'] !== null ? UiFormatter::formatHours($adjustments['hours_approved']).' · Novedades remuneración' : '—'],
-            ['label' => 'Horas aprobadas efectivas', 'value' => UiFormatter::formatHours($record->hours_approved)],
+            ['label' => 'Horas aprobadas efectivas', 'value' => UiFormatter::formatHours($hoursApprovedEffective)],
             ['label' => 'Tarifa automática', 'value' => $formatPayrollSource($context['hourly_value_source'], true)],
             ['label' => 'Tarifa override', 'value' => $adjustments['hourly_value'] !== null ? UiFormatter::formatMoney($adjustments['hourly_value'], 'CLP').' / HH · Novedades remuneración' : '—'],
             ['label' => 'Tarifa efectiva', 'value' => UiFormatter::formatMoney($record->hourly_value, 'CLP').' / HH'],
@@ -949,7 +956,7 @@ class PayrollService
         }
 
         if (! $record->payment_date) {
-            return 'Falta fecha';
+            return 'Pendiente de fecha de pago';
         }
 
         $date = $asOf ? Carbon::parse($asOf) : now();

@@ -14,6 +14,7 @@ use App\Models\ExpenseSubcategory;
 use App\Models\LegalParameter;
 use App\Models\Person;
 use App\Models\PayrollAdjustment;
+use App\Models\PayrollRecord;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
@@ -2020,7 +2021,7 @@ class OperationalUiTest extends TestCase
             'status' => 'Pendiente',
         ]);
 
-        $response = $this->actingAs($admin)->get(route('operational.show', ['payroll-records', $payroll->id]));
+        $response = $this->actingAs($admin)->get(route('operational.edit', ['payroll-records', $payroll->id]));
 
         $response->assertOk();
         $response->assertSee('Fuentes aplicadas', false);
@@ -2032,6 +2033,100 @@ class OperationalUiTest extends TestCase
         $response->assertSee('Otros descuentos automáticos', false);
         $response->assertSee('Tarifa automática', false);
         $response->assertSee('Horas aprobadas automáticas', false);
+    }
+
+    public function test_payroll_edit_reflects_automatic_hours_and_specific_missing_payment_date_status(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REM-04',
+            'first_names' => 'Laura',
+            'paternal_surname' => 'Vega',
+            'maternal_surname' => 'Rojas',
+            'name' => 'Laura Vega Rojas',
+            'modality' => 'Dependiente por hora',
+            'hourly_value' => 1300,
+            'additional_health_plan' => 12000,
+            'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-REM-04',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-07-01',
+            'end_date' => '2026-07-31',
+            'hourly_value' => 1300,
+            'project_value' => 50000,
+        ]);
+
+        $approvedId = ApprovalStatus::query()
+            ->where('company_id', $company->id)
+            ->where('code', 'approved')
+            ->valueOrFail('id');
+
+        $activity = Activity::query()->create([
+            'company_id' => $company->id,
+            'code' => 'ACT-REM-04-'.uniqid(),
+            'name' => 'Trabajo rem '.uniqid(),
+            'active' => true,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HRS-REM-04',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-07-15',
+            'activity' => 'Trabajo rem',
+            'activity_id' => $activity->id,
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 1300,
+            'calculated_amount' => 13000,
+            'approval_status_id' => $approvedId,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $payroll = PayrollRecord::query()->create([
+            'company_id' => $company->id,
+            'code' => 'REM-UI-04',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-07-01',
+            'payment_date' => null,
+            'hours_approved' => 0,
+            'hourly_value' => 1300,
+            'project_value' => 50000,
+            'base_salary' => 200000,
+            'gross_amount' => 200000,
+            'taxable_amount' => 200000,
+            'taxable_gross' => 200000,
+            'employee_retention' => 30000,
+            'retention_rate' => 0.15,
+            'employer_cost' => 220000,
+            'net_pay' => 170000,
+            'calculation_status' => 'OK',
+            'legal_snapshot' => ['period' => '2026-07-01'],
+            'status' => 'Pendiente de fecha de pago',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('operational.show', ['payroll-records', $payroll->id]));
+
+        $response->assertOk();
+        $response->assertSee('Pendiente de fecha de pago', false);
+        $response->assertSee('Horas aprobadas sistema', false);
+        $response->assertSee('10 h', false);
     }
 
     public function test_clients_and_projects_generate_immutable_codes_when_omitted(): void

@@ -206,7 +206,14 @@ class PayrollBatchService
 
     private function isDraftLike(PayrollRecord $record): bool
     {
-        return in_array(strtolower((string) $record->status), ['borrador', 'requiere revisión', 'requiere revision', 'pendiente'], true);
+        return in_array(strtolower((string) $record->status), [
+            'borrador',
+            'requiere revisión',
+            'requiere revision',
+            'pendiente',
+            'pendiente de fecha de pago',
+            'falta fecha',
+        ], true);
     }
 
     private function mergeNotes(?string $primary, array $notes): ?string

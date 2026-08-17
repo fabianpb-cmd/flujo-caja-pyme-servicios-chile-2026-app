@@ -299,6 +299,26 @@ class FinancialCoreTest extends TestCase
         $this->assertStringContainsString('UF 1,30 / HH', $explanationJson);
     }
 
+    public function test_payroll_status_without_payment_date_remains_recalculable_and_specific(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios mensual',
+            'monthly_value' => 100000,
+        ]);
+
+        $record = PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'REM-PRL-02',
+            'person_id' => $person->id,
+            'period_date' => '2026-08-01',
+            'status' => 'Borrador',
+        ]);
+
+        app(PayrollService::class)->refreshStatus($record);
+
+        $this->assertSame('Pendiente de fecha de pago', $record->refresh()->status);
+    }
+
     public function test_dependent_payroll_calculates_afp_health_afc_and_company_cost(): void
     {
         $person = $this->person([

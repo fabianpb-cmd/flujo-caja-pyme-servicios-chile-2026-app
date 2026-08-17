@@ -88,7 +88,7 @@ class ManagementController extends Controller
 
         $paymentsWithoutDate = PayrollRecord::query()
             ->forCompany($companyId)
-            ->where('status', 'Falta fecha')
+            ->whereNull('payment_date')
             ->count();
 
         $receivableDocuments = SalesDocument::query()

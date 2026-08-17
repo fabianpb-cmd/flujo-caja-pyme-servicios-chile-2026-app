@@ -30,7 +30,7 @@
     'payment_date' => 'Fecha prevista o real de pago del período. Solo afecta el control y cierre operativo.',
     'amount_basis' => 'Indica si la base del período se interpreta como bruto o líquido pactado.',
     'project_id' => 'Proyecto asociado a la asignación vigente del período, cuando exista.',
-    'hours_approved' => 'Horas aprobadas del período obtenidas desde Horas. Si no hay horas aprobadas, se mostrará 0,00 h.',
+    'hours_approved' => 'Horas aprobadas del período obtenidas desde Horas. Se muestran como referencia del cálculo y no se editan aquí.',
     'monthly_value' => 'Valor mensual override. Déjelo vacío para usar el valor automático del período. Si ingresa 0,00, la base mensual queda en cero.',
     'hourly_value' => 'Valor hora override. Déjelo vacío para usar la tarifa automática del período. Si ingresa 0,00, la modalidad por hora queda desactivada.',
     'project_value' => 'Valor proyecto/hito override. Déjelo vacío para usar el valor automático del período. Si ingresa 0,00, el monto fijo queda en cero.',
@@ -457,6 +457,15 @@
 @php($payrollProjectValueAutoOrigin = $payrollProjectValueParts[1] ?? null)
 @php($payrollHoursApprovedRowValue = data_get($payrollSourceRows->get('Horas aprobadas automáticas'), 'value'))
 @php($payrollHoursApprovedValue = $payrollHoursApprovedRowValue ? preg_split('/\s+·\s+/u', (string) $payrollHoursApprovedRowValue, 2)[0] : null)
+@php($payrollHoursApprovedDisplay = filled(data_get($payrollHourlyCost ?? [], 'worked_hours'))
+    ? \App\Support\UiFormatter::formatHours(data_get($payrollHourlyCost ?? [], 'worked_hours'))
+    : $payrollHoursApprovedValue)
+@php($payrollFieldDisplayValue = function (string $field, array $definition, mixed $value) use ($payrollHoursApprovedDisplay, $payrollDisplayValue) {
+    if ($field === 'hours_approved' && filled($payrollHoursApprovedDisplay)) {
+        return $payrollHoursApprovedDisplay;
+    }
+    return $payrollDisplayValue($field, $definition, $value);
+})
 @php($payrollMonthlyAutoValue = data_get($payrollSourceRows->get('Base mensual automática'), 'value'))
 @php($payrollHealthAutoValue = data_get($payrollSourceRows->get('Salud adicional automática'), 'value'))
 @php($payrollBonusesAutoValue = data_get($payrollSourceRows->get('Bonos automáticos'), 'value'))
@@ -633,7 +642,7 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="app-panel bg-light border-0 p-3 h-100">
                     <div class="small text-muted">Horas aprobadas sistema</div>
-                    <div class="fw-semibold">{{ $payrollHoursApprovedValue ?: '0,00' }}</div>
+                    <div class="fw-semibold">{{ $payrollHoursApprovedDisplay ?: '0,00' }}</div>
                     <div class="small text-muted">Obtenidas desde Horas para el período.</div>
                 </div>
             </div>
@@ -856,7 +865,7 @@
                                     name="{{ $field }}"
                                     type="{{ in_array($type, ['email', 'number'], true) ? $type : 'text' }}"
                                     class="form-control {{ $isCalculated ? 'payroll-calculated-field' : ($isManual ? 'payroll-manual-field' : '') }}"
-                                    value="{{ $isCalculated ? $payrollDisplayValue($field, $definition, $displayValue) : $displayValue }}"
+                                    value="{{ $payrollFieldDisplayValue($field, $definition, $displayValue) }}"
                                     @if ($type === 'date') placeholder="dd/mm/yyyy" inputmode="numeric" @endif
                                     @if (($definition['presentation'] ?? null) === 'rut') placeholder="12.345.678-5" @endif
                                     @if (($definition['presentation'] ?? null) === 'phone') placeholder="+56 9 1234 5678" @endif

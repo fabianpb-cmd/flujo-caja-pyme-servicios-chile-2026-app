@@ -135,6 +135,30 @@ class PayrollBatchGenerationTest extends TestCase
         $this->assertSame(1050000.0, (float) PayrollRecord::query()->where('person_id', $person->id)->firstOrFail()->gross_amount);
     }
 
+    public function test_missing_payment_date_draft_is_recalculated_instead_of_being_omitted(): void
+    {
+        $person = $this->person(['monthly_value' => 1000000]);
+
+        PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'REM-BATCH-02',
+            'person_id' => $person->id,
+            'period_date' => '2026-08-01',
+            'payment_date' => null,
+            'gross_amount' => 1000,
+            'net_pay' => 1000,
+            'employer_cost' => 1000,
+            'status' => 'Pendiente de fecha de pago',
+        ]);
+
+        $summary = app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
+
+        $this->assertSame(1, $summary['evaluated']);
+        $this->assertSame(1, $summary['updated']);
+        $this->assertSame(0, $summary['omitted']);
+        $this->assertSame(1, PayrollRecord::query()->where('person_id', $person->id)->count());
+    }
+
     public function test_confirmed_existing_payroll_is_not_replaced(): void
     {
         $person = $this->person(['monthly_value' => 1000000]);
