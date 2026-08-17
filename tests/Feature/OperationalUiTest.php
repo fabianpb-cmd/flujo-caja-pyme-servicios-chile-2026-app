@@ -246,6 +246,131 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('data-assignments-warning-box', false);
     }
 
+    public function test_assignments_validate_schema_limits_before_persisting_and_preserve_selected_project_context(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $uf = Currency::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'UF'],
+            [
+                'name' => 'Unidad de Fomento',
+                'symbol' => 'UF',
+                'minor_units' => 2,
+                'is_base_currency' => false,
+                'active' => true,
+                'sort_order' => 2,
+            ]
+        );
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-LIMIT',
+            'legal_name' => 'Cliente Límite',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-LIMIT',
+            'first_names' => 'Jaime',
+            'paternal_surname' => 'Soriano',
+            'name' => 'Jaime Soriano',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-LIMIT',
+            'name' => 'Alertas de Matrículas',
+            'sale_net' => 160,
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->from(route('operational.create', 'assignments'))
+            ->followingRedirects()
+            ->post(route('operational.store', 'assignments'), [
+                'code' => 'ASI-LIMIT-ERR',
+                'person_id' => $person->id,
+                'client_id' => $client->id,
+                'project_id' => $project->id,
+                'hourly_rate_unit_type' => 'UF',
+                'hourly_value' => '8888888',
+                'project_value' => '000000',
+                'monthly_hours' => '3000000',
+                'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            ]);
+
+        $response->assertOk();
+        $response->assertSee('Horas mensuales no puede superar 65535.');
+        $response->assertSee('value="000000"', false);
+        $response->assertSee('Venta neta proyecto: UF 160,00');
+        $response->assertSee('<div class="d-none" data-assignments-warning-double>', false);
+
+        $this->assertDatabaseMissing('project_assignments', [
+            'company_id' => $company->id,
+            'code' => 'ASI-LIMIT-ERR',
+        ]);
+    }
+
+    public function test_assignments_accept_schema_maximum_supported_values(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-MAX',
+            'legal_name' => 'Cliente Máximo',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-MAX',
+            'first_names' => 'Máximo',
+            'paternal_surname' => 'Seguro',
+            'name' => 'Máximo Seguro',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-MAX',
+            'name' => 'Proyecto Máximo',
+            'sale_net' => 1000,
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'assignments'), [
+            'code' => 'ASI-LIMIT-OK',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => '9999999999999999.99',
+            'project_value' => '0',
+            'monthly_hours' => '65535',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $response->assertRedirect(route('operational.index', 'assignments'));
+
+        $this->assertDatabaseHas('project_assignments', [
+            'company_id' => $company->id,
+            'code' => 'ASI-LIMIT-OK',
+            'monthly_hours' => 65535,
+        ]);
+    }
+
     public function test_assignments_accept_projects_in_execution_for_the_selected_client(): void
     {
         [$company, $admin] = $this->companyWithAdmin();

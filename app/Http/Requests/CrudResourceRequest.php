@@ -193,6 +193,8 @@ class CrudResourceRequest extends FormRequest
                 }
             }
 
+            $this->validateTechnicalFieldLimits($validator, $resource, $config);
+
             if ($resource !== 'people') {
                 return;
             }
@@ -221,6 +223,7 @@ class CrudResourceRequest extends FormRequest
                     $validator->errors()->add('sale_net', $this->moneyScaleMessage($currency));
                 }
             }
+
         });
     }
 
@@ -415,5 +418,96 @@ class CrudResourceRequest extends FormRequest
         $model = new $modelClass;
 
         return method_exists($model, 'functionalCodeAuto') && $model->functionalCodeAuto();
+    }
+
+    private function validateTechnicalFieldLimits(Validator $validator, string $resource, array $config): void
+    {
+        foreach ($this->technicalFieldSpecs($resource, $config) as $field => $spec) {
+            if ($validator->errors()->has($field) || ! filled($this->input($field))) {
+                continue;
+            }
+
+            $value = trim((string) $this->input($field));
+            if ($value === '') {
+                continue;
+            }
+
+            if (($spec['type'] ?? null) === 'decimal' && ! $this->fitsDecimalColumn($value, $spec['precision'], $spec['scale'])) {
+                $validator->errors()->add($field, $this->decimalLimitMessage($spec['label'], $spec['precision'], $spec['scale']));
+                continue;
+            }
+
+            if (($spec['type'] ?? null) === 'unsignedSmallInteger' && ! $this->fitsUnsignedIntegerMax($value, $spec['max'])) {
+                $validator->errors()->add($field, $this->unsignedIntegerLimitMessage($spec['label'], $spec['max']));
+            }
+        }
+    }
+
+    private function technicalFieldSpecs(string $resource, array $config): array
+    {
+        $labels = fn (string $field, string $fallback): string => (string) data_get($config, $field.'.label', $fallback);
+
+        return match ($resource) {
+            'assignments' => [
+                'hourly_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('hourly_value', 'El valor HH')],
+                'project_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('project_value', 'El monto pactado asignación')],
+                'monthly_hours' => ['type' => 'unsignedSmallInteger', 'max' => 65535, 'label' => $labels('monthly_hours', 'Las horas mensuales')],
+            ],
+            default => [],
+        };
+    }
+
+    private function fitsDecimalColumn(string $value, int $precision, int $scale): bool
+    {
+        $normalized = str_replace(',', '.', trim($value));
+        if (! preg_match('/^\d+(?:\.\d+)?$/', $normalized)) {
+            return true;
+        }
+
+        [$integerPart, $fractionPart] = array_pad(explode('.', $normalized, 2), 2, '');
+        if (strlen($fractionPart) > $scale) {
+            return false;
+        }
+
+        $significantIntegerPart = ltrim($integerPart, '0');
+        if ($significantIntegerPart === '') {
+            $significantIntegerPart = '0';
+        }
+
+        return strlen($significantIntegerPart) <= ($precision - $scale);
+    }
+
+    private function fitsUnsignedIntegerMax(string $value, int $max): bool
+    {
+        if (! preg_match('/^\d+$/', trim($value))) {
+            return true;
+        }
+
+        return (int) $value <= $max;
+    }
+
+    private function decimalLimitMessage(string $label, int $precision, int $scale): string
+    {
+        return sprintf(
+            '%s supera el máximo permitido por el campo (%s).',
+            $label,
+            $this->decimalMaxValue($precision, $scale)
+        );
+    }
+
+    private function unsignedIntegerLimitMessage(string $label, int $max): string
+    {
+        return sprintf('%s no puede superar %d.', $label, $max);
+    }
+
+    private function decimalMaxValue(int $precision, int $scale): string
+    {
+        $integerDigits = str_repeat('9', max($precision - $scale, 1));
+
+        if ($scale === 0) {
+            return $integerDigits;
+        }
+
+        return $integerDigits.','.str_repeat('9', $scale);
     }
 }
