@@ -1808,6 +1808,7 @@ class OperationalUiTest extends TestCase
             'modality' => 'Dependiente mensual',
             'contract_type' => 'Indefinido',
             'monthly_value' => 1000000,
+            'hourly_value' => 1300,
             'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
             'employment_contract_type_id' => \App\Models\ContractType::query()->where('company_id', $company->id)->where('domain', 'employment')->where('code', 'INDEFINIDO')->valueOrFail('id'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
@@ -1822,12 +1823,21 @@ class OperationalUiTest extends TestCase
         $response->assertSee('payroll-help-shell', false);
         $response->assertSee('id="payrollUsageHelp"', false);
         $response->assertSee('class="collapse mt-3"', false);
-        $response->assertSee('Fecha prevista o real de pago del período. El estado se recalcula según este dato y los pagos registrados.');
-        $response->assertSee('Los campos marcados como override reemplazan la referencia automática del período. Déjelos vacíos solo cuando corresponda usar el valor base.');
+        $response->assertSee('Seleccione primero Persona, Proyecto y Período. El sistema completa la referencia automática del período.');
+        $response->assertSee('Los campos marcados como override reemplazan un valor calculado solo para esta remuneración.');
+        $response->assertSeeText('Datos base');
+        $response->assertSeeText('Referencia de la remuneración');
+        $response->assertSeeText('Ajustes / overrides');
+        $response->assertSeeText('Adicionales');
+        $response->assertSeeText('Descuentos');
+        $response->assertSeeText('Resultado');
+        $response->assertSeeText('Control del cálculo');
+        $response->assertSeeText('Horas aprobadas sistema');
+        $response->assertSeeText('Costo hora referencial persona');
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Nueva remuneración/s', $response->getContent());
         $response->assertSee('data-bs-toggle="tooltip"', false);
-        $response->assertSee('Días remunerados', false);
-        $response->assertSee('Provisión vacaciones', false);
+        $response->assertSee('Base calculada', false);
+        $response->assertSee('Líquido', false);
         $response->assertSee('payrollPersonSummary', false);
         $response->assertSee('data-payroll-mode="DEPENDIENTE_MENSUAL"', false);
         $response->assertSee('data-payroll-contract-label="Indefinido"', false);
@@ -1867,11 +1877,16 @@ class OperationalUiTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Editar remuneración');
+        $response->assertSee('Julio 2026');
         $response->assertSee('Pedro González Rojas');
         $response->assertSee('Honorarios mensual');
         $response->assertSee('$ 100.000');
         $response->assertSee('$ 15.250');
         $response->assertSee('$ 84.750');
+        $response->assertSeeText('Referencia de la remuneración');
+        $response->assertSeeText('Resultado');
+        $response->assertSeeText('Control del cálculo');
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar remuneración/s', $response->getContent());
     }
 
     public function test_payroll_show_breakdown_exposes_automatic_sources_and_assignment_context(): void

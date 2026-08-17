@@ -25,29 +25,29 @@
     };
 })
 @php($payrollHelp = [
-    'person_id' => 'Persona o prestador al que corresponde la remuneración. Su ficha aporta la referencia base de cálculo.',
-    'period_date' => 'Mes al que pertenece la remuneración. El sistema normaliza el valor al primer día del mes para mantener el período contable.',
-    'payment_date' => 'Fecha prevista o real de pago del período. El estado se recalcula según este dato y los pagos registrados.',
-    'amount_basis' => 'Indica si el monto pactado se interpreta como bruto o líquido para el cálculo.',
+    'person_id' => 'Persona a la que corresponde la remuneración. Su ficha aporta la referencia base de cálculo.',
+    'period_date' => 'Mes al que corresponde esta remuneración. El sistema la normaliza al primer día del mes.',
+    'payment_date' => 'Fecha prevista o real de pago del período. Solo afecta el control y cierre operativo.',
+    'amount_basis' => 'Indica si la base del período se interpreta como bruto o líquido pactado.',
     'project_id' => 'Proyecto asociado a la asignación vigente del período, cuando exista.',
-    'hours_approved' => 'Horas aprobadas del período. Déjelo vacío solo si corresponde usar la referencia automática.',
-    'monthly_value' => 'Valor mensual override. Déjelo vacío para usar el valor base de la persona o de la novedad automática del período. Si ingresa 0,00, el período queda con base mensual en cero.',
-    'hourly_value' => 'Tarifa hora override. Déjelo vacío para usar la tarifa base de la persona o de la novedad automática del período. Si ingresa 0,00, el período queda sin tarifa por hora.',
-    'project_value' => 'Monto fijo del proyecto o hito. Déjelo vacío para usar la referencia automática del período cuando exista. Si ingresa 0,00, el período queda sin monto fijo.',
+    'hours_approved' => 'Horas aprobadas del período obtenidas desde Horas. Si no hay horas aprobadas, se mostrará 0,00 h.',
+    'monthly_value' => 'Valor mensual override. Déjelo vacío para usar el valor automático del período. Si ingresa 0,00, la base mensual queda en cero.',
+    'hourly_value' => 'Valor hora override. Déjelo vacío para usar la tarifa automática del período. Si ingresa 0,00, la modalidad por hora queda desactivada.',
+    'project_value' => 'Valor proyecto/hito override. Déjelo vacío para usar el valor automático del período. Si ingresa 0,00, el monto fijo queda en cero.',
     'bonuses' => 'Bonos imponibles del período. Si provienen de Novedades remuneración, el sistema los toma como referencia automática.',
-    'non_taxable_allowances' => 'Asignaciones no imponibles del período. Si provienen de Novedades remuneración, el sistema los toma como referencia automática.',
-    'base_salary' => 'Sueldo proporcional o base honorarios calculada automáticamente.',
+    'non_taxable_allowances' => 'Asignaciones no imponibles del período. Si provienen de Novedades remuneración, el sistema las toma como referencia automática.',
+    'base_salary' => 'Base calculada automáticamente según la modalidad y los datos del período.',
     'taxable_gross' => 'Base sobre la cual se calculan cotizaciones, sujeta a topes legales.',
     'pension_health_base' => 'Base previsional afecta a AFP y salud, considerando el tope legal vigente del período.',
     'afc_base' => 'Base afecta a Seguro de Cesantía, considerando el tope AFC aplicable al período.',
-    'employee_retention' => 'Monto retenido y enterado posteriormente mediante las obligaciones tributarias correspondientes.',
+    'employee_retention' => 'Monto retenido por honorarios según la retención legal del período.',
     'afp_mandatory' => 'Cotización obligatoria del trabajador sobre la base previsional con tope.',
     'afp_commission' => 'Comisión vigente de la AFP de la persona según el período.',
     'health_employee' => 'Cotización legal de salud calculada sobre la base previsional.',
     'afc_employee' => 'Seguro de Cesantía de cargo del trabajador cuando corresponde según tipo de contrato.',
-    'iusc_amount' => 'Impuesto Único de Segunda Categoría calculado según tabla SII vigente y base tributaria.',
-    'advances' => 'Dato de ingreso manual para el período. Déjelo vacío si no corresponde un anticipo.',
-    'other_deductions' => 'Dato de ingreso manual para el período. Déjelo vacío si no corresponde otro descuento.',
+    'iusc_amount' => 'Impuesto Único de Segunda Categoría calculado según la tabla legal vigente.',
+    'advances' => 'Anticipos del período. Déjelo vacío si no corresponde un anticipo.',
+    'other_deductions' => 'Otros descuentos del período. Déjelo vacío si no corresponde otro descuento.',
     'net_pay' => 'Monto líquido a pagar después de descuentos legales y manuales.',
     'afc_employer' => 'Seguro de Cesantía de cargo del empleador según tipo de contrato.',
     'employer_pension' => 'Cotización adicional de cargo del empleador según la vigencia legal del período.',
@@ -55,28 +55,28 @@
     'sanna' => 'Cotización de cargo del empleador correspondiente al seguro SANNA.',
     'vacation_provision_amount' => 'Costo provisionado para análisis financiero. No corresponde a un descuento del trabajador ni a una salida real de caja.',
     'employer_cost' => 'Costo económico total de la remuneración, incluyendo aportes del empleador y provisiones.',
-    'calculation_notes' => 'Observaciones del cálculo o alertas que el sistema detectó para este período.',
+    'calculation_notes' => 'Observaciones o alertas del cálculo que el sistema detectó para este período.',
     'status' => 'Estado de pago o control operacional del documento.',
 ]);
-@php($payrollAutoFields = ['code', 'base_salary', 'taxable_gross', 'employee_retention', 'afp_mandatory', 'afp_commission', 'health_employee', 'afc_employee', 'iusc_amount', 'net_pay', 'afc_employer', 'employer_pension', 'accident_insurance', 'sanna', 'vacation_provision_amount', 'employer_cost', 'calculation_status', 'calculation_notes'])
-@php($payrollManualFields = ['person_id', 'project_id', 'period_date', 'payment_date', 'amount_basis', 'hours_approved', 'monthly_value', 'hourly_value', 'project_value', 'bonuses', 'non_taxable_allowances', 'advances', 'other_deductions'])
+@php($payrollAutoFields = ['code', 'hours_approved', 'base_salary', 'taxable_gross', 'employee_retention', 'afp_mandatory', 'afp_commission', 'health_employee', 'afc_employee', 'iusc_amount', 'net_pay', 'afc_employer', 'employer_pension', 'accident_insurance', 'sanna', 'vacation_provision_amount', 'employer_cost', 'calculation_status', 'calculation_notes'])
+@php($payrollManualFields = ['person_id', 'project_id', 'period_date', 'payment_date', 'amount_basis', 'monthly_value', 'hourly_value', 'project_value', 'bonuses', 'non_taxable_allowances', 'advances', 'other_deductions'])
 @php($payrollSections = [
     'Datos base' => ['code', 'person_id', 'project_id', 'period_date', 'payment_date', 'amount_basis'],
-    'Remuneración' => ['hours_approved', 'monthly_value', 'hourly_value', 'project_value', 'bonuses', 'non_taxable_allowances', 'base_salary', 'taxable_gross', 'pension_health_base', 'afc_base'],
-    'Descuentos legales' => ['employee_retention', 'afp_mandatory', 'afp_commission', 'health_employee', 'afc_employee', 'iusc_amount'],
-    'Otros descuentos' => ['advances', 'other_deductions'],
-    'Líquido' => ['net_pay'],
-    'Aportes empleador' => ['afc_employer', 'employer_pension', 'accident_insurance', 'sanna', 'employer_cost'],
-    'Provisiones' => ['vacation_provision_amount'],
-    'Control' => ['calculation_status', 'calculation_notes', 'status'],
+    'Referencia de la remuneración' => ['hours_approved'],
+    'Ajustes / overrides' => ['monthly_value', 'hourly_value', 'project_value'],
+    'Adicionales' => ['bonuses', 'non_taxable_allowances'],
+    'Descuentos' => ['advances', 'other_deductions'],
+    'Resultado' => ['base_salary', 'taxable_gross', 'pension_health_base', 'afc_base', 'employee_retention', 'afp_mandatory', 'afp_commission', 'health_employee', 'afc_employee', 'iusc_amount', 'net_pay', 'afc_employer', 'employer_pension', 'accident_insurance', 'sanna', 'vacation_provision_amount', 'employer_cost'],
+    'Control del cálculo' => ['calculation_status', 'calculation_notes', 'status'],
 ])
 @php($payrollSummary = [
-    ['label' => 'Días remunerados', 'field' => 'worked_days', 'text' => 'Cantidad de días considerados en el período. Para sueldo mensual fijo, el valor diario se determina sobre base 30.'],
-    ['label' => 'Sueldo proporcional', 'field' => 'base_salary', 'text' => 'Monto calculado según sueldo mensual y días remunerados.'],
-    ['label' => 'Total imponible', 'field' => 'taxable_gross', 'text' => 'Base sobre la cual se calculan cotizaciones, sujeta a topes legales.'],
-    ['label' => 'Días vacaciones devengados', 'field' => 'vacation_days_accrued_period', 'text' => 'Devengo estimado de feriado legal del período.'],
-    ['label' => 'Valor día vacaciones', 'field' => 'vacation_daily_value', 'text' => 'Valor utilizado para estimar la provisión, según tipo de remuneración.'],
-    ['label' => 'Provisión vacaciones', 'field' => 'vacation_provision_amount', 'text' => 'Costo provisionado para análisis financiero. No corresponde a un descuento del trabajador ni a una salida real de caja.'],
+    ['label' => 'Datos base', 'field' => 'code', 'text' => 'Persona, proyecto y período que definen el cálculo de la remuneración.'],
+    ['label' => 'Referencia de la remuneración', 'field' => 'hours_approved', 'text' => 'Valores automáticos provenientes de Horas, Asignaciones, Personal y novedades del período.'],
+    ['label' => 'Ajustes / overrides', 'field' => 'monthly_value', 'text' => 'Valores manuales que reemplazan la referencia automática solo para esta remuneración.'],
+    ['label' => 'Adicionales', 'field' => 'bonuses', 'text' => 'Bonos y asignaciones que se agregan al período según novedades o ingreso manual.'],
+    ['label' => 'Descuentos', 'field' => 'advances', 'text' => 'Anticipos y otros descuentos aplicados al período.'],
+    ['label' => 'Resultado', 'field' => 'net_pay', 'text' => 'Totales y aportes calculados para el período.'],
+    ['label' => 'Control del cálculo', 'field' => 'calculation_status', 'text' => 'Estado y observaciones para revisar el cierre del período.'],
 ])
 @php($projectHelp = [
     'sales_currency_id' => 'Moneda utilizada para cotizar y registrar las ventas del proyecto.',
@@ -441,8 +441,38 @@
     is_array($selectedPayrollPerson) && !empty($selectedPayrollPerson['payroll_afp_label']) ? 'AFP '.$selectedPayrollPerson['payroll_afp_label'] : null,
     is_array($selectedPayrollPerson) && !empty($selectedPayrollPerson['payroll_health_label']) ? 'Salud '.$selectedPayrollPerson['payroll_health_label'] : null,
     is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_monthly_value'] ?? null) ? 'Base mensual '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_monthly_value']) : null,
-    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? 'Tarifa hora base '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP').' / HH' : null,
+    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? 'Costo hora referencial persona: '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP').' / HH' : null,
 ])->filter()->implode(' · '))
+@php($payrollPeriodLabel = $item->period_date ? ucfirst(\Illuminate\Support\Carbon::parse($item->period_date)->locale('es')->isoFormat('MMMM YYYY')) : 'Pendiente de selección')
+@php($payrollCalculationSections = collect($payrollCalculationBreakdown['sections'] ?? []))
+@php($payrollSourceSection = $payrollCalculationSections->firstWhere('title', 'Fuentes aplicadas'))
+@php($payrollSourceRows = collect(data_get($payrollSourceSection, 'rows', []))->keyBy('label'))
+@php($payrollTariffRowValue = data_get($payrollSourceRows->get('Tarifa automática'), 'value'))
+@php($payrollTariffParts = $payrollTariffRowValue ? preg_split('/\s+·\s+/u', (string) $payrollTariffRowValue, 2) : [])
+@php($payrollTariffAutoValue = $payrollTariffParts[0] ?? null)
+@php($payrollTariffAutoOrigin = $payrollTariffParts[1] ?? null)
+@php($payrollProjectValueRowValue = data_get($payrollSourceRows->get('Valor proyecto/hito automático'), 'value'))
+@php($payrollProjectValueParts = $payrollProjectValueRowValue ? preg_split('/\s+·\s+/u', (string) $payrollProjectValueRowValue, 2) : [])
+@php($payrollProjectValueAutoValue = $payrollProjectValueParts[0] ?? null)
+@php($payrollProjectValueAutoOrigin = $payrollProjectValueParts[1] ?? null)
+@php($payrollHoursApprovedRowValue = data_get($payrollSourceRows->get('Horas aprobadas automáticas'), 'value'))
+@php($payrollHoursApprovedValue = $payrollHoursApprovedRowValue ? preg_split('/\s+·\s+/u', (string) $payrollHoursApprovedRowValue, 2)[0] : null)
+@php($payrollMonthlyAutoValue = data_get($payrollSourceRows->get('Base mensual automática'), 'value'))
+@php($payrollHealthAutoValue = data_get($payrollSourceRows->get('Salud adicional automática'), 'value'))
+@php($payrollBonusesAutoValue = data_get($payrollSourceRows->get('Bonos automáticos'), 'value'))
+@php($payrollAllowancesAutoValue = data_get($payrollSourceRows->get('Asignaciones no imponibles automáticas'), 'value'))
+@php($payrollAdvancesAutoValue = data_get($payrollSourceRows->get('Anticipos automáticos'), 'value'))
+@php($payrollOtherDeductionsAutoValue = data_get($payrollSourceRows->get('Otros descuentos automáticos'), 'value'))
+@php($payrollAutomaticSourceLabels = [
+    'hours_approved' => 'Horas aprobadas automáticas',
+    'monthly_value' => 'Base mensual automática',
+    'hourly_value' => 'Tarifa automática',
+    'project_value' => 'Valor proyecto/hito automático',
+    'bonuses' => 'Bonos automáticos',
+    'non_taxable_allowances' => 'Asignaciones no imponibles automáticas',
+    'advances' => 'Anticipos automáticos',
+    'other_deductions' => 'Otros descuentos automáticos',
+])
 @if ($isPayroll)
     @if (($item->calculation_status ?? null) && $item->calculation_status !== 'OK')
         @php($payrollWarnings[] = $item->calculation_status)
@@ -478,16 +508,11 @@
 
         <div class="collapse mt-3" id="payrollUsageHelp">
             <ul class="small text-muted mb-3 ps-3">
-                <li>Seleccione Persona, Proyecto y Período primero. El sistema completa la referencia base y valida la asignación vigente del mes.</li>
-                <li>Los campos marcados como override reemplazan un valor automático del período; déjelos vacíos cuando quiera usar la referencia base.</li>
-                <li>La modalidad, el contrato, AFP, salud y la tarifa base provienen de la ficha de Personal o de las novedades del período.</li>
-                <li>Las novedades de remuneración alimentan horas aprobadas, bonos, asignaciones no imponibles, anticipos y otros descuentos cuando existen.</li>
-                <li>Para honorarios, Base, retención y líquido se calculan automáticamente según el período.</li>
-                <li>Para dependientes, AFP, salud, AFC, IUSC y aportes del empleador se calculan según el período legal vigente.</li>
-                <li>La provisión de vacaciones afecta costo y análisis financiero, no el líquido ni la caja real.</li>
-                <li>Use “Recalcular” antes de confirmar si cambió algún dato base del período.</li>
-                <li>Una remuneración confirmada o cerrada no debe modificarse sin el flujo correspondiente.</li>
-                <li>Revise siempre el bloque “Costo empresa” antes de confirmar.</li>
+                <li>Seleccione primero Persona, Proyecto y Período. El sistema completa la referencia automática del período.</li>
+                <li>Los campos marcados como override reemplazan un valor calculado solo para esta remuneración.</li>
+                <li>La referencia automática proviene de Horas, Asignaciones, Personal y Novedades remuneración cuando existe información válida.</li>
+                <li>Los bloques de Resultado y Control muestran lo que el sistema calculó para el período.</li>
+                <li>Revise la referencia, el costo HH y el resultado antes de guardar o recalcular.</li>
             </ul>
             <div class="payroll-help-legend small">
                 <span><i class="bi bi-info-circle-fill"></i> ayuda del campo</span>
@@ -514,14 +539,14 @@
         <div id="payrollPersonSummary"
              class="payroll-person-summary"
              data-empty-title="Seleccione una persona"
-             data-empty-meta="La modalidad, contrato, AFP, salud y valores base se obtienen desde la ficha de Personal."
+             data-empty-meta="La modalidad, el contrato, AFP, salud y valores base se obtienen desde la ficha de Personal."
              data-empty-extra="Luego revise el período y complete solo conceptos extraordinarios si corresponde.">
             <div class="payroll-person-title">{{ $selectedPayrollTitle ?: 'Seleccione una persona' }}</div>
             <div class="payroll-person-meta">{{ $selectedPayrollSegments ?: 'La modalidad, contrato, AFP, salud y valores base se obtienen desde la ficha de Personal.' }}</div>
             <div class="payroll-person-extra">{{ $selectedPayrollExtras ?: 'Luego revise el período y complete solo conceptos extraordinarios si corresponde.' }}</div>
         </div>
         <div class="small text-muted mt-2">
-            Los campos marcados como override reemplazan la referencia automática del período. Déjelos vacíos solo cuando corresponda usar el valor base.
+            Los campos marcados como override reemplazan la referencia automática del período. Déjelos vacíos solo cuando corresponda usar el valor automático.
         </div>
     </div>
 @endif
@@ -537,10 +562,13 @@
     </div>
 @endif
 
-@if ($isPayroll && $editing && ! empty($payrollHourlyCost))
+@if ($isPayroll)
     <div class="app-panel p-3 mb-4">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-            <div class="section-title mb-0">Costo HH del período</div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <div class="section-title mb-1">Referencia de la remuneración</div>
+                <div class="small text-muted">Información automática del período y del origen de cálculo.</div>
+            </div>
             @if (! empty($payrollCalculationBreakdown))
                 <x-calculation-breakdown
                     id="payroll-edit-breakdown"
@@ -550,6 +578,92 @@
                     trigger-class="btn btn-sm btn-outline-secondary"
                 />
             @endif
+        </div>
+
+        <div class="row g-3">
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Persona</div>
+                    <div class="fw-semibold">{{ $selectedPayrollTitle ?: 'Seleccione una persona' }}</div>
+                    <div class="small text-muted">{{ $selectedPayrollSegments ?: 'La modalidad se completará desde la ficha de Personal.' }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Proyecto</div>
+                    <div class="fw-semibold">{{ $item->project?->name ?: 'Pendiente de selección' }}</div>
+                    <div class="small text-muted">Cliente: {{ $item->project?->client?->legal_name ?: 'No informado' }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Período</div>
+                    <div class="fw-semibold">{{ $payrollPeriodLabel }}</div>
+                    <div class="small text-muted">Mes al que corresponde esta remuneración.</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Tipo contractual</div>
+                    <div class="fw-semibold">{{ is_array($selectedPayrollPerson) ? ($selectedPayrollPerson['payroll_contract_label'] ?? 'No informado') : 'No informado' }}</div>
+                    <div class="small text-muted">Modalidad: {{ is_array($selectedPayrollPerson) ? ($selectedPayrollPerson['payroll_mode_label'] ?? 'No informada') : 'No informada' }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Asignación</div>
+                    <div class="fw-semibold">{{ data_get($payrollSourceRows->get('Asignación'), 'value') ?: 'No configurada' }}</div>
+                    <div class="small text-muted">{{ data_get($payrollSourceRows->get('Vigencia asignación'), 'value') ?: 'Vigencia no disponible' }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Tarifa automática</div>
+                    <div class="fw-semibold">{{ $payrollTariffAutoValue ?: 'No configurada' }}{{ $payrollTariffAutoValue ? ' / HH' : '' }}</div>
+                    <div class="small text-muted">Origen: {{ $payrollTariffAutoOrigin ?: 'No configurado' }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Valor proyecto / hito automático</div>
+                    <div class="fw-semibold">{{ $payrollProjectValueAutoValue ?: 'No configurado' }}</div>
+                    <div class="small text-muted">Origen: {{ $payrollProjectValueAutoOrigin ?: 'No configurado' }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Horas aprobadas sistema</div>
+                    <div class="fw-semibold">{{ $payrollHoursApprovedValue ?: '0,00' }}</div>
+                    <div class="small text-muted">Obtenidas desde Horas para el período.</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Costo hora referencial persona</div>
+                    <div class="fw-semibold">{{ is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? \App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP').' / HH' : 'No configurado' }}</div>
+                    <div class="small text-muted">Referencia de la ficha de Personal.</div>
+                </div>
+            </div>
+        </div>
+
+        @if (filled($payrollMonthlyAutoValue) || filled($payrollHealthAutoValue) || filled($payrollBonusesAutoValue) || filled($payrollAllowancesAutoValue) || filled($payrollAdvancesAutoValue) || filled($payrollOtherDeductionsAutoValue))
+            <div class="small text-muted mt-3">
+                Novedades automáticas:
+                @if (filled($payrollMonthlyAutoValue)) <span class="me-2">Base mensual {{ $payrollMonthlyAutoValue }}</span> @endif
+                @if (filled($payrollHealthAutoValue)) <span class="me-2">Salud adicional {{ $payrollHealthAutoValue }}</span> @endif
+                @if (filled($payrollBonusesAutoValue)) <span class="me-2">Bonos {{ $payrollBonusesAutoValue }}</span> @endif
+                @if (filled($payrollAllowancesAutoValue)) <span class="me-2">Asignaciones no imponibles {{ $payrollAllowancesAutoValue }}</span> @endif
+                @if (filled($payrollAdvancesAutoValue)) <span class="me-2">Anticipos {{ $payrollAdvancesAutoValue }}</span> @endif
+                @if (filled($payrollOtherDeductionsAutoValue)) <span class="me-2">Otros descuentos {{ $payrollOtherDeductionsAutoValue }}</span> @endif
+            </div>
+        @endif
+    </div>
+@endif
+
+@if ($isPayroll && $editing && ! empty($payrollHourlyCost))
+    <div class="app-panel p-3 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <div class="section-title mb-0">Costo HH del período</div>
         </div>
         <div class="row g-3">
             <div class="col-12 col-md-6 col-xl-3">
@@ -570,8 +684,10 @@
             </div>
         </div>
         <div class="small text-muted mt-3">
-            Costo HH real = costo empresa del período / horas productivas registradas.
-            {{ $payrollHourlyCost['reference_capacity_label'] ?? '' }}
+            Costo HH real = costo empresa del período / horas productivas aprobadas.
+            @if (filled($payrollHourlyCost['reference_capacity_label'] ?? null))
+                {{ $payrollHourlyCost['reference_capacity_label'] }}
+            @endif
             @if (! empty($payrollHourlyCost['real_hourly_cost_message']))
                 {{ $payrollHourlyCost['real_hourly_cost_message'] }}
             @endif
@@ -605,6 +721,9 @@
 
     @if ($isPayroll)
         @foreach ($payrollSections as $sectionTitle => $sectionFields)
+            @if (in_array($sectionTitle, ['Resultado', 'Control del cálculo'], true))
+                @continue
+            @endif
             @php($visibleFields = collect($sectionFields)->filter(fn (string $field) => array_key_exists($field, $fields))->values()->all())
             @continue(empty($visibleFields))
             <div class="section-title">{{ $sectionTitle }}</div>
@@ -749,11 +868,136 @@
                             @error($field)
                                 <div class="text-danger small mt-1">{{ $message }}</div>
                             @enderror
+                            @if ($isPayroll && array_key_exists($field, $payrollAutomaticSourceLabels))
+                                @php($automaticSourceLabel = $payrollAutomaticSourceLabels[$field])
+                                @php($automaticSourceValue = data_get($payrollSourceRows->get($automaticSourceLabel), 'value'))
+                                @if (filled($automaticSourceValue))
+                                    <div class="small text-muted mt-1">Automático: {{ $automaticSourceValue }}</div>
+                                @endif
+                            @endif
                         @endif
                     </div>
                 @endforeach
             </div>
         @endforeach
+
+        <div class="section-title">Resultado</div>
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-md-6 col-xl-4">
+                <x-kpi-card
+                    title="Base calculada"
+                    :value="\App\Support\UiFormatter::formatMoney($item->base_salary)"
+                    icon="bi bi-calculator"
+                    tone="primary"
+                />
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <x-kpi-card
+                    title="Total imponible"
+                    :value="\App\Support\UiFormatter::formatMoney($item->taxable_gross)"
+                    icon="bi bi-cash"
+                    tone="info"
+                />
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <x-kpi-card
+                    title="Retención honorarios"
+                    :value="\App\Support\UiFormatter::formatMoney($item->employee_retention)"
+                    icon="bi bi-receipt"
+                    tone="warning"
+                />
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <x-kpi-card
+                    title="Anticipos"
+                    :value="\App\Support\UiFormatter::formatMoney($item->advances)"
+                    icon="bi bi-arrow-down-circle"
+                    tone="secondary"
+                />
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <x-kpi-card
+                    title="Otros descuentos"
+                    :value="\App\Support\UiFormatter::formatMoney($item->other_deductions)"
+                    icon="bi bi-slash-circle"
+                    tone="secondary"
+                />
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <x-kpi-card
+                    title="Líquido"
+                    :value="\App\Support\UiFormatter::formatMoney($item->net_pay)"
+                    icon="bi bi-wallet2"
+                    tone="success"
+                />
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <x-kpi-card
+                    title="Costo empresa"
+                    :value="\App\Support\UiFormatter::formatMoney($item->employer_cost)"
+                    icon="bi bi-building"
+                    tone="dark"
+                />
+            </div>
+        </div>
+
+        <div class="section-title">Descuentos</div>
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Base AFP/salud</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($item->pension_health_base) }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Base AFC</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($item->afc_base) }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">AFP 10%</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($item->afp_mandatory) }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Comisión AFP</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($item->afp_commission) }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">Salud trabajador</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($item->health_employee) }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">AFC trabajador</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($item->afc_employee) }}</div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="app-panel bg-light border-0 p-3 h-100">
+                    <div class="small text-muted">IUSC</div>
+                    <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($item->iusc_amount) }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title">Control del cálculo</div>
+        <div class="app-panel p-3 mb-3">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <span class="small text-muted">Estado:</span>
+                <x-status-badge :status="$item->calculation_status ?? 'OK'" />
+            </div>
+            <div class="small text-muted">
+                Observación:
+                {{ filled($item->calculation_notes) ? $item->calculation_notes : '—' }}
+            </div>
+        </div>
     @else
         <div class="row g-3">
             @php($currentSection = null)
