@@ -946,6 +946,10 @@
                     childSelect.disabled = false;
                     placeholder.textContent = childSelect.dataset.placeholderDefault || 'Seleccione';
                 }
+
+                if (childSelect.matches('[data-assignments-project-select="true"]') && typeof syncAssignmentContext === 'function') {
+                    syncAssignmentContext();
+                }
             };
 
             parentSelect.addEventListener('change', syncOptions);
@@ -1186,12 +1190,25 @@
                 return null;
             }
 
-            const parts = String(value).split('/');
+            const normalizedValue = String(value).trim();
+            if (normalizedValue === '') {
+                return null;
+            }
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) {
+                const date = new Date(`${normalizedValue}T00:00:00`);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+
+            const parts = normalizedValue.split(/[\/-]/);
             if (parts.length !== 3) {
                 return null;
             }
 
-            const [day, month, year] = parts;
+            const [first, second, third] = parts;
+            const [day, month, year] = first.length === 4
+                ? [third, second, first]
+                : [first, second, third];
             const date = new Date(`${year}-${month}-${day}T00:00:00`);
             return Number.isNaN(date.getTime()) ? null : date;
         };
@@ -1523,6 +1540,26 @@
                 assignmentVigencyWarningBox.classList.toggle('d-none', vigencyWarning === '');
             }
         };
+
+        const assignmentReactiveFieldIds = new Set([
+            'project_id',
+            'hourly_value',
+            'project_value',
+            'start_date',
+            'end_date',
+        ]);
+
+        const syncAssignmentContextOnEvent = (event) => {
+            const targetId = event.target?.id || '';
+            if (!assignmentReactiveFieldIds.has(targetId)) {
+                return;
+            }
+
+            syncAssignmentContext();
+        };
+
+        form.addEventListener('input', syncAssignmentContextOnEvent);
+        form.addEventListener('change', syncAssignmentContextOnEvent);
 
         assignmentProjectSelect?.addEventListener('change', syncAssignmentContext);
         assignmentHourlyInput?.addEventListener('input', syncAssignmentContext);
