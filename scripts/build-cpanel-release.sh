@@ -220,9 +220,11 @@ validate_public_index_template
 
 rsync -a \
   --exclude '.git/' \
+  --exclude '.DS_Store' \
   --exclude '.env' \
   --exclude '.env.*' \
   --exclude 'dist/' \
+  --exclude '.phpunit.result.cache' \
   --exclude 'README.md' \
   --exclude 'CLAUDE.md' \
   --exclude 'docs/' \
@@ -243,6 +245,7 @@ rsync -a \
   "$repo_root/" "$private_root/"
 
 find "$private_root/database" -name '*.sqlite' -delete
+find "$private_root" -name '.DS_Store' -delete
 find "$private_root/storage/framework/cache" -type f ! -name '.gitignore' -delete
 find "$private_root/storage/framework/sessions" -type f ! -name '.gitignore' -delete
 find "$private_root/storage/framework/views" -type f ! -name '.gitignore' -delete

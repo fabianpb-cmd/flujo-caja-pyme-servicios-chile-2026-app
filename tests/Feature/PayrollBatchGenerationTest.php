@@ -13,9 +13,12 @@ use App\Models\PayrollRecord;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
+use App\Models\RecordStatus;
+use App\Models\TimeEntry;
 use App\Models\UfValue;
 use App\Models\User;
 use App\Services\PayrollBatchService;
+use App\Services\PayrollService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -215,6 +218,115 @@ class PayrollBatchGenerationTest extends TestCase
         $this->assertSame(1, PayrollRecord::query()->count());
     }
 
+    public function test_manual_override_inputs_ignore_historical_values_that_match_automatic_sources(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por proyecto',
+            'monthly_value' => 0,
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-HIST-AUTO');
+        $assignment = $this->assignment($person, $project, '2026-08-01', '2026-08-31', [
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => \App\Models\Currency::query()->where('company_id', $this->company->id)->where('code', 'UF')->value('id'),
+            'hourly_value' => 0.50,
+            'project_value' => 100.00,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HRS-BATCH-HIST',
+            'person_id' => $person->id,
+            'client_id' => $project->client_id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-15',
+            'activity' => 'Trabajo histórico',
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 20422,
+            'calculated_amount' => 204220,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $record = PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => 10,
+            'hourly_value' => 20422,
+            'project_value' => 4084479,
+            'gross_amount' => 4084479,
+            'net_pay' => 3461596,
+            'employer_cost' => 4084479,
+            'status' => 'Borrador',
+        ]);
+
+        $overrides = app(PayrollService::class)->manualOverrideInputs($record);
+
+        $this->assertSame([], $overrides);
+    }
+
+    public function test_recalculate_preserves_existing_manual_overrides_that_differ_from_automatic_sources(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por proyecto',
+            'monthly_value' => 0,
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-HIST-OVR');
+        $assignment = $this->assignment($person, $project, '2026-08-01', '2026-08-31', [
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => \App\Models\Currency::query()->where('company_id', $this->company->id)->where('code', 'UF')->value('id'),
+            'hourly_value' => 0.50,
+            'project_value' => 100.00,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HRS-BATCH-OVR',
+            'person_id' => $person->id,
+            'client_id' => $project->client_id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-15',
+            'activity' => 'Trabajo override',
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 20422,
+            'calculated_amount' => 204220,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $record = PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => 12,
+            'hourly_value' => 25000,
+            'project_value' => 5000000,
+            'gross_amount' => 5000000,
+            'net_pay' => 4237500,
+            'employer_cost' => 5000000,
+            'status' => 'Borrador',
+        ]);
+
+        $summary = app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01', true);
+        $record->refresh();
+        $summaryAgain = app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01', true);
+        $record->refresh();
+
+        $this->assertSame(1, $summary['updated']);
+        $this->assertSame(1, $summaryAgain['updated']);
+        $this->assertSame(12.0, (float) $record->hours_approved);
+        $this->assertSame(25000.0, (float) $record->hourly_value);
+        $this->assertSame(5000000.0, (float) $record->project_value);
+    }
+
     private function person(array $overrides = []): Person
     {
         return Person::query()->create(array_merge([
@@ -245,9 +357,9 @@ class PayrollBatchGenerationTest extends TestCase
         ]);
     }
 
-    private function assignment(Person $person, Project $project, string $start, ?string $end): ProjectAssignment
+    private function assignment(Person $person, Project $project, string $start, ?string $end, array $overrides = []): ProjectAssignment
     {
-        return ProjectAssignment::query()->create([
+        return ProjectAssignment::query()->create(array_merge([
             'company_id' => $this->company->id,
             'person_id' => $person->id,
             'client_id' => $project->client_id,
@@ -256,7 +368,23 @@ class PayrollBatchGenerationTest extends TestCase
             'start_date' => $start,
             'end_date' => $end,
             'status' => 'active',
-        ]);
+            'assignment_status_id' => $this->statusId('assignment', 'active'),
+        ], $overrides));
+    }
+
+    private function statusId(string $domain, string $code): int
+    {
+        return RecordStatus::query()->firstOrCreate(
+            [
+                'company_id' => $this->company->id,
+                'domain' => $domain,
+                'code' => $code,
+            ],
+            [
+                'name' => strtoupper($code),
+                'active' => true,
+            ]
+        )->id;
     }
 
     private function seedLegal(): void

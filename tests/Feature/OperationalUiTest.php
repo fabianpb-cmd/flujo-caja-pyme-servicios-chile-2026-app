@@ -20,6 +20,7 @@ use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
 use App\Models\SalesDocument;
 use App\Models\TimeEntry;
+use App\Models\UfValue;
 use App\Models\User;
 use App\Services\CatalogService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -1836,10 +1837,14 @@ class OperationalUiTest extends TestCase
         $response->assertSeeText('Control del cálculo');
         $response->assertSeeText('Horas aprobadas del período');
         $response->assertSeeText('Origen: módulo Horas.');
-        $response->assertSeeText('Override horas aprobadas');
+        $response->assertDontSeeText('Override horas aprobadas');
         $response->assertSeeText('Costo hora referencial persona');
+        $response->assertSee('payroll-base-row-1', false);
+        $response->assertSee('payroll-base-row-2', false);
+        $this->assertRowClassHasColumns($response->getContent(), 'payroll-base-row-1', ['Código', 'Persona', 'Proyecto']);
+        $this->assertRowClassHasColumns($response->getContent(), 'payroll-base-row-2', ['Período', 'Base pactada', 'Fecha pago']);
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Nueva remuneración/s', $response->getContent());
-        $this->assertDoesNotMatchRegularExpression('/name="hours_approved"[^>]*value="—"/', $response->getContent());
+        $this->assertDoesNotMatchRegularExpression('/name="hours_approved"/', $response->getContent());
         $this->assertDoesNotMatchRegularExpression('/name="payment_date"[^>]*value="—"/', $response->getContent());
         $response->assertSee('data-bs-toggle="tooltip"', false);
         $response->assertSee('Base calculada', false);
@@ -1890,6 +1895,10 @@ class OperationalUiTest extends TestCase
         $response->assertSee('$ 15.250');
         $response->assertSee('$ 84.750');
         $response->assertSee('payroll-base-grid', false);
+        $response->assertSee('payroll-base-row-1', false);
+        $response->assertSee('payroll-base-row-2', false);
+        $this->assertRowClassHasColumns($response->getContent(), 'payroll-base-row-1', ['Código', 'Persona', 'Proyecto']);
+        $this->assertRowClassHasColumns($response->getContent(), 'payroll-base-row-2', ['Período', 'Base pactada', 'Fecha pago']);
         $response->assertSeeText('Referencia de la remuneración');
         $response->assertSeeText('Horas aprobadas del período');
         $response->assertSeeText('Origen: módulo Horas.');
@@ -2039,7 +2048,8 @@ class OperationalUiTest extends TestCase
         $response->assertSee('Salud adicional automática', false);
         $response->assertSee('Anticipos automáticos', false);
         $response->assertSee('Otros descuentos automáticos', false);
-        $response->assertSee('Tarifa automática', false);
+        $response->assertSee('Tarifa pactada', false);
+        $response->assertSee('Tarifa convertida', false);
         $response->assertSee('Horas aprobadas del período', false);
         $response->assertSee('Origen: módulo Horas.', false);
     }
@@ -2137,8 +2147,124 @@ class OperationalUiTest extends TestCase
         $response->assertSee('Horas aprobadas del período', false);
         $response->assertSee('10 h', false);
         $response->assertSee('Origen: módulo Horas.', false);
-        $response->assertSee('Override horas aprobadas', false);
+        $this->assertDoesNotMatchRegularExpression('/name="hours_approved"/', $response->getContent());
         $this->assertDoesNotMatchRegularExpression('/name="payment_date"[^>]*value="—"/', $response->getContent());
+    }
+
+    public function test_payroll_edit_reclassifies_historical_automatic_values_without_false_overrides(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        $uf = $this->currency($company->id, 'UF', 'Unidad de Fomento');
+        UfValue::query()->create([
+            'company_id' => $company->id,
+            'value_date' => '2026-08-01',
+            'value' => 40844.79,
+        ]);
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-REM-HIST',
+            'legal_name' => 'Cliente Histórico',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-REM-HIST',
+            'name' => 'Alertas de Matrículas',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REM-HIST',
+            'first_names' => 'Jaime',
+            'paternal_surname' => 'Soriano',
+            'maternal_surname' => 'Prueba',
+            'name' => 'Jaime Soriano',
+            'modality' => 'Honorarios por proyecto',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'POR_PROYECTO'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-000010',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $uf->id,
+            'hourly_value' => 0.50,
+            'project_value' => 100.00,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HRS-REM-HIST',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-15',
+            'activity' => 'Implementación',
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 20422,
+            'calculated_amount' => 204220,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $payroll = PayrollRecord::query()->create([
+            'company_id' => $company->id,
+            'code' => 'REM-000001',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => 10,
+            'hourly_value' => 20422,
+            'project_value' => 4084479,
+            'base_salary' => 4084479,
+            'gross_amount' => 4084479,
+            'taxable_amount' => 0,
+            'taxable_gross' => 0,
+            'employee_retention' => 622883,
+            'retention_rate' => 0.1525,
+            'employer_cost' => 4084479,
+            'net_pay' => 3461596,
+            'calculation_status' => 'OK',
+            'legal_snapshot' => ['period' => '2026-08-01', 'honorarios_retention_rate' => 0.1525],
+            'status' => 'Pendiente',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('operational.edit', ['payroll-records', $payroll->id]));
+
+        $response->assertOk();
+        $response->assertSee('Agosto 2026');
+        $response->assertSee('Horas aprobadas del período');
+        $response->assertSee('10 h');
+        $response->assertSee('Origen: módulo Horas.');
+        $response->assertSee('Tarifa pactada');
+        $response->assertSee('UF 0,50 / HH');
+        $response->assertSee('Valor convertido: $ 20.422 / HH');
+        $response->assertSee('Override manual: No informado');
+        $response->assertSee('Valor efectivo: $ 20.422 / HH');
+        $response->assertSee('Valor proyecto / hito pactado');
+        $response->assertSee('UF 100,00');
+        $response->assertSee('Valor convertido: $ 4.084.479');
+        $response->assertSee('Valor efectivo: $ 4.084.479');
+        $this->assertDoesNotMatchRegularExpression('/name="hours_approved"/', $response->getContent());
+        $this->assertMatchesRegularExpression('/name="hourly_value"[^>]*value=""/', $response->getContent());
+        $this->assertMatchesRegularExpression('/name="project_value"[^>]*value=""/', $response->getContent());
+        $this->assertMatchesRegularExpression('/name="period_date"[^>]*value="2026-08-01"/', $response->getContent());
+        $this->assertMatchesRegularExpression('/id="period_date"[^>]*value="Agosto 2026"/', $response->getContent());
     }
 
     public function test_clients_and_projects_generate_immutable_codes_when_omitted(): void
@@ -2294,46 +2420,74 @@ class OperationalUiTest extends TestCase
         libxml_clear_errors();
         $xpath = new \DOMXPath($dom);
 
-        $rowPath = null;
+        $candidateRows = $xpath->query('//div[contains(concat(" ", normalize-space(@class), " "), " row ")]');
+        $matched = false;
 
-        foreach ($labels as $label) {
-            $labelNode = $xpath->query(sprintf('//label[contains(normalize-space(string(.)), %s)]', $this->xpathLiteral($label)))->item(0);
-            $this->assertNotNull($labelNode, "No se encontró el label {$label}");
+        foreach ($candidateRows as $rowNode) {
+            $directColumns = $xpath->query('./div[contains(@class, "col-")]', $rowNode);
+            if ($directColumns->length < count($labels)) {
+                continue;
+            }
 
-            $colNode = $this->ancestorByClass($xpath, $labelNode, 'col-');
-            $this->assertNotNull($colNode, "No se encontró la columna de {$label}");
+            $columnTexts = [];
+            foreach ($directColumns as $column) {
+                $columnTexts[] = trim(preg_replace('/\s+/u', ' ', $column->textContent));
+            }
 
-            $currentRow = $this->ancestorByClass($xpath, $colNode, 'row');
-            $this->assertNotNull($currentRow, "No se encontró la row de {$label}");
+            $allPresent = collect($labels)->every(
+                fn (string $label) => collect($columnTexts)->contains(fn (string $text) => str_contains($text, $label))
+            );
 
-            $currentPath = $currentRow->getNodePath();
-            $rowPath ??= $currentPath;
-            $this->assertSame($rowPath, $currentPath, "{$label} no comparte la misma row");
+            if ($allPresent) {
+                $matched = true;
+                break;
+            }
         }
 
-        $rowNode = $xpath->query($rowPath)->item(0);
-        $this->assertNotNull($rowNode, 'No se pudo localizar la row validada');
+        $this->assertTrue($matched, 'No se encontró una row horizontal con las columnas esperadas');
+    }
+
+    private function assertRowClassHasColumns(string $html, string $rowClass, array $labels): void
+    {
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="utf-8" ?>'.$html);
+        libxml_clear_errors();
+        $xpath = new \DOMXPath($dom);
+
+        $rowNode = $xpath->query(sprintf(
+            '//div[contains(concat(" ", normalize-space(@class), " "), %s)]',
+            $this->xpathLiteral(' '.$rowClass.' ')
+        ))->item(0);
+
+        $this->assertNotNull($rowNode, "No se encontró la row {$rowClass}");
 
         $directColumns = $xpath->query('./div[contains(@class, "col-")]', $rowNode);
-        $renderedLabels = [];
+        $this->assertSame(count($labels), $directColumns->length, "La row {$rowClass} no contiene la cantidad esperada de columnas");
+
+        $columnTexts = [];
         foreach ($directColumns as $column) {
-            $columnLabels = $xpath->query('.//label', $column);
-            if ($columnLabels->length > 0) {
-                $renderedLabels[] = trim(preg_replace('/\s+/u', ' ', $columnLabels->item(0)->textContent));
-            }
+            $columnTexts[] = trim(preg_replace('/\s+/u', ' ', $column->textContent));
         }
 
         foreach ($labels as $label) {
             $this->assertTrue(
-                collect($renderedLabels)->contains(fn (string $rendered) => str_contains($rendered, $label)),
-                "La row no contiene el label {$label} como columna hija directa"
+                collect($columnTexts)->contains(fn (string $text) => str_contains($text, $label)),
+                "La row {$rowClass} no contiene la columna {$label}"
             );
         }
     }
 
     private function ancestorByClass(\DOMXPath $xpath, \DOMNode $node, string $classFragment): ?\DOMNode
     {
-        return $xpath->query(sprintf('ancestor::div[contains(@class, %s)][1]', $this->xpathLiteral($classFragment)), $node)->item(0) ?: null;
+        $expression = str_ends_with($classFragment, '-')
+            ? sprintf('ancestor::div[contains(@class, %s)][1]', $this->xpathLiteral($classFragment))
+            : sprintf(
+                'ancestor::div[contains(concat(" ", normalize-space(@class), " "), %s)][1]',
+                $this->xpathLiteral(' '.$classFragment.' ')
+            );
+
+        return $xpath->query($expression, $node)->item(0) ?: null;
     }
 
     private function xpathLiteral(string $value): string

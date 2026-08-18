@@ -103,7 +103,7 @@
             @endif
         @endif
         <div class="row mb-3">
-            <dt class="col-sm-4">{{ $resource === 'payroll-records' && $field === 'hours_approved' ? 'Horas aprobadas sistema' : $definition['label'] }}</dt>
+            <dt class="col-sm-4">{{ $resource === 'payroll-records' && $field === 'hours_approved' ? 'Horas aprobadas del período' : $definition['label'] }}</dt>
             @php($display = $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay)
                 ? $payrollHoursApprovedDisplay
                 : \App\Support\UiFormatter::display($item, $field, $definition))

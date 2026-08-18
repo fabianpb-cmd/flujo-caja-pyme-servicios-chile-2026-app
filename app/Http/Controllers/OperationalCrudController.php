@@ -118,6 +118,7 @@ class OperationalCrudController extends Controller
             'options' => $this->options($config, $request, $item),
             'codeMeta' => $this->codeMeta($config['model']),
             'payrollViewMeta' => $this->payrollViewMeta($resource),
+            'payrollFormState' => [],
             'payrollHourlyCost' => null,
         ]);
     }
@@ -155,8 +156,9 @@ class OperationalCrudController extends Controller
         $payrollHourlyCost = $resource === 'payroll-records' ? $this->hourlyCosts->forPayroll($item) : null;
         $payrollCalculationBreakdown = $resource === 'payroll-records' ? $this->payroll->explain($item) : null;
         $salesCalculationBreakdown = $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null;
+        $payrollFormState = $resource === 'payroll-records' ? $this->payroll->formState($item) : [];
 
-        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown'));
+        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState'));
     }
 
     public function edit(Request $request, string $resource, int $record): View
@@ -172,6 +174,7 @@ class OperationalCrudController extends Controller
             'options' => $this->options($config, $request, $item),
             'codeMeta' => $this->codeMeta($config['model']),
             'payrollViewMeta' => $this->payrollViewMeta($resource),
+            'payrollFormState' => $resource === 'payroll-records' ? $this->payroll->formState($item) : [],
             'payrollHourlyCost' => $resource === 'payroll-records' ? $this->hourlyCosts->forPayroll($item) : null,
             'payrollCalculationBreakdown' => $resource === 'payroll-records' ? $this->payroll->explain($item) : null,
             'salesCalculationBreakdown' => $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null,
@@ -304,6 +307,16 @@ class OperationalCrudController extends Controller
             $data['period_date'] = $period->toDateString();
 
             $person = Person::query()->forCompany($data['company_id'])->findOrFail($data['person_id']);
+            $existingRecord = filled($request->route('record'))
+                ? PayrollRecord::query()->forCompany($data['company_id'])->find((int) $request->route('record'))
+                : null;
+            if ($existingRecord) {
+                foreach ($this->payroll->manualOverrideInputs($existingRecord) as $field => $value) {
+                    if (! array_key_exists($field, $data)) {
+                        $data[$field] = $value;
+                    }
+                }
+            }
             $derived = $this->payrollRecordDefaults($data['company_id'], $person->id, $period, $data['project_id'] ?? null);
 
             foreach ($derived as $field => $value) {

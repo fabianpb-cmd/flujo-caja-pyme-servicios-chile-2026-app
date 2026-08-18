@@ -59,11 +59,11 @@
     'status' => 'Estado de pago o control operacional del documento.',
 ]);
 @php($payrollAutoFields = ['code', 'base_salary', 'taxable_gross', 'employee_retention', 'afp_mandatory', 'afp_commission', 'health_employee', 'afc_employee', 'iusc_amount', 'net_pay', 'afc_employer', 'employer_pension', 'accident_insurance', 'sanna', 'vacation_provision_amount', 'employer_cost', 'calculation_status', 'calculation_notes'])
-@php($payrollManualFields = ['person_id', 'project_id', 'period_date', 'payment_date', 'amount_basis', 'hours_approved', 'monthly_value', 'hourly_value', 'project_value', 'bonuses', 'non_taxable_allowances', 'advances', 'other_deductions'])
+@php($payrollManualFields = ['person_id', 'project_id', 'period_date', 'payment_date', 'amount_basis', 'monthly_value', 'hourly_value', 'project_value', 'bonuses', 'non_taxable_allowances', 'advances', 'other_deductions'])
 @php($payrollSections = [
-    'Datos base' => ['code', 'person_id', 'project_id', 'period_date', 'payment_date', 'amount_basis'],
+    'Datos base' => ['code', 'person_id', 'project_id', 'period_date', 'amount_basis', 'payment_date'],
     'Referencia de la remuneración' => [],
-    'Ajustes / overrides' => ['hours_approved', 'monthly_value', 'hourly_value', 'project_value'],
+    'Ajustes / overrides' => ['monthly_value', 'hourly_value', 'project_value'],
     'Adicionales' => ['bonuses', 'non_taxable_allowances'],
     'Descuentos' => ['advances', 'other_deductions'],
     'Resultado' => ['base_salary', 'taxable_gross', 'pension_health_base', 'afc_base', 'employee_retention', 'afp_mandatory', 'afp_commission', 'health_employee', 'afc_employee', 'iusc_amount', 'net_pay', 'afc_employer', 'employer_pension', 'accident_insurance', 'sanna', 'vacation_provision_amount', 'employer_cost'],
@@ -481,27 +481,42 @@
 @php($payrollCalculationSections = collect($payrollCalculationBreakdown['sections'] ?? []))
 @php($payrollSourceSection = $payrollCalculationSections->firstWhere('title', 'Fuentes aplicadas'))
 @php($payrollSourceRows = collect(data_get($payrollSourceSection, 'rows', []))->keyBy('label'))
-@php($payrollTariffRowValue = data_get($payrollSourceRows->get('Tarifa automática'), 'value'))
+@php($payrollTariffRowValue = data_get($payrollSourceRows->get('Tarifa pactada'), 'value'))
 @php($payrollTariffParts = $payrollTariffRowValue ? preg_split('/\s+·\s+/u', (string) $payrollTariffRowValue, 2) : [])
 @php($payrollTariffAutoValue = $payrollTariffParts[0] ?? null)
 @php($payrollTariffAutoOrigin = $payrollTariffParts[1] ?? null)
-@php($payrollProjectValueRowValue = data_get($payrollSourceRows->get('Valor proyecto/hito automático'), 'value'))
+@php($payrollProjectValueRowValue = data_get($payrollSourceRows->get('Valor proyecto/hito pactado'), 'value'))
 @php($payrollProjectValueParts = $payrollProjectValueRowValue ? preg_split('/\s+·\s+/u', (string) $payrollProjectValueRowValue, 2) : [])
 @php($payrollProjectValueAutoValue = $payrollProjectValueParts[0] ?? null)
 @php($payrollProjectValueAutoOrigin = $payrollProjectValueParts[1] ?? null)
-@php($payrollHoursApprovedDisplay = filled(data_get($payrollHourlyCost ?? [], 'worked_hours'))
-    ? \App\Support\UiFormatter::formatHours(data_get($payrollHourlyCost ?? [], 'worked_hours'))
-    : null)
+@php($payrollFormState = $payrollFormState ?? [])
+@php($payrollFieldStates = $payrollFormState['fields'] ?? [])
+@php($payrollHoursState = $payrollFieldStates['hours_approved'] ?? ['automatic' => null, 'override' => null, 'effective' => null, 'has_override' => false])
+@php($payrollMonthlyValueState = $payrollFieldStates['monthly_value'] ?? ['automatic' => null, 'override' => null, 'effective' => null, 'has_override' => false])
+@php($payrollHourlyValueState = $payrollFieldStates['hourly_value'] ?? ['automatic' => null, 'override' => null, 'effective' => null, 'has_override' => false])
+@php($payrollProjectValueState = $payrollFieldStates['project_value'] ?? ['automatic' => null, 'override' => null, 'effective' => null, 'has_override' => false])
+@php($payrollOverrideInputs = [
+    'monthly_value' => $payrollMonthlyValueState['override'] ?? null,
+    'hourly_value' => $payrollHourlyValueState['override'] ?? null,
+    'project_value' => $payrollProjectValueState['override'] ?? null,
+])
+@php($payrollHoursApprovedDisplay = \App\Support\UiFormatter::formatHours($payrollHoursState['effective'] ?? 0))
+@php($payrollHourlyValueConvertedDisplay = ($payrollHourlyValueState['effective'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyValueState['effective'], 'CLP').' / HH' : 'No configurada')
+@php($payrollHourlyValueOverrideDisplay = ($payrollHourlyValueState['override'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyValueState['override'], 'CLP').' / HH' : 'No informado')
+@php($payrollProjectValueConvertedDisplay = ($payrollProjectValueState['effective'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollProjectValueState['effective'], 'CLP') : 'No configurado')
+@php($payrollProjectValueOverrideDisplay = ($payrollProjectValueState['override'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollProjectValueState['override'], 'CLP') : 'No informado')
 @php($payrollMonthlyAutoValue = data_get($payrollSourceRows->get('Base mensual automática'), 'value'))
 @php($payrollHealthAutoValue = data_get($payrollSourceRows->get('Salud adicional automática'), 'value'))
 @php($payrollBonusesAutoValue = data_get($payrollSourceRows->get('Bonos automáticos'), 'value'))
 @php($payrollAllowancesAutoValue = data_get($payrollSourceRows->get('Asignaciones no imponibles automáticas'), 'value'))
 @php($payrollAdvancesAutoValue = data_get($payrollSourceRows->get('Anticipos automáticos'), 'value'))
 @php($payrollOtherDeductionsAutoValue = data_get($payrollSourceRows->get('Otros descuentos automáticos'), 'value'))
+@php($payrollSelectedProjectId = old('project_id', $item->project_id ?? null))
+@php($payrollSelectedProjectOption = $payrollSelectedProjectId !== null ? ($options['project_id'][$payrollSelectedProjectId] ?? null) : null)
 @php($payrollAutomaticSourceLabels = [
     'monthly_value' => 'Base mensual automática',
-    'hourly_value' => 'Tarifa automática',
-    'project_value' => 'Valor proyecto/hito automático',
+    'hourly_value' => 'Tarifa pactada',
+    'project_value' => 'Valor proyecto/hito pactado',
     'bonuses' => 'Bonos automáticos',
     'non_taxable_allowances' => 'Asignaciones no imponibles automáticas',
     'advances' => 'Anticipos automáticos',
@@ -652,23 +667,33 @@
             </div>
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="app-panel bg-light border-0 p-3 h-100">
-                    <div class="small text-muted">Tarifa automática</div>
+                    <div class="small text-muted">Tarifa pactada</div>
                     <div class="fw-semibold">{{ $payrollTariffAutoValue ?: 'No configurada' }}{{ $payrollTariffAutoValue ? ' / HH' : '' }}</div>
                     <div class="small text-muted">Origen: {{ $payrollTariffAutoOrigin ?: 'No configurado' }}</div>
+                    <div class="small text-muted mt-1">Valor convertido: {{ $payrollHourlyValueConvertedDisplay }}</div>
+                    <div class="small text-muted">Override manual: {{ $payrollHourlyValueOverrideDisplay }}</div>
+                    <div class="small text-muted">Valor efectivo: {{ $payrollHourlyValueConvertedDisplay }}</div>
                 </div>
             </div>
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="app-panel bg-light border-0 p-3 h-100">
-                    <div class="small text-muted">Valor proyecto / hito automático</div>
+                    <div class="small text-muted">Valor proyecto / hito pactado</div>
                     <div class="fw-semibold">{{ $payrollProjectValueAutoValue ?: 'No configurado' }}</div>
                     <div class="small text-muted">Origen: {{ $payrollProjectValueAutoOrigin ?: 'No configurado' }}</div>
+                    <div class="small text-muted mt-1">Valor convertido: {{ $payrollProjectValueConvertedDisplay }}</div>
+                    <div class="small text-muted">Override manual: {{ $payrollProjectValueOverrideDisplay }}</div>
+                    <div class="small text-muted">Valor efectivo: {{ $payrollProjectValueConvertedDisplay }}</div>
                 </div>
             </div>
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="app-panel bg-light border-0 p-3 h-100">
                     <div class="small text-muted">Horas aprobadas del período</div>
-                    <div class="fw-semibold">{{ $payrollHoursApprovedDisplay ?: '0,00 h' }}</div>
+                    <div class="fw-semibold">{{ $payrollHoursApprovedDisplay }}</div>
                     <div class="small text-muted">Origen: módulo Horas.</div>
+                    @if ($payrollHoursState['has_override'] ?? false)
+                        <div class="small text-muted mt-1">Override horas: {{ \App\Support\UiFormatter::formatHours($payrollHoursState['override']) }}</div>
+                        <div class="small text-muted">Horas efectivas: {{ \App\Support\UiFormatter::formatHours($payrollHoursState['effective']) }}</div>
+                    @endif
                 </div>
             </div>
             <div class="col-12 col-md-6 col-xl-4">
@@ -761,19 +786,38 @@
             @php($visibleFields = collect($sectionFields)->filter(fn (string $field) => array_key_exists($field, $fields))->values()->all())
             @continue(empty($visibleFields))
             <div class="section-title">{{ $sectionTitle }}</div>
-            <div class="row g-3 mb-3">
-                @foreach ($visibleFields as $field)
+            @php($fieldRows = $sectionTitle === 'Datos base'
+                ? [
+                    ['code', 'person_id', 'project_id'],
+                    ['period_date', 'amount_basis', 'payment_date'],
+                ]
+                : [$visibleFields])
+            @foreach ($fieldRows as $rowIndex => $fieldRow)
+            <div class="row g-3 mb-3 {{ $sectionTitle === 'Datos base' ? 'payroll-base-row payroll-base-row-'.($rowIndex + 1) : '' }}">
+                @foreach ($fieldRow as $field)
+                    @continue(! array_key_exists($field, $fields))
                     @php($definition = $fields[$field])
                     @php($type = $definition['type'] ?? 'text')
-                    @php($value = old($field, $item->{$field}))
+                    @php($value = old($field, array_key_exists($field, $payrollOverrideInputs) ? $payrollOverrideInputs[$field] : $item->{$field}))
                     @if ($field === 'phone_country_code' && blank($value))
                         @php($value = '+56')
                     @endif
-                    @php($colClass = $definition['col'] ?? 'col-12 col-md-6')
+                    @php($colClass = $resourceColumns[$field] ?? ($definition['col'] ?? 'col-12 col-md-6'))
                     @php($label = $definition['label'])
                     @php($helpText = $payrollHelp[$field] ?? $projectHelp[$field] ?? $rateUnitHelp[$field] ?? null)
                     @php($isCalculated = in_array($field, $payrollAutoFields, true))
-                    @php($isManual = in_array($field, $payrollManualFields, true))
+                    @php($isPayrollIdentityField = $editing && in_array($field, ['person_id', 'project_id', 'period_date'], true))
+                    @php($isManual = in_array($field, $payrollManualFields, true) && ! $isPayrollIdentityField)
+                    @php($payrollReadonlyDisplay = match ($field) {
+                        'person_id' => $selectedPayrollTitle ?: 'Pendiente de selección',
+                        'project_id' => is_array($payrollSelectedProjectOption) ? ($payrollSelectedProjectOption['label'] ?? 'Pendiente de selección') : ($item->project?->name ?: 'Pendiente de selección'),
+                        'period_date' => $payrollPeriodLabel,
+                        default => null,
+                    })
+                    @php($payrollReadonlyRaw = match ($field) {
+                        'period_date' => old('period_date', optional($item->period_date)->toDateString()),
+                        default => old($field, $item->{$field}),
+                    })
                     @php($visibilityMode = in_array($field, $payrollDependentOnly, true) ? 'dependent' : (in_array($field, $payrollHonorariosOnly, true) ? 'honorarios' : 'all'))
                     <div class="{{ $colClass }} payroll-field-wrapper"
                          data-payroll-field-wrapper="true"
@@ -794,6 +838,7 @@
                             @else
                                 <div class="form-control bg-light text-muted">{{ $codeMeta['label'] ?? 'Se generará automáticamente' }}</div>
                             @endif
+                        </div>
                             @continue
                         @endif
                         @if ($type === 'checkbox')
@@ -822,7 +867,19 @@
                                     </span>
                                 @endif
                             </label>
-                            @if (($definition['readonly'] ?? false) === true)
+                            @if ($isPayrollIdentityField)
+                                <input type="hidden" name="{{ $field }}" value="{{ $payrollReadonlyRaw }}">
+                                <input
+                                    id="{{ $field }}"
+                                    class="form-control payroll-calculated-field"
+                                    value="{{ $payrollReadonlyDisplay }}"
+                                    readonly
+                                    aria-readonly="true"
+                                >
+                                @if ($field === 'period_date')
+                                    <div class="small text-muted mt-1">Mes: {{ $payrollPeriodLabel }}</div>
+                                @endif
+                            @elseif (($definition['readonly'] ?? false) === true)
                                 <input
                                     id="{{ $field }}"
                                     class="form-control payroll-calculated-field"
@@ -916,6 +973,7 @@
                     </div>
                 @endforeach
             </div>
+            @endforeach
         @endforeach
 
         <div class="section-title">Resultado</div>

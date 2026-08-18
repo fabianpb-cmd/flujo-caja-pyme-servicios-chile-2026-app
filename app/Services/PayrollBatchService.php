@@ -76,6 +76,10 @@ class PayrollBatchService
             $assignments = $this->validAssignments($person, $period, $periodEnd);
             $data = $this->adjustmentData($companyId, $person->id, $period);
             $projectId = $assignments->count() === 1 ? $assignments->first()->project_id : null;
+            if ($existing) {
+                $data = array_merge($data, $this->payroll->manualOverrideInputs($existing));
+                $projectId ??= $existing->project_id;
+            }
             $notes = [];
 
             if ($assignments->count() > 1) {

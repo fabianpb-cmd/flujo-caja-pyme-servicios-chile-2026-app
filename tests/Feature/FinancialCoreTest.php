@@ -293,8 +293,8 @@ class FinancialCoreTest extends TestCase
         $explanationJson = json_encode($explanation, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $this->assertSame('Costo empresa', $explanation['result']['label']);
-        $this->assertStringContainsString('Horas aprobadas automáticas', $explanationJson);
-        $this->assertStringContainsString('Tarifa automática', $explanationJson);
+        $this->assertStringContainsString('Horas aprobadas del período', $explanationJson);
+        $this->assertStringContainsString('Tarifa pactada', $explanationJson);
         $this->assertStringContainsString('ASI-PRL-01 · Proyecto Payroll', $explanationJson);
         $this->assertStringContainsString('UF 1,30 / HH', $explanationJson);
     }

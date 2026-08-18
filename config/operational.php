@@ -441,10 +441,10 @@ return [
         'model' => PayrollRecord::class,
         'display' => 'code',
         'fields' => [
-            'code' => ['label' => 'Codigo', 'type' => 'text', 'readonly' => true],
+            'code' => ['label' => 'Código', 'type' => 'text', 'readonly' => true],
             'person_id' => ['label' => 'Persona', 'type' => 'relation', 'model' => Person::class, 'display' => 'name'],
             'project_id' => ['label' => 'Proyecto', 'type' => 'relation', 'model' => Project::class, 'display' => 'name'],
-            'period_date' => ['label' => 'Periodo', 'type' => 'date'],
+            'period_date' => ['label' => 'Período', 'type' => 'date'],
             'payment_date' => ['label' => 'Fecha pago', 'type' => 'date'],
             'amount_basis' => ['label' => 'Base pactada', 'type' => 'select', 'options' => ['GROSS' => 'Bruto', 'NET' => 'Liquido pactado']],
             'hours_approved' => ['label' => 'Override horas aprobadas', 'type' => 'number'],

@@ -606,33 +606,14 @@ class PayrollService
             $record->calculation_notes ?? null,
             $record->calculation_status && $record->calculation_status !== 'OK' ? $record->calculation_status : null,
         ]));
-        $adjustments = $this->payrollAdjustmentTotals($record);
-        $assignment = $this->payrollAssignmentForRecord($record);
-        $context = $record->person && $record->period_date
-            ? $this->payrollContext($record->person, Carbon::parse($record->period_date)->startOfMonth(), $record->project_id)
-            : [
-                'assignment' => null,
-                'assignment_context' => ['ambiguous' => false],
-                'project' => $record->project,
-                'project_id' => $record->project_id,
-                'time_entries' => collect(),
-                'hours_approved_auto' => 0.0,
-                'monthly_value_auto' => $record->person?->monthly_value !== null ? (float) $record->person->monthly_value : null,
-                'hourly_value_auto' => null,
-                'hourly_value_source' => null,
-                'project_value_auto' => null,
-                'project_value_source' => null,
-                'health_additional_auto' => $record->person?->additional_health_plan !== null ? (float) $record->person->additional_health_plan : null,
-                'notes' => [],
-                'requires_review' => false,
-            ];
-        $hoursApprovedEffective = $adjustments['hours_approved'] !== null
-            ? round((float) $adjustments['hours_approved'], 2)
-            : round((float) ($context['hours_approved_auto'] ?? 0), 2);
-
-        if ($adjustments['hours_approved'] === null && abs((float) ($record->hours_approved ?? 0) - $hoursApprovedEffective) > 0.00001) {
-            $warnings[] = 'Las horas aprobadas almacenadas difieren de la fuente de Horas del período. Recalcule la remuneración.';
-        }
+        $formState = $this->formState($record);
+        $adjustments = $formState['adjustments'];
+        $context = $formState['context'];
+        $assignment = $context['assignment'];
+        $hoursApprovedState = $formState['fields']['hours_approved'];
+        $monthlyValueState = $formState['fields']['monthly_value'];
+        $hourlyValueState = $formState['fields']['hourly_value'];
+        $projectValueState = $formState['fields']['project_value'];
 
         $formatPayrollSource = function (?array $source, bool $hours = false): string {
             if (! $source) {
@@ -666,18 +647,21 @@ class PayrollService
             ['label' => 'Cliente', 'value' => $record->project?->client?->legal_name ?? '—'],
             ['label' => 'Asignación', 'value' => $assignment?->code ? trim((string) ($assignment->code.' · '.($assignment->project?->name ?: $record->project?->name ?: 'No informado'))) : 'No configurada'],
             ['label' => 'Vigencia asignación', 'value' => $this->payrollAssignmentRangeLabel($assignment)],
-            ['label' => 'Horas aprobadas automáticas', 'value' => UiFormatter::formatHours($context['hours_approved_auto']).' · Horas'],
-            ['label' => 'Horas aprobadas override', 'value' => $adjustments['hours_approved'] !== null ? UiFormatter::formatHours($adjustments['hours_approved']).' · Novedades remuneración' : '—'],
-            ['label' => 'Horas aprobadas efectivas', 'value' => UiFormatter::formatHours($hoursApprovedEffective)],
-            ['label' => 'Tarifa automática', 'value' => $formatPayrollSource($context['hourly_value_source'], true)],
-            ['label' => 'Tarifa override', 'value' => $adjustments['hourly_value'] !== null ? UiFormatter::formatMoney($adjustments['hourly_value'], 'CLP').' / HH · Novedades remuneración' : '—'],
-            ['label' => 'Tarifa efectiva', 'value' => UiFormatter::formatMoney($record->hourly_value, 'CLP').' / HH'],
-            ['label' => 'Valor proyecto/hito automático', 'value' => $formatPayrollSource($context['project_value_source'])],
-            ['label' => 'Valor proyecto/hito override', 'value' => $adjustments['project_value'] !== null ? UiFormatter::formatMoney($adjustments['project_value'], 'CLP').' · Novedades remuneración' : '—'],
-            ['label' => 'Valor proyecto/hito efectivo', 'value' => UiFormatter::formatMoney($record->project_value, 'CLP')],
+            ['label' => 'Horas aprobadas del período', 'value' => UiFormatter::formatHours($hoursApprovedState['automatic'] ?? 0)],
+            ['label' => 'Origen horas', 'value' => 'Módulo Horas'],
+            ['label' => 'Override horas', 'value' => $this->payrollOverrideDisplay($hoursApprovedState, true)],
+            ['label' => 'Horas aprobadas efectivas', 'value' => UiFormatter::formatHours($hoursApprovedState['effective'] ?? 0)],
+            ['label' => 'Tarifa pactada', 'value' => $formatPayrollSource($context['hourly_value_source'], true)],
+            ['label' => 'Tarifa convertida', 'value' => $this->payrollEffectiveDisplay($hourlyValueState, false, true)],
+            ['label' => 'Tarifa override', 'value' => $this->payrollOverrideDisplay($hourlyValueState, false, true)],
+            ['label' => 'Tarifa efectiva', 'value' => $this->payrollEffectiveDisplay($hourlyValueState, false, true)],
+            ['label' => 'Valor proyecto/hito pactado', 'value' => $formatPayrollSource($context['project_value_source'])],
+            ['label' => 'Valor proyecto/hito convertido', 'value' => $this->payrollEffectiveDisplay($projectValueState, false)],
+            ['label' => 'Valor proyecto/hito override', 'value' => $this->payrollOverrideDisplay($projectValueState, false)],
+            ['label' => 'Valor proyecto/hito efectivo', 'value' => $this->payrollEffectiveDisplay($projectValueState, false)],
             ['label' => 'Base mensual automática', 'value' => $record->person?->monthly_value !== null ? UiFormatter::formatMoney($record->person?->monthly_value, 'CLP').' · Ficha de Personal' : '—'],
-            ['label' => 'Base mensual override', 'value' => $adjustments['monthly_value'] !== null ? UiFormatter::formatMoney($adjustments['monthly_value'], 'CLP').' · Novedades remuneración' : '—'],
-            ['label' => 'Base mensual efectiva', 'value' => UiFormatter::formatMoney($record->monthly_value, 'CLP')],
+            ['label' => 'Base mensual override', 'value' => $this->payrollOverrideDisplay($monthlyValueState, false)],
+            ['label' => 'Base mensual efectiva', 'value' => $this->payrollEffectiveDisplay($monthlyValueState, false)],
             ['label' => 'Salud adicional automática', 'value' => $record->person?->additional_health_plan !== null ? UiFormatter::formatMoney($record->person?->additional_health_plan, 'CLP').' · Ficha de Personal' : '—'],
             ['label' => 'Salud adicional override', 'value' => $adjustments['health_additional'] !== null ? UiFormatter::formatMoney($adjustments['health_additional']).' · Novedades remuneración' : '—'],
             ['label' => 'Salud adicional efectiva', 'value' => UiFormatter::formatMoney($record->health_additional, 'CLP')],
@@ -821,6 +805,43 @@ class PayrollService
         ];
     }
 
+    public function formState(?PayrollRecord $record): array
+    {
+        if (! $record || ! $record->exists || ! $record->person || ! $record->period_date) {
+            return $this->emptyPayrollFormState();
+        }
+
+        $record->loadMissing(['person', 'project.client']);
+        $context = $this->payrollContext($record->person, Carbon::parse($record->period_date)->startOfMonth(), $record->project_id);
+        $adjustments = $this->payrollAdjustmentTotals($record);
+
+        return [
+            'context' => $context,
+            'adjustments' => $adjustments,
+            'fields' => [
+                'hours_approved' => $this->payrollFieldState($record->hours_approved, $adjustments['hours_approved'], $context['hours_approved_auto'], 2),
+                'monthly_value' => $this->payrollFieldState($record->monthly_value, $adjustments['monthly_value'], $context['monthly_value_auto'], 2),
+                'hourly_value' => $this->payrollFieldState($record->hourly_value, $adjustments['hourly_value'], $context['hourly_value_auto'], 2),
+                'project_value' => $this->payrollFieldState($record->project_value, $adjustments['project_value'], $context['project_value_auto'], 2),
+            ],
+        ];
+    }
+
+    public function manualOverrideInputs(?PayrollRecord $record): array
+    {
+        $state = $this->formState($record);
+        $overrides = [];
+
+        foreach (['hours_approved', 'monthly_value', 'hourly_value', 'project_value'] as $field) {
+            $override = $state['fields'][$field]['override'] ?? null;
+            if ($override !== null) {
+                $overrides[$field] = $override;
+            }
+        }
+
+        return $overrides;
+    }
+
     private function payrollAdjustmentTotals(PayrollRecord $record): array
     {
         if (! $record->period_date) {
@@ -874,6 +895,116 @@ class PayrollService
             });
 
         return $totals;
+    }
+
+    private function emptyPayrollFormState(): array
+    {
+        $emptyField = [
+            'automatic' => null,
+            'override' => null,
+            'effective' => null,
+            'stored' => null,
+            'has_override' => false,
+            'source' => null,
+        ];
+
+        return [
+            'context' => [
+                'assignment' => null,
+                'assignment_context' => ['ambiguous' => false],
+                'project' => null,
+                'project_id' => null,
+                'time_entries' => collect(),
+                'hours_approved_auto' => null,
+                'monthly_value_auto' => null,
+                'hourly_value_auto' => null,
+                'hourly_value_source' => null,
+                'project_value_auto' => null,
+                'project_value_source' => null,
+                'health_additional_auto' => null,
+                'notes' => [],
+                'requires_review' => false,
+            ],
+            'adjustments' => [
+                'hours_approved' => null,
+                'monthly_value' => null,
+                'hourly_value' => null,
+                'project_value' => null,
+                'health_additional' => null,
+                'bonuses' => null,
+                'non_taxable_allowances' => null,
+                'advances' => null,
+                'other_deductions' => null,
+            ],
+            'fields' => [
+                'hours_approved' => $emptyField,
+                'monthly_value' => $emptyField,
+                'hourly_value' => $emptyField,
+                'project_value' => $emptyField,
+            ],
+        ];
+    }
+
+    private function payrollFieldState(mixed $storedValue, ?float $adjustmentOverride, ?float $automaticValue, int $scale): array
+    {
+        $stored = $this->payrollNumericValue($storedValue);
+        $stored = $stored !== null ? round($stored, $scale) : null;
+        $automatic = $automaticValue !== null ? round((float) $automaticValue, $scale) : null;
+        $override = $adjustmentOverride !== null ? round((float) $adjustmentOverride, $scale) : null;
+        $source = null;
+        $tolerance = 0.00001;
+
+        if ($override !== null) {
+            $source = 'adjustment';
+        } elseif ($stored !== null) {
+            $matchesAutomatic = $automatic !== null && abs($stored - $automatic) <= $tolerance;
+            $matchesZeroFallback = $automatic === null && abs($stored) <= $tolerance;
+
+            if (! $matchesAutomatic && ! $matchesZeroFallback) {
+                $override = $stored;
+                $source = 'record';
+            }
+        }
+
+        $effective = $override ?? $automatic ?? $stored;
+
+        return [
+            'automatic' => $automatic,
+            'override' => $override,
+            'effective' => $effective,
+            'stored' => $stored,
+            'has_override' => $override !== null,
+            'source' => $source,
+        ];
+    }
+
+    private function payrollOverrideDisplay(array $state, bool $hours, bool $rate = false): string
+    {
+        if (($state['override'] ?? null) === null) {
+            return 'No informado';
+        }
+
+        $formatted = $hours
+            ? UiFormatter::formatHours($state['override'])
+            : UiFormatter::formatMoney($state['override'], 'CLP').($rate ? ' / HH' : '');
+
+        $origin = ($state['source'] ?? null) === 'adjustment'
+            ? 'Novedades remuneración'
+            : 'Registro histórico';
+
+        return $hours ? ($formatted.' · '.$origin) : ($formatted.' · '.$origin);
+    }
+
+    private function payrollEffectiveDisplay(array $state, bool $hours, bool $rate = false): string
+    {
+        $value = $state['effective'] ?? null;
+        if ($value === null) {
+            return 'No configurado';
+        }
+
+        return $hours
+            ? UiFormatter::formatHours($value)
+            : UiFormatter::formatMoney($value, 'CLP').($rate ? ' / HH' : '');
     }
 
     private function payrollAssignmentForRecord(PayrollRecord $record): ?ProjectAssignment
