@@ -1827,15 +1827,20 @@ class OperationalUiTest extends TestCase
         $response->assertSee('Seleccione primero Persona, Proyecto y Período. El sistema completa la referencia automática del período.');
         $response->assertSee('Los campos marcados como override reemplazan un valor calculado solo para esta remuneración.');
         $response->assertSeeText('Datos base');
+        $response->assertSee('payroll-base-grid', false);
         $response->assertSeeText('Referencia de la remuneración');
         $response->assertSeeText('Ajustes / overrides');
         $response->assertSeeText('Adicionales');
         $response->assertSeeText('Descuentos');
         $response->assertSeeText('Resultado');
         $response->assertSeeText('Control del cálculo');
-        $response->assertSeeText('Horas aprobadas sistema');
+        $response->assertSeeText('Horas aprobadas del período');
+        $response->assertSeeText('Origen: módulo Horas.');
+        $response->assertSeeText('Override horas aprobadas');
         $response->assertSeeText('Costo hora referencial persona');
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Nueva remuneración/s', $response->getContent());
+        $this->assertDoesNotMatchRegularExpression('/name="hours_approved"[^>]*value="—"/', $response->getContent());
+        $this->assertDoesNotMatchRegularExpression('/name="payment_date"[^>]*value="—"/', $response->getContent());
         $response->assertSee('data-bs-toggle="tooltip"', false);
         $response->assertSee('Base calculada', false);
         $response->assertSee('Líquido', false);
@@ -1884,7 +1889,10 @@ class OperationalUiTest extends TestCase
         $response->assertSee('$ 100.000');
         $response->assertSee('$ 15.250');
         $response->assertSee('$ 84.750');
+        $response->assertSee('payroll-base-grid', false);
         $response->assertSeeText('Referencia de la remuneración');
+        $response->assertSeeText('Horas aprobadas del período');
+        $response->assertSeeText('Origen: módulo Horas.');
         $response->assertSeeText('Resultado');
         $response->assertSeeText('Control del cálculo');
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar remuneración/s', $response->getContent());
@@ -2032,7 +2040,8 @@ class OperationalUiTest extends TestCase
         $response->assertSee('Anticipos automáticos', false);
         $response->assertSee('Otros descuentos automáticos', false);
         $response->assertSee('Tarifa automática', false);
-        $response->assertSee('Horas aprobadas automáticas', false);
+        $response->assertSee('Horas aprobadas del período', false);
+        $response->assertSee('Origen: módulo Horas.', false);
     }
 
     public function test_payroll_edit_reflects_automatic_hours_and_specific_missing_payment_date_status(): void
@@ -2121,12 +2130,15 @@ class OperationalUiTest extends TestCase
             'status' => 'Pendiente de fecha de pago',
         ]);
 
-        $response = $this->actingAs($admin)->get(route('operational.show', ['payroll-records', $payroll->id]));
+        $response = $this->actingAs($admin)->get(route('operational.edit', ['payroll-records', $payroll->id]));
 
         $response->assertOk();
-        $response->assertSee('Pendiente de fecha de pago', false);
-        $response->assertSee('Horas aprobadas sistema', false);
+        $response->assertSee('Editar remuneración', false);
+        $response->assertSee('Horas aprobadas del período', false);
         $response->assertSee('10 h', false);
+        $response->assertSee('Origen: módulo Horas.', false);
+        $response->assertSee('Override horas aprobadas', false);
+        $this->assertDoesNotMatchRegularExpression('/name="payment_date"[^>]*value="—"/', $response->getContent());
     }
 
     public function test_clients_and_projects_generate_immutable_codes_when_omitted(): void

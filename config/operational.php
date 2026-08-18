@@ -447,7 +447,7 @@ return [
             'period_date' => ['label' => 'Periodo', 'type' => 'date'],
             'payment_date' => ['label' => 'Fecha pago', 'type' => 'date'],
             'amount_basis' => ['label' => 'Base pactada', 'type' => 'select', 'options' => ['GROSS' => 'Bruto', 'NET' => 'Liquido pactado']],
-            'hours_approved' => ['label' => 'Horas aprobadas', 'type' => 'number'],
+            'hours_approved' => ['label' => 'Override horas aprobadas', 'type' => 'number'],
             'monthly_value' => ['label' => 'Valor mensual override', 'type' => 'money'],
             'hourly_value' => ['label' => 'Valor hora override', 'type' => 'money'],
             'project_value' => ['label' => 'Valor proyecto/hito override', 'type' => 'money'],
