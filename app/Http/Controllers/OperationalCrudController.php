@@ -17,6 +17,7 @@ use App\Services\CashMovementService;
 use App\Services\CatalogService;
 use App\Services\HourlyRateService;
 use App\Services\HourlyCostService;
+use App\Services\OperationalDependencyService;
 use App\Services\PayablesService;
 use App\Services\PayrollService;
 use App\Services\SalesPrefacturationService;
@@ -44,6 +45,7 @@ class OperationalCrudController extends Controller
         private readonly HourlyRateService $hourlyRates,
         private readonly HourlyCostService $hourlyCosts,
         private readonly CatalogService $catalogs,
+        private readonly OperationalDependencyService $dependencies,
         private readonly AuditService $audit,
     ) {
     }
@@ -216,6 +218,10 @@ class OperationalCrudController extends Controller
                 : 'Los mantenedores no se eliminan físicamente; use activar o desactivar.';
 
             return redirect()->route('operational.show', [$resource, $item->id])->withErrors(['catalog' => $message]);
+        }
+
+        if ($message = $this->dependencies->deletionMessage($item)) {
+            return redirect()->route('operational.show', [$resource, $item->id])->withErrors(['dependencies' => $message]);
         }
 
         $before = $item->toArray();
