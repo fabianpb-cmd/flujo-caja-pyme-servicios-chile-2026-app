@@ -74,14 +74,14 @@ class TimeEntry extends Model
 
     public function getHourlyRateDisplayCurrencyAttribute(): mixed
     {
-        $resolution = app(HourlyRateService::class)->resolveForEntry($this);
+        $resolution = app(HourlyRateService::class)->resolveCostingForEntry($this);
 
         return $resolution['currency'] ?? 'CLP';
     }
 
     public function getHourlyRateSourceLabelAttribute(): ?string
     {
-        return app(HourlyRateService::class)->resolveForEntry($this)['source_label'] ?? null;
+        return app(HourlyRateService::class)->resolveCostingForEntry($this)['source_label'] ?? null;
     }
 
     public function getHourlyRateSourceTypeAttribute(): ?string

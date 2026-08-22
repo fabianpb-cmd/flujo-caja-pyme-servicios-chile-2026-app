@@ -182,7 +182,7 @@ class FinancialCoreTest extends TestCase
         $this->assertSame(84750.0, $payroll['net_pay']);
     }
 
-    public function test_payroll_uses_approved_hours_and_assignment_sources_when_available(): void
+    public function test_payroll_uses_person_hourly_rate_for_remuneration_even_when_assignment_has_project_cost_rate(): void
     {
         $client = Client::query()->create([
             'company_id' => $this->company->id,
@@ -203,7 +203,8 @@ class FinancialCoreTest extends TestCase
 
         $person = $this->person([
             'modality' => 'Dependiente por hora',
-            'hourly_value' => 0,
+            'hourly_value' => 1.10,
+            'hourly_rate_unit_type' => 'UF',
             'monthly_value' => 0,
         ]);
 
@@ -267,6 +268,7 @@ class FinancialCoreTest extends TestCase
         $this->assertSame(10.0, $payroll['hours_approved']);
         $this->assertGreaterThan(0, $payroll['base_salary']);
         $this->assertSame('OK', $payroll['calculation_status']);
+        $this->assertSame(app(HourlyRateService::class)->resolvePersonRate($person->fresh(['hourlyRateCurrency']), '2026-08-01'), (float) $payroll['hourly_value']);
 
         $record = PayrollRecord::query()->create([
             'company_id' => $this->company->id,
@@ -297,11 +299,12 @@ class FinancialCoreTest extends TestCase
         $this->assertSame('Costo empresa', $explanation['result']['label']);
         $this->assertStringContainsString('Horas aprobadas del período', $explanationJson);
         $this->assertStringContainsString('Tarifa pactada', $explanationJson);
-        $this->assertStringContainsString('ASI-PRL-01 · Proyecto Payroll', $explanationJson);
-        $this->assertStringContainsString('UF 1,30 / HH', $explanationJson);
+        $this->assertStringContainsString('Persona', $explanationJson);
+        $this->assertStringContainsString('UF 1,10 / HH', $explanationJson);
+        $this->assertStringContainsString('ASI-PRL-01', $explanationJson);
     }
 
-    public function test_payroll_uses_project_contract_rate_when_assignment_hourly_value_is_empty(): void
+    public function test_payroll_falls_back_to_person_hourly_rate_when_assignment_rate_is_empty(): void
     {
         $client = Client::query()->create([
             'company_id' => $this->company->id,
@@ -322,7 +325,8 @@ class FinancialCoreTest extends TestCase
 
         $person = $this->person([
             'modality' => 'Dependiente por hora',
-            'hourly_value' => 0,
+            'hourly_value' => 0.40,
+            'hourly_rate_unit_type' => 'UF',
             'monthly_value' => 0,
         ]);
 
@@ -381,10 +385,10 @@ class FinancialCoreTest extends TestCase
         ]);
 
         $payroll = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id]);
-        $expectedProjectRate = app(HourlyRateService::class)->resolveProjectRate($project->fresh(['salesCurrency']), '2026-08-01');
+        $expectedPersonRate = app(HourlyRateService::class)->resolvePersonRate($person->fresh(['hourlyRateCurrency']), '2026-08-01');
 
         $this->assertSame(10.0, $payroll['hours_approved']);
-        $this->assertSame($expectedProjectRate, (float) $payroll['hourly_value']);
+        $this->assertSame($expectedPersonRate, (float) $payroll['hourly_value']);
 
         $record = PayrollRecord::query()->create([
             'company_id' => $this->company->id,
@@ -411,8 +415,9 @@ class FinancialCoreTest extends TestCase
 
         $explanationJson = json_encode(app(PayrollService::class)->explain($record), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        $this->assertStringContainsString('Proyecto Tarifa Proyecto', $explanationJson);
-        $this->assertStringContainsString('Proyecto · Proyecto Tarifa Proyecto', $explanationJson);
+        $this->assertStringContainsString('UF 0,40 / HH', $explanationJson);
+        $this->assertStringContainsString('Persona', $explanationJson);
+        $this->assertStringNotContainsString('Proyecto · Proyecto Tarifa Proyecto', $explanationJson);
     }
 
     public function test_payroll_status_without_payment_date_remains_recalculable_and_specific(): void

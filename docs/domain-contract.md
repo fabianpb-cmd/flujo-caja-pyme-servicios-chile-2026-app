@@ -1,93 +1,97 @@
 # Domain Contract
 
-Referencia funcional persistente basada únicamente en reglas ya confirmadas por código y tests.
+Referencia funcional persistente basada únicamente en reglas confirmadas por código y tests.
 
 ## Proyecto
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `sale_net` | `projects.sale_net` | No aplica | Sí | No | `>= 0` y escala monetaria por moneda del proyecto | Rentabilidad, caja, compromiso proyectado, ventas, reportes de proyecto |
-| `contracted_hourly_rate` | `projects.contracted_hourly_rate` | No aplica | Sí | No | `>= 0` y tarifa contractual por moneda del proyecto | Asignaciones, Horas, Remuneraciones, rentabilidad proyectada |
-| `start_date` / `end_date` | `projects.start_date` / `projects.end_date` | No aplica | Sí | No | `end_date >= start_date` cuando ambas existen | Asignaciones, Horas, UI operativa |
-| `project_status` | Estado del proyecto | No aplica | Sí | No | Catálogo de estado del dominio | Filtros operativos, UI, reglas de vigencia |
+| `sale_net` | `projects.sale_net` | No aplica | Sí | No | `>= 0` y escala monetaria según moneda del proyecto | Proyecto, rentabilidad, compromiso proyectado, ventas |
+| `contracted_hourly_rate` | `projects.contracted_hourly_rate` | No aplica | Sí | No | `>= 0` y moneda comercial del proyecto | Referencia comercial del proyecto, prefacturación/ventas HH cuando el flujo comercial lo usa |
+| `start_date` / `end_date` | `projects.start_date` / `projects.end_date` | No aplica | Sí | No | `end_date >= start_date` cuando ambas existen | Asignaciones, vistas operativas |
+| `sales_currency_id` | `projects.sales_currency_id` | CLP/base company cuando corresponde al alta | Sí | No | Moneda válida de la empresa | Venta contractual, conversión de `sale_net`, servicios comerciales |
+
+## Personal
+
+| Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
+|---|---|---|---|---|---|---|
+| `hourly_value` | `people.hourly_value` | No aplica | Sí | No | `>= 0` | Fallback de costeo de Asignaciones, remuneración por hora, UI de Personal |
+| `hourly_rate_unit_type` / `hourly_rate_currency_id` | `people.hourly_rate_unit_type` / `people.hourly_rate_currency_id` | CLP/CURRENCY cuando el flujo lo normaliza | Sí | No | Deben ser compatibles con la moneda configurada | Conversión de tarifa de Personal, remuneración por hora, fallback de costeo |
+| `monthly_value` | `people.monthly_value` | No aplica | Sí | No | `>= 0` | Remuneración mensual |
+| `employment_mode_id` / `contract_type_id` | Catálogos laborales de la persona | No aplica | Sí | No | Deben existir en la empresa | Payroll, remuneración y reglas laborales |
 
 ## Asignaciones
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `hourly_value` | `project_assignments.hourly_value` | `projects.contracted_hourly_rate` cuando está vacío | Sí | Sí, como valor específico de la asignación | `>= 0` | Horas, Remuneraciones, rentabilidad proyectada, UI operativa |
-| `project_value` | `project_assignments.project_value` | No usa `sale_net` como fallback | Sí | Sí, como valor específico de la asignación | `>= 0` | Remuneraciones, rentabilidad proyectada, UI operativa |
-| `monthly_hours` | `project_assignments.monthly_hours` | No aplica | Sí | No | `0 <= monthly_hours <= 744` | UI operativa, validación de integridad |
-| `start_date` / `end_date` | `project_assignments.start_date` / `project_assignments.end_date` | No aplica | Sí | No | `required_with` entre fechas y `end_date >= start_date` | Horas, remuneraciones, UI operativa |
-| `client_id` / `project_id` / `person_id` | Relación directa de la asignación | No aplica | Sí | No | Deben pertenecer al ámbito de empresa y mantener integridad relacional | Horas, Remuneraciones, UI operativa, integridad de dependencias |
+| `hourly_value` | `project_assignments.hourly_value` | `people.hourly_value` para costeo cuando está vacío | Sí | Sí, como valor específico de costeo por proyecto | `>= 0` | ProjectCommitmentService, Horas (valor HH de costeo), vistas operativas |
+| `hourly_rate_unit_type` / `hourly_rate_currency_id` | `project_assignments.hourly_rate_unit_type` / `project_assignments.hourly_rate_currency_id` | Unidad/currency de Personal solo cuando el valor específico está vacío y el servicio usa fallback | Sí | Sí, junto al valor específico | Deben ser compatibles con la moneda configurada | Costeo por asignación, remuneración por proyecto/hito |
+| `project_value` | `project_assignments.project_value` | No usa `sale_net` como fallback | Sí | No como concepto separado; es el dato específico de la asignación | `>= 0` | Remuneración por proyecto/hito |
+| `monthly_hours` | `project_assignments.monthly_hours` | No aplica | Sí | No | `0 <= monthly_hours <= 744` | Compromiso/costeo proyectado, planificación operativa |
+| `start_date` / `end_date` | `project_assignments.start_date` / `project_assignments.end_date` | No aplica | Sí | No | `required_with` entre fechas y `end_date >= start_date` | Vigencia de Asignaciones, ProjectCommitmentService, vistas |
 
 ## Horas
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `hours_worked` | Registro transaccional de la entrada de horas | No aplica | Sí | No | `> 0` en captura normal | Costo horario, prefacturación, controles operativos |
-| `hours_approved` | Registro transaccional de la entrada de horas aprobadas | No aplica | Sí | No | `0 <= hours_approved <= 24` por registro | Remuneraciones, rentabilidad, costo horario, prefacturación, control operativo |
-| `person_id` / `project_id` / `assignment_id` | Relación operativa de la entrada de horas | No aplica | Sí | No | Debe existir relación válida persona-proyecto-asignación y pertenecer a la empresa | Remuneraciones, costo horario, prefacturación, rentabilidad |
-| `entry_date` | Fecha del registro de horas | No aplica | Sí | No | Debe caer dentro de la vigencia operativa aplicable | Remuneraciones, prefacturación, rentabilidad |
+| `hours_worked` | `time_entries.hours_worked` | No aplica | Sí | No | `> 0` y suma diaria `<= 24` | Ejecución real, productividad, controles operativos |
+| `hours_approved` | `time_entries.hours_approved` | No aplica | Sí | No | `0 <= hours_approved <= hours_worked` | Remuneraciones, costo real, productividad |
+| `hourly_value` | Valor HH de costeo resuelto para la entrada | `assignment.hourly_value`, luego `person.hourly_value` | Derivado en el flujo actual | No | Depende de la fuente resuelta | Cálculo del monto de la hora registrada, UI de Horas |
+| `person_id` / `project_id` / `assignment_id` | Relación operativa de la entrada | No aplica | Sí | No | Deben mantener integridad persona-proyecto-asignación | Ejecución real, remuneraciones, costo real |
 
 ## Remuneraciones
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `hours_approved` | Snapshot o valor derivado del período según la lógica de payroll | Fuente automática de Horas cuando corresponde | Depende del flujo vigente | Solo si el formulario lo contempla explícitamente | `>= 0` y no puede superar horas trabajadas cuando aplica | Payroll, costo horario, rentabilidad, reportes de remuneración |
-| `hourly_value` | Tarifa efectiva según la lógica de payroll | `project_assignments.hourly_value` o `projects.contracted_hourly_rate` según precedencia ya confirmada | Depende del flujo vigente | Sí, si existe override explícito en la remuneración | `>= 0` | Cálculo de remuneración, costo horario, rentabilidad |
-| `project_value` | Valor efectivo de la remuneración por proyecto/hito | `project_assignments.project_value` cuando corresponde | Depende del flujo vigente | Sí, si existe override explícito en la remuneración | `>= 0` | Cálculo de remuneración, rentabilidad |
-| `monthly_value` | Valor mensual de la persona o remuneración, según el flujo vigente | Fuente automática de payroll cuando aplica | Depende del flujo vigente | Sí, si existe override explícito en la remuneración | `>= 0` | Cálculo de remuneración, rentabilidad |
-| `employer_cost` / `net_pay` | Resultado del cálculo de payroll del período | No aplica | No como fuente primaria | No como regla general | Debe derivarse de datos válidos del período | Rentabilidad, caja, reportes, dashboard |
+| `hours_approved` | Horas aprobadas del período desde Horas | Ajustes explícitos solo si existen en Novedades remuneración | Derivado en Edit/Show | Solo cuando un ajuste de remuneración lo define explícitamente | `>= 0` | Payroll, snapshots de remuneración |
+| `hourly_value` | Tarifa de remuneración por hora desde Personal/contrato | No usa automáticamente `assignment.hourly_value` ni `project.contracted_hourly_rate` como tarifa de pago | Depende del flujo de payroll | Sí, si el override existe explícitamente en la remuneración | `>= 0` | Payroll por hora |
+| `project_value` | `assignment.project_value` convertido según la moneda vigente | No aplica | Depende del flujo de payroll | Sí, si el override existe explícitamente en la remuneración | `>= 0` | Payroll por proyecto/hito |
+| `monthly_value` | `people.monthly_value` | No aplica | Depende del flujo de payroll | Sí, si el override existe explícitamente en la remuneración | `>= 0` | Payroll mensual |
+| `employer_cost` / `net_pay` | Snapshot calculado del período | No aplica | No como dato fuente | No | Debe derivarse del cálculo del período | Rentabilidad real, costo real, caja/pagos |
 
 ## Rentabilidad
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `sale_net` | Venta contractual del proyecto | No aplica | Sí, en Proyecto | No | `>= 0` | Rentabilidad, compromiso proyectado, dashboard |
-| `costo real` | Horas, remuneraciones y egresos reales ya registrados | No aplica | No | No | No se mezcla con compromiso ni presupuesto | Rentabilidad, dashboard, análisis histórico |
-| `costo comprometido` | Asignaciones del proyecto mediante su costo económico proyectado | No aplica | No | No | No se suma como costo real | Rentabilidad proyectada, detalle de proyecto, alertas operativas |
-| `margen proyectado` | `sale_net - costo comprometido` | No aplica | No | No | Si `sale_net = 0`, debe tratarse sin división inválida | Rentabilidad proyectada, detalle de proyecto, alertas operativas |
-| `margen real` | Venta real vs costo real | No aplica | No | No | No mezclar con compromiso | Rentabilidad histórica, dashboard |
+| `personnel_committed_cost` | `ProjectCommitmentService` | No aplica | No | No | No sustituye costo real ni presupuesto | Proyecto, rentabilidad proyectada |
+| `projected_personnel_margin` | `sale_net_clp - personnel_committed_cost` | No aplica | No | No | Si falta información, el cálculo queda incompleto | Proyecto, rentabilidad proyectada |
+| `real_cost` | Remuneraciones, Horas reales y egresos según el servicio vigente | No aplica | No | No | No mezclar con compromiso | Rentabilidad real |
+| `real_margin` | Venta real/facturación real vs costo real | No aplica | No | No | No mezclar con proyectado | Rentabilidad real |
 
 ## Presupuesto
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `revenue_budget` | `budgets.revenue_budget` | No aplica | Sí | No | `>= 0` | Presupuesto, variaciones, planificación |
-| `personnel_budget` | `budgets.personnel_budget` | No aplica | Sí | No | `>= 0` | Presupuesto, variaciones, planificación |
-| `other_direct_budget` | `budgets.other_direct_budget` | No aplica | Sí | No | `>= 0` | Presupuesto, variaciones, planificación |
-| `legal_budget` | `budgets.legal_budget` | No aplica | Sí | No | `>= 0` | Presupuesto, variaciones, planificación |
-| `other_indirect_budget` | `budgets.other_indirect_budget` | No aplica | Sí | No | `>= 0` | Presupuesto, variaciones, planificación |
-| `total_budget` | Suma de campos de presupuesto según servicio vigente | No aplica | No como fuente primaria | No | No mezclar con costo real o comprometido | Presupuesto, variaciones, reportes de planificación |
+| `personnel_budget` y demás componentes | `budgets.*` | No aplica | Sí | No | `>= 0` | Presupuesto, planificación, variaciones |
 
 ## Flujo de caja
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `opening_balance` | Caja real histórica | No aplica | No como cálculo operativo | No | Se calcula por fecha de corte | Cash Flow, dashboard, cierres |
-| `income_real` / `expense_real` | Movimientos de caja posteados | No aplica | Sí en el origen del movimiento | No | Depende del movimiento real | Cash Flow, cierres, dashboard |
-| `net_real` | Ingresos reales menos egresos reales y costos reales del período | No aplica | No | No | No mezclar con presupuesto o compromiso | Cash Flow, dashboard |
-| `net_projected` | Proyección separada del flujo de caja | No aplica | No | No | No sustituye caja real | Cash Flow, escenarios, dashboard |
+| Caja real/proyectada | `CashFlowService` y movimientos de caja | No aplica | Según el origen del movimiento | No | No confundir con rentabilidad ni presupuesto | Tesorería, dashboard, escenarios |
 
 ## Relaciones confirmadas
 
 | Relación | Regla confirmada |
 |---|---|
-| `assignment.hourly_value` vs `project.contracted_hourly_rate` | `assignment.hourly_value` prevalece; `project.contracted_hourly_rate` es fallback dinámico, no tarifa única por persona. |
-| `assignment.project_value` vs `project.sale_net` | `project_value` pertenece a la Asignación; `sale_net` no es su fallback. |
-| `assignment.monthly_hours` vs Proyecto | `monthly_hours` pertenece a la Asignación; no existe límite de horas a nivel Proyecto. |
-| Horas | Es ejecución real/transaccional, no compromiso ni presupuesto. |
-| Remuneraciones | Es snapshot/costo real del período, no presupuesto ni caja. |
-| Budget | Es planificación manual. |
-| Cash Flow | Representa timing de caja, separado de rentabilidad y presupuesto. |
-| Costo comprometido, costo real, presupuesto y caja | Son conceptos separados y no deben sumarse indiscriminadamente. |
-| `sale_net` | Es la referencia contractual de venta del Proyecto. |
+| `assignment.hourly_value` → costeo de proyecto | Prevalece como valor HH específico de costeo del proyecto. |
+| Fallback de costeo de Asignación | Si `assignment.hourly_value` está vacío, el fallback confirmado es `people.hourly_value`. |
+| `project.contracted_hourly_rate` | Es referencia comercial/contractual del proyecto. No es fallback individual de costo de Asignación ni tarifa automática de remuneración. |
+| `assignment.project_value` | Pertenece a la Asignación y se usa para remuneración por proyecto/hito. `sale_net` no es su fallback. |
+| `assignment.monthly_hours` | Pertenece a la Asignación. No existe límite de horas confirmado a nivel Proyecto. |
+| ProjectCommitmentService | Calcula costo comprometido de personal desde HH comprometidas y valor HH de costeo; no depende de la modalidad de payroll y no usa `project_value` como base del compromiso. |
+| Horas | Representa ejecución real. No es compromiso ni presupuesto. |
+| Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
+| Costo HH real | Se obtiene desde costo empresa real del período / horas productivas aprobadas. No equivale al valor HH base de Persona ni al valor HH de costeo de la Asignación. |
+| Presupuesto | Es planificación manual y no reemplaza compromiso ni costo real. |
+| Cash Flow | Representa timing de caja y no debe mezclarse con compromiso, presupuesto o costo real. |
+| `sale_net` | Es referencia contractual/comercial de venta del Proyecto. |
+| Compromiso, costo real, presupuesto y caja | Son conceptos separados y no deben sumarse indiscriminadamente. |
 
 ## Reglas deliberadamente no incorporadas
 
-- No se documenta como confirmada una herencia automática de `sale_net` hacia `project_value`.
-- No se documenta un límite de horas a nivel Proyecto.
-- No se documenta una única fórmula universal para costos monetarios porque la precedencia depende de la modalidad y del servicio consumidor ya existente.
-- No se documenta que todos los overrides sean obligatorios o que existan en todos los formularios; solo se reconoce cuando la UI o el servicio lo exponen.
-- No se documenta una equivalencia entre costo comprometido y costo real.
+- No se documenta una herencia automática de `project.contracted_hourly_rate` hacia el costo individual de una persona.
+- No se documenta que `project_value` determine el costo comprometido por HH del proyecto.
+- No se documenta límite de horas a nivel Proyecto porque no existe campo confirmado para ello.
+- No se documenta una equivalencia entre valor HH de costeo, tarifa de remuneración y costo HH real.
+- No se documenta ninguna limpieza retroactiva global de datos históricos; solo reclasificación segura cuando un valor coincide inequívocamente con una fuente automática conocida.

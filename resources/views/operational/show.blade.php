@@ -9,14 +9,14 @@
     $assignmentProjectValueDisplay = null;
 
     if ($resource === 'assignments' && $item instanceof \App\Models\ProjectAssignment) {
-        $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency']);
+        $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency', 'person.hourlyRateCurrency']);
 
         if ((float) ($item->hourly_value ?? 0) > 0) {
             $assignmentEffectiveHourlyDisplay = \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH';
             $assignmentEffectiveHourlyOrigin = 'Asignación';
-        } elseif ((float) ($item->project?->contracted_hourly_rate ?? 0) > 0) {
-            $assignmentEffectiveHourlyDisplay = \App\Support\UiFormatter::formatMoney($item->project->contracted_hourly_rate, $item->project->salesCurrency ?: 'CLP').' / HH';
-            $assignmentEffectiveHourlyOrigin = 'Proyecto · '.($item->project->name ?: $item->project->code ?: 'No informado');
+        } elseif ((float) ($item->person?->hourly_value ?? 0) > 0) {
+            $assignmentEffectiveHourlyDisplay = \App\Support\UiFormatter::formatMoney($item->person->hourly_value, $item->person->hourlyRateDisplayCurrency).' / HH';
+            $assignmentEffectiveHourlyOrigin = 'Persona · '.($item->person->full_name ?: $item->person->name ?: 'No informado');
         }
 
         $assignmentProjectValueDisplay = $item->project_value !== null

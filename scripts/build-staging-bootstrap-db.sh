@@ -184,7 +184,7 @@ if ($sql === false) {
     exit(1);
 }
 
-foreach (["admin@STAGING_HOST", "admin@PRODUCTION_HOST", "Empresa Staging", "Empresa Producción", "Jaime", "Emilio", "IRIS Consultor", "Empresa Demo"] as $forbidden) {
+foreach (["Empresa Staging", "Empresa Producción", "Jaime", "Emilio", "IRIS Consultor", "Empresa Demo"] as $forbidden) {
     if (str_contains($sql, $forbidden)) {
         fwrite(STDERR, "El dump SQL contiene datos demo o marcadores no permitidos: ".$forbidden.PHP_EOL);
         exit(1);

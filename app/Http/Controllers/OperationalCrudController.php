@@ -311,7 +311,7 @@ class OperationalCrudController extends Controller
         if ($resource === 'time-entries') {
             $person = Person::query()->forCompany($data['company_id'])->findOrFail($data['person_id']);
             $project = \App\Models\Project::query()->forCompany($data['company_id'])->findOrFail($data['project_id']);
-            $resolution = $this->hourlyRates->resolveForTimeEntry($person, $project, $data['entry_date']);
+            $resolution = $this->hourlyRates->resolveCostingForTimeEntry($person, $project, $data['entry_date']);
 
             $data['client_id'] = (int) $project->client_id;
             $data['assignment_id'] = $resolution['assignment_id'] ?? $data['assignment_id'] ?? null;
@@ -539,6 +539,18 @@ class OperationalCrudController extends Controller
 
                 if (isset($definition['option_parent_key'])) {
                     $payload['parent_id'] = $record->{$definition['option_parent_key']};
+                }
+
+                if ($record instanceof Person && in_array($resource, ['assignments', 'time-entries', 'payroll-records'], true)) {
+                    $record->loadMissing(['hourlyRateCurrency']);
+                    $payload += [
+                        'person_rate_amount' => $record->hourly_value,
+                        'person_rate_unit_type' => strtoupper((string) ($record->hourly_rate_unit_type ?: 'CURRENCY')),
+                        'person_rate_currency_code' => $record->hourlyRateCurrency?->code ?: 'CLP',
+                        'person_rate_currency_symbol' => $record->hourlyRateCurrency?->symbol ?: '$',
+                        'person_rate_minor_units' => $record->hourlyRateCurrency?->minor_units ?? 0,
+                        'person_rate_label' => trim((string) ('Persona · '.($record->full_name ?: $record->name ?: 'No informado'))),
+                    ];
                 }
 
                 if (($config['model'] ?? null) === PayrollRecord::class && $field === 'person_id' && $record instanceof Person) {

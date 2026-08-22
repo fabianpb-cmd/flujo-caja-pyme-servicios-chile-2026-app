@@ -237,9 +237,9 @@ class OperationalUiTest extends TestCase
         $response->assertSeeText('Centro de costo');
         $response->assertSee('data-bs-toggle="tooltip"', false);
         $response->assertSeeText('Los cálculos financieros asociados se actualizan al guardar.');
-        $response->assertSeeText('Valor HH es específico de la asignación cuando se informa. Si se deja vacío y el proyecto tiene tarifa contractual, Horas y Remuneraciones usarán esa referencia del proyecto.');
-        $response->assertSeeText('Usa Monto pactado de la asignación cuando existe un monto fijo para la participación o para un hito acordado.');
-        $response->assertSeeText('Monto pactado y Horas mensuales son datos propios de esta asignación; no se completan automáticamente desde la venta neta del proyecto.');
+        $response->assertSeeText('Valor HH de costeo del proyecto es específico de la asignación cuando se informa. Si se deja vacío y la Persona tiene un Valor HH base de costeo, el sistema usa esa referencia.');
+        $response->assertSeeText('Usa Monto pactado de remuneración por proyecto/hito cuando existe un monto fijo para pagar la participación o un hito acordado.');
+        $response->assertSeeText('Horas mensuales representan el compromiso mensual de costeo y planificación de esta asignación.');
         $response->assertSeeText('Si completas Valor HH y Monto pactado de la asignación, el sistema mostrará una advertencia para que revises el acuerdo contractual.');
         $response->assertSeeText('Las fechas corresponden a la vigencia de la asignación y pueden diferir de las del proyecto, pero se advertirá si quedan fuera de su rango.');
         $response->assertSeeText('Referencia del proyecto');
@@ -273,6 +273,8 @@ class OperationalUiTest extends TestCase
             'modality' => 'Dependiente mensual',
             'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.50,
         ]);
         $project = Project::query()->create([
             'company_id' => $company->id,
@@ -300,9 +302,9 @@ class OperationalUiTest extends TestCase
         $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
 
         $edit->assertOk();
-        $edit->assertSee('Valor HH referencia: UF 0,50 / HH', false);
-        $edit->assertSee('Referencia proyecto: UF 0,50 / HH', false);
-        $edit->assertSee('Efectivo: UF 0,50 / HH · Proyecto', false);
+        $edit->assertSee('Valor HH contractual referencia: UF 0,50 / HH', false);
+        $edit->assertSee('Referencia Persona: UF 0,50 / HH', false);
+        $edit->assertSee('Efectivo: UF 0,50 / HH · Persona', false);
         $this->assertMatchesRegularExpression('/name="hourly_value"[^>]*value=""/', $edit->getContent());
         $this->assertMatchesRegularExpression('/name="project_value"[^>]*value=""/', $edit->getContent());
 
@@ -310,7 +312,7 @@ class OperationalUiTest extends TestCase
 
         $show->assertOk();
         $show->assertSee('UF 0,50 / HH');
-        $show->assertSee('Origen: Proyecto · Alerta Matrículas');
+        $show->assertSee('Origen: Persona · Jaime Tarifa');
         $show->assertSee('No informado');
         $this->assertDoesNotMatchRegularExpression('/<dt class="col-sm-4">Valor HH<\/dt>\s*<dd[^>]*>\s*—/u', $show->getContent());
     }
@@ -361,7 +363,8 @@ class OperationalUiTest extends TestCase
         $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
 
         $edit->assertOk();
-        $edit->assertSee('Referencia proyecto: UF 0,50 / HH', false);
+        $edit->assertSee('Valor HH contractual referencia: UF 0,50 / HH', false);
+        $edit->assertSee('Referencia Persona:', false);
         $edit->assertSee('Efectivo: UF 0,60 / HH · Asignación', false);
 
         $show = $this->actingAs($admin)->get(route('operational.show', ['assignments', $assignment->id]));
@@ -1108,6 +1111,9 @@ class OperationalUiTest extends TestCase
             'modality' => 'Dependiente mensual',
             'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => 35000,
         ]);
 
         $project = Project::query()->create([
@@ -1156,7 +1162,7 @@ class OperationalUiTest extends TestCase
 
         $create = $this->actingAs($admin)->get(route('operational.create', 'time-entries'));
         $create->assertOk();
-        $create->assertSee('Tarifa aplicable', false);
+        $create->assertSee('Valor HH de costeo del proyecto', false);
         $create->assertSee('data-time-entry-rate-prefix', false);
         $create->assertSee('data-time-entry-rate-display', false);
 
@@ -1214,6 +1220,8 @@ class OperationalUiTest extends TestCase
             'modality' => 'Dependiente mensual',
             'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.50,
         ]);
 
         $projectUf = Project::query()->create([
@@ -1567,7 +1575,7 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('Vigencia: 01/08/2026 al 30/09/2026');
         $edit->assertSee('Cliente: Cliente Día Horas');
         $edit->assertSee('Centro de costo: Centro Tiempo');
-        $edit->assertSee('Tarifa:');
+        $edit->assertSee('Valor HH de costeo del proyecto:');
         $edit->assertSee('UF');
         $edit->assertSee('/ HH');
     }
@@ -2486,11 +2494,6 @@ class OperationalUiTest extends TestCase
         $response->assertSee('Horas aprobadas del período');
         $response->assertSee('10 h');
         $response->assertSee('Origen: módulo Horas.');
-        $response->assertSee('Tarifa pactada');
-        $response->assertSee('UF 0,50 / HH');
-        $response->assertSee('Valor convertido: $ 20.422 / HH');
-        $response->assertSee('Override manual: No informado');
-        $response->assertSee('Valor efectivo: $ 20.422 / HH');
         $response->assertSee('Valor proyecto / hito pactado');
         $response->assertSee('UF 100,00');
         $response->assertSee('Valor convertido: $ 4.084.479');
@@ -2578,6 +2581,9 @@ class OperationalUiTest extends TestCase
             'modality' => 'Pago por hora',
             'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => 1000,
             'start_date' => '2026-08-01',
             'end_date' => '2026-08-31',
         ]);

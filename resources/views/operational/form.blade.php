@@ -85,8 +85,8 @@
 ])
 @php($rateUnitHelp = [
     'hourly_rate_unit_type' => 'Unidad en que se pactó la tarifa por hora. UF usa la unidad de cuenta del período; las monedas usan su conversión configurada.',
-    'hourly_value' => 'Tarifa por una hora de trabajo. La unidad se muestra al lado del monto.',
-    'project_value' => 'Valor contractual o referencial del proyecto. Usa la misma unidad definida para la tarifa HH.',
+    'hourly_value' => 'Valor por hora utilizado para costear la participación de una persona. La unidad se muestra al lado del monto.',
+    'project_value' => 'Monto utilizado para remunerar a la persona cuando la modalidad contractual corresponde a proyecto o hito.',
 ])
 @php($formHelp = [
     'clients' => [
@@ -110,7 +110,7 @@
         'afp_id' => 'AFP asociada a la persona. Sus tasas se obtienen según el período de cálculo.',
         'health_system_id' => 'Sistema de salud asociado a la persona.',
         'hourly_rate_unit_type' => 'Unidad en que se pactó la tarifa por hora. Puede ser UF o una moneda habilitada.',
-        'hourly_value' => 'Tarifa correspondiente a una hora de trabajo. El formato depende de la unidad seleccionada.',
+        'hourly_value' => 'Valor HH base de costeo utilizado como referencia cuando una asignación no informa un valor específico.',
         'monthly_hours' => 'Referencia de horas contractuales o mensuales utilizada cuando corresponda.',
         'start_date' => 'Inicio de vigencia de la relación contractual.',
         'end_date' => 'Fin de vigencia. Déjelo vacío mientras la relación continúe vigente.',
@@ -154,10 +154,10 @@
     'assignments' => [
     'title' => '¿Cómo completar la asignación?',
         'bullets' => [
-            'Define cómo se remunera la participación de esta persona y durante qué período aplica en el proyecto.',
-            'Valor HH es específico de la asignación cuando se informa. Si se deja vacío y el proyecto tiene tarifa contractual, Horas y Remuneraciones usarán esa referencia del proyecto.',
-            'Usa Monto pactado de la asignación cuando existe un monto fijo para la participación o para un hito acordado.',
-            'Monto pactado y Horas mensuales son datos propios de esta asignación; no se completan automáticamente desde la venta neta del proyecto.',
+            'Define cómo se costea y remunera la participación de esta persona durante la vigencia indicada en el proyecto.',
+            'Valor HH de costeo del proyecto es específico de la asignación cuando se informa. Si se deja vacío y la Persona tiene un Valor HH base de costeo, el sistema usa esa referencia.',
+            'Usa Monto pactado de remuneración por proyecto/hito cuando existe un monto fijo para pagar la participación o un hito acordado.',
+            'Horas mensuales representan el compromiso mensual de costeo y planificación de esta asignación.',
             'Si completas Valor HH y Monto pactado de la asignación, el sistema mostrará una advertencia para que revises el acuerdo contractual.',
             'Las fechas corresponden a la vigencia de la asignación y pueden diferir de las del proyecto, pero se advertirá si quedan fuera de su rango.',
         ],
@@ -198,10 +198,10 @@
         'project_id' => 'Proyecto al que se asigna la persona.',
         'start_date' => 'Fecha desde la cual comienza la vigencia de esta asignación. Puede ser distinta a la del proyecto, pero se advertirá si inicia antes de su rango.',
         'end_date' => 'Fecha hasta la cual se mantiene vigente esta asignación. Puede ser distinta a la del proyecto, pero se advertirá si termina después de su rango.',
-        'hourly_rate_unit_type' => 'Unidad monetaria usada para expresar la tarifa por hora de esta asignación.',
-        'hourly_value' => 'Tarifa específica de esta asignación. Si queda sin informar y el proyecto tiene tarifa contractual, Horas y Remuneraciones usarán esa referencia del proyecto.',
-        'project_value' => 'Monto fijo pactado específicamente para esta asignación. No corresponde a la venta neta del proyecto.',
-        'monthly_hours' => 'Cantidad de horas mensuales consideradas para esta asignación. No corresponde a una capacidad definida a nivel de proyecto.',
+        'hourly_rate_unit_type' => 'Unidad monetaria usada para expresar el Valor HH de costeo de esta asignación.',
+        'hourly_value' => 'Valor utilizado para estimar el costo comprometido de esta persona en el proyecto. Puede diferir de su remuneración y puede variar entre asignaciones.',
+        'project_value' => 'Monto utilizado para remunerar a la persona cuando su modalidad contractual corresponde a pago por proyecto o hito. No se utiliza para calcular el compromiso de HH del proyecto.',
+        'monthly_hours' => 'Horas mensuales comprometidas de esta persona para efectos de costeo y planificación del proyecto.',
     ],
     'time-entries' => [
         'person_id' => 'Persona a la que corresponde este registro de horas.',
@@ -211,7 +211,7 @@
         'activity_id' => 'Actividad registrada para identificar el trabajo realizado.',
         'hours_worked' => 'Horas efectivamente registradas para esta persona, proyecto y fecha. Cada registro diario debe ser mayor que 0 y no puede superar 24 horas.',
         'hours_approved' => 'Horas finalmente aprobadas para control, cálculo y procesos posteriores. No pueden superar las horas trabajadas.',
-        'hourly_value' => 'Tarifa por hora obtenida automáticamente desde la asignación vigente o, cuando corresponda, desde el proyecto.',
+        'hourly_value' => 'Valor HH de costeo del proyecto obtenido automáticamente desde la asignación vigente o, si falta, desde el valor base de la persona.',
         'cost_center_id' => 'Centro de costo asociado al registro. Si la asignación ya lo define, se propone automáticamente como referencia.',
         'approval_status_id' => 'Estado actual de revisión del registro de horas.',
         'payment_status' => 'Estado manual de pago del registro. Solo corresponde marcarlo como pagado cuando la aprobación ya está resuelta.',
@@ -269,7 +269,7 @@
 @php($selectedRateCurrencyId = old('hourly_rate_currency_id', $item->hourly_rate_currency_id ?? null))
 @php($selectedRateCurrency = $selectedRateCurrencyId !== null && isset($options['hourly_rate_currency_id'][$selectedRateCurrencyId]) ? $options['hourly_rate_currency_id'][$selectedRateCurrencyId] : null)
 @php($selectedRateUnitPrefix = $selectedRateUnitType === 'UF' ? 'UF' : (string) ($selectedRateCurrency['currency_symbol'] ?? $selectedRateCurrency['currency_code'] ?? 'Moneda'))
-@php($timeEntryRatePreview = $resource === 'time-entries' ? app(\App\Services\HourlyRateService::class)->resolveForEntry($item) : null)
+@php($timeEntryRatePreview = $resource === 'time-entries' ? app(\App\Services\HourlyRateService::class)->resolveCostingForEntry($item) : null)
 @php($timeEntryRatePreviewCurrency = data_get($timeEntryRatePreview, 'currency'))
 @php($timeEntryRatePreviewCode = strtoupper((string) (data_get($timeEntryRatePreview, 'currency_code') ?: ($timeEntryRatePreviewCurrency instanceof \App\Models\Currency ? $timeEntryRatePreviewCurrency->code : 'CLP'))))
 @php($timeEntryRatePreviewPrefix = $timeEntryRatePreviewCode === 'UF'
@@ -286,6 +286,8 @@
 @php($timeEntryRatePreviewProjectName = data_get($timeEntryRatePreview, 'project_name'))
 @php($assignmentSelectedProjectId = $resource === 'assignments' ? old('project_id', $item->project_id ?? null) : null)
 @php($assignmentSelectedProject = $assignmentSelectedProjectId !== null ? ($options['project_id'][$assignmentSelectedProjectId] ?? null) : null)
+@php($assignmentSelectedPersonId = $resource === 'assignments' ? old('person_id', $item->person_id ?? null) : null)
+@php($assignmentSelectedPerson = $assignmentSelectedPersonId !== null ? ($options['person_id'][$assignmentSelectedPersonId] ?? null) : null)
 @php($assignmentProjectSaleNet = data_get($assignmentSelectedProject, 'project_sale_net'))
 @php($assignmentProjectSaleCurrencyCode = data_get($assignmentSelectedProject, 'project_sale_currency_code', 'CLP'))
 @php($assignmentProjectSaleCurrencySymbol = data_get($assignmentSelectedProject, 'project_sale_currency_symbol', '$'))
@@ -314,11 +316,18 @@
         ]
         : 'CLP'))
 @php($assignmentProjectRateReferenceDisplay = is_numeric($assignmentProjectRateAmount) && (float) $assignmentProjectRateAmount > 0
-    ? 'Valor HH referencia: '.\App\Support\UiFormatter::formatMoney($assignmentProjectRateAmount, $assignmentProjectRateCurrencyCode).' / HH'
+    ? 'Valor HH contractual referencia: '.\App\Support\UiFormatter::formatMoney($assignmentProjectRateAmount, $assignmentProjectRateCurrencyCode).' / HH'
+    : null)
+@php($assignmentPersonRateAmount = data_get($assignmentSelectedPerson, 'person_rate_amount'))
+@php($assignmentPersonRateUnitType = strtoupper((string) data_get($assignmentSelectedPerson, 'person_rate_unit_type', 'CURRENCY')))
+@php($assignmentPersonRateCurrencyCode = data_get($assignmentSelectedPerson, 'person_rate_currency_code', 'CLP'))
+@php($assignmentPersonRateMinorUnits = (int) data_get($assignmentSelectedPerson, 'person_rate_minor_units', 0))
+@php($assignmentPersonRateReferenceDisplay = is_numeric($assignmentPersonRateAmount) && (float) $assignmentPersonRateAmount > 0
+    ? 'Valor HH base Persona: '.\App\Support\UiFormatter::formatMoney($assignmentPersonRateAmount, $assignmentPersonRateUnitType === 'UF' ? 'UF' : $assignmentPersonRateCurrencyCode).' / HH'
     : null)
 @php($assignmentEffectiveHourlyDisplay = match (true) {
     $assignmentSpecificHourlyValueActive => 'Efectivo: '.\App\Support\UiFormatter::formatMoney($assignmentHourlyValue, $assignmentSpecificRateCurrency).' / HH · Asignación',
-    is_numeric($assignmentProjectRateAmount) && (float) $assignmentProjectRateAmount > 0 => 'Efectivo: '.\App\Support\UiFormatter::formatMoney($assignmentProjectRateAmount, $assignmentProjectRateCurrencyCode).' / HH · Proyecto',
+    is_numeric($assignmentPersonRateAmount) && (float) $assignmentPersonRateAmount > 0 => 'Efectivo: '.\App\Support\UiFormatter::formatMoney($assignmentPersonRateAmount, $assignmentPersonRateUnitType === 'UF' ? 'UF' : $assignmentPersonRateCurrencyCode).' / HH · Persona',
     default => 'Efectivo: No configurado',
 })
 @php($assignmentEffectiveProjectValueDisplay = is_numeric($assignmentProjectValue)
@@ -1229,7 +1238,7 @@
                                     <span class="input-group-text">/ HH</span>
                                 </div>
                                 <div class="small mt-1 {{ $timeEntryRatePreviewAmount === null ? 'text-warning' : 'text-muted' }}" data-time-entry-rate-message>
-                                    {{ $timeEntryRatePreviewAmount === null ? 'No existe una tarifa HH aplicable para esta combinación de persona, proyecto y fecha.' : ($timeEntryRatePreviewSource ? 'Origen: '.$timeEntryRatePreviewSource : 'Tarifa obtenida automáticamente.') }}
+                                    {{ $timeEntryRatePreviewAmount === null ? 'No existe un Valor HH de costeo aplicable para esta combinación de persona, proyecto y fecha.' : ($timeEntryRatePreviewSource ? 'Origen: '.$timeEntryRatePreviewSource : 'Valor HH de costeo obtenido automáticamente.') }}
                                 </div>
                             @elseif ($resource === 'time-entries' && $field === 'project_id')
                                 @php($projectValue = old('project_id', $item->project_id ?? ''))
@@ -1268,13 +1277,37 @@
                                     <div class="small text-muted" data-time-entry-assignment-vigency>{{ $timeEntryAssignmentVigencyLabel }}</div>
                                     <div class="small text-muted" data-time-entry-assignment-client>{{ $timeEntryContextClient }}</div>
                                     <div class="small text-muted" data-time-entry-assignment-rate>
-                                        Tarifa: {{ $timeEntryRatePreviewAmount !== null ? trim($timeEntryRatePreviewPrefix.' '.($timeEntryRatePreviewDisplay ?? '')).' / HH' : 'No aplica / No configurada' }}
+                                        Valor HH de costeo del proyecto: {{ $timeEntryRatePreviewAmount !== null ? trim($timeEntryRatePreviewPrefix.' '.($timeEntryRatePreviewDisplay ?? '')).' / HH' : 'No aplica / No configurada' }}
                                     </div>
                                     <div class="small text-muted {{ $timeEntryContextCostCenter ? '' : 'd-none' }}" data-time-entry-assignment-cost-center>{{ $timeEntryContextCostCenter }}</div>
                                 </div>
                                 <div class="mt-2 {{ $timeEntryContextWarning ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-time-entry-context-warning-box>
                                     <div class="{{ $timeEntryContextWarning ? '' : 'd-none' }}" data-time-entry-context-warning>{{ $timeEntryContextWarning }}</div>
                                 </div>
+                            @elseif ($resource === 'assignments' && $field === 'person_id')
+                                <select
+                                    id="{{ $field }}"
+                                    name="{{ $field }}"
+                                    class="form-select @error($field) is-invalid @enderror"
+                                    data-assignments-person-select="true"
+                                >
+                                    <option value="">Seleccione</option>
+                                    @foreach (($options[$field] ?? []) as $key => $option)
+                                        @php($label = is_array($option) ? $option['label'] : $option)
+                                        <option
+                                            value="{{ $key }}"
+                                            @selected((string) $value === (string) $key)
+                                            @if(is_array($option))
+                                                data-person-rate-amount="{{ $option['person_rate_amount'] ?? '' }}"
+                                                data-person-rate-unit-type="{{ $option['person_rate_unit_type'] ?? '' }}"
+                                                data-person-rate-currency-code="{{ $option['person_rate_currency_code'] ?? '' }}"
+                                                data-person-rate-currency-symbol="{{ $option['person_rate_currency_symbol'] ?? '' }}"
+                                                data-person-rate-minor-units="{{ $option['person_rate_minor_units'] ?? '' }}"
+                                                data-person-rate-label="{{ $option['person_rate_label'] ?? '' }}"
+                                            @endif
+                                        >{{ $label }}</option>
+                                    @endforeach
+                                </select>
                             @elseif ($resource === 'assignments' && $field === 'project_id')
                                 @php($assignmentProjectValue = old('project_id', $item->project_id ?? ''))
                                 <select
@@ -1346,7 +1379,18 @@
                                     <option value="">Seleccione</option>
                                     @foreach (($options[$field] ?? []) as $key => $option)
                                         @php($label = is_array($option) ? $option['label'] : $option)
-                                        <option value="{{ $key }}" @selected((string) $value === (string) $key)>{{ $label }}</option>
+                                        <option
+                                            value="{{ $key }}"
+                                            @selected((string) $value === (string) $key)
+                                            @if(is_array($option))
+                                                data-person-rate-amount="{{ $option['person_rate_amount'] ?? '' }}"
+                                                data-person-rate-unit-type="{{ $option['person_rate_unit_type'] ?? '' }}"
+                                                data-person-rate-currency-code="{{ $option['person_rate_currency_code'] ?? '' }}"
+                                                data-person-rate-currency-symbol="{{ $option['person_rate_currency_symbol'] ?? '' }}"
+                                                data-person-rate-minor-units="{{ $option['person_rate_minor_units'] ?? '' }}"
+                                                data-person-rate-label="{{ $option['person_rate_label'] ?? '' }}"
+                                            @endif
+                                        >{{ $label }}</option>
                                     @endforeach
                                 </select>
                             @elseif ($resource === 'time-entries' && $field === 'entry_date')
@@ -1393,8 +1437,8 @@
                                 <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror
                             @if ($resource === 'assignments' && $field === 'hourly_value')
-                                <div class="small text-muted mt-2 {{ $assignmentProjectRateReferenceDisplay ? '' : 'd-none' }}" data-assignments-hourly-reference>
-                                    Referencia proyecto: {{ $assignmentProjectRateReferenceDisplay ? str_replace('Valor HH referencia: ', '', $assignmentProjectRateReferenceDisplay) : '' }}
+                                <div class="small text-muted mt-2 {{ $assignmentPersonRateReferenceDisplay ? '' : 'd-none' }}" data-assignments-hourly-reference>
+                                    Referencia Persona: {{ $assignmentPersonRateReferenceDisplay ? str_replace('Valor HH base Persona: ', '', $assignmentPersonRateReferenceDisplay) : '' }}
                                 </div>
                                 <div class="small text-muted mt-1" data-assignments-hourly-effective>
                                     {{ $assignmentEffectiveHourlyDisplay }}
@@ -1874,8 +1918,17 @@
             return timeEntryProjectSelect.options[timeEntryProjectSelect.selectedIndex] || null;
         };
 
+        const selectedTimeEntryPersonOption = () => {
+            if (!timeEntryPersonSelect) {
+                return null;
+            }
+
+            return timeEntryPersonSelect.options[timeEntryPersonSelect.selectedIndex] || null;
+        };
+
         const resolveTimeEntryRate = () => {
             const projectOption = selectedTimeEntryProjectOption();
+            const personOption = selectedTimeEntryPersonOption();
             if (!projectOption) {
                 return { amount: null, prefix: '—', decimals: 2, source: null, clientId: '', clientLabel: '', matchedRange: null, projectOption: null };
             }
@@ -1883,25 +1936,36 @@
             const matchedRanges = timeEntryMatchingRanges(projectOption);
             const matchedRange = matchedRanges.length === 1 ? matchedRanges[0] : null;
 
-            const sourceType = matchedRange && Number(matchedRange.hourly_value) > 0 ? 'assignment' : 'project';
+            const personRateAmount = parseTimeEntryNumber(personOption?.dataset?.personRateAmount || '');
+            const personRateUnitType = String(personOption?.dataset?.personRateUnitType || 'CURRENCY').toUpperCase();
+            const personRateCurrencyCode = String(personOption?.dataset?.personRateCurrencyCode || (personRateUnitType === 'UF' ? 'UF' : 'CLP')).toUpperCase();
+            const personRateCurrencySymbol = personOption?.dataset?.personRateCurrencySymbol || (personRateCurrencyCode === 'CLP' ? '$' : personRateCurrencyCode);
+            const personRateMinorUnits = Number.parseInt(personOption?.dataset?.personRateMinorUnits || (personRateCurrencyCode === 'CLP' ? '0' : '2'), 10);
+            const sourceType = matchedRange && Number(matchedRange.hourly_value) > 0
+                ? 'assignment'
+                : (personRateAmount !== null && personRateAmount > 0 ? 'person' : null);
             const amount = sourceType === 'assignment'
                 ? matchedRange.hourly_value
-                : projectOption.dataset.projectRateAmount;
+                : (sourceType === 'person' ? personRateAmount : null);
             const unitType = sourceType === 'assignment'
                 ? (matchedRange.hourly_rate_unit_type || 'CURRENCY')
-                : (projectOption.dataset.projectRateUnitType || 'CURRENCY');
+                : (sourceType === 'person' ? personRateUnitType : 'CURRENCY');
             const currencyCode = sourceType === 'assignment'
                 ? (matchedRange.currency_code || (unitType === 'UF' ? 'UF' : 'CLP'))
-                : (projectOption.dataset.projectRateCurrencyCode || 'CLP');
+                : (sourceType === 'person' ? personRateCurrencyCode : 'CLP');
             const currencySymbol = sourceType === 'assignment'
                 ? (matchedRange.currency_symbol || (currencyCode === 'CLP' ? '$' : currencyCode))
-                : (projectOption.dataset.projectRateCurrencySymbol || '$');
+                : (sourceType === 'person' ? personRateCurrencySymbol : '$');
             const decimals = sourceType === 'assignment'
                 ? (unitType === 'UF' ? 2 : (currencyCode === 'CLP' ? 0 : 2))
-                : parseInt(projectOption.dataset.projectRateMinorUnits || '0', 10);
+                : (sourceType === 'person'
+                    ? (unitType === 'UF' ? 2 : (Number.isNaN(personRateMinorUnits) ? (currencyCode === 'CLP' ? 0 : 2) : personRateMinorUnits))
+                    : 2);
             const sourceLabel = sourceType === 'assignment'
                 ? (matchedRange?.source_label || `Asignación · ${projectOption.dataset.projectName || projectOption.textContent.trim()}`)
-                : `Proyecto · ${projectOption.dataset.projectName || projectOption.textContent.trim()}`;
+                : (sourceType === 'person'
+                    ? (personOption?.dataset?.personRateLabel || `Persona · ${personOption?.textContent?.trim() || 'No informada'}`)
+                    : null);
 
             return {
                 amount,
@@ -1971,14 +2035,14 @@
                     timeEntryRateDisplay.value = '';
                     timeEntryRateDisplay.placeholder = 'No aplica / No configurada';
                     timeEntryRatePrefix.textContent = '—';
-                    timeEntryRateMessage.textContent = 'No existe una tarifa HH aplicable para esta combinación de persona, proyecto y fecha.';
+                    timeEntryRateMessage.textContent = 'No existe un Valor HH de costeo aplicable para esta combinación de persona, proyecto y fecha.';
                     timeEntryRateMessage.className = 'small mt-1 text-warning';
                 } else {
                     timeEntryRateRaw.value = resolution.amount;
                     timeEntryRateDisplay.value = formatRateValue(resolution.amount, resolution.decimals);
                     timeEntryRateDisplay.placeholder = '';
                     timeEntryRatePrefix.textContent = resolution.prefix || '—';
-                    timeEntryRateMessage.textContent = resolution.source ? `Origen: ${resolution.source}` : 'Tarifa obtenida automáticamente.';
+                    timeEntryRateMessage.textContent = resolution.source ? `Origen: ${resolution.source}` : 'Valor HH de costeo obtenido automáticamente.';
                     timeEntryRateMessage.className = 'small mt-1 text-muted';
                 }
             }
@@ -2011,7 +2075,7 @@
             }
 
             if (timeEntryAssignmentRate) {
-                timeEntryAssignmentRate.textContent = `Tarifa: ${resolution.amount !== null && resolution.amount !== '' ? `${resolution.prefix || '—'} ${formatRateValue(resolution.amount, resolution.decimals)} / HH` : 'No aplica / No configurada'}`;
+                timeEntryAssignmentRate.textContent = `Valor HH de costeo del proyecto: ${resolution.amount !== null && resolution.amount !== '' ? `${resolution.prefix || '—'} ${formatRateValue(resolution.amount, resolution.decimals)} / HH` : 'No aplica / No configurada'}`;
             }
 
             if (timeEntryAssignmentCostCenter) {
@@ -2095,6 +2159,7 @@
         timeEntryPaymentStatusSelect?.addEventListener('change', syncTimeEntryContext);
         syncTimeEntryContext();
 
+        const assignmentPersonSelect = form.querySelector('[data-assignments-person-select="true"]');
         const assignmentProjectSelect = form.querySelector('[data-assignments-project-select="true"]');
         const assignmentProjectSaleNet = form.querySelector('[data-assignments-project-sale-net]');
         const assignmentProjectRate = form.querySelector('[data-assignments-project-rate]');
@@ -2130,6 +2195,14 @@
         const csrfToken = form.querySelector('input[name="_token"]')?.value || '';
         let assignmentCommitmentTimer = null;
         let assignmentCommitmentAbortController = null;
+
+        const selectedAssignmentPersonOption = () => {
+            if (!assignmentPersonSelect) {
+                return null;
+            }
+
+            return assignmentPersonSelect.options[assignmentPersonSelect.selectedIndex] || null;
+        };
 
         const parseAssignmentNumber = (value) => {
             if (value === null || value === undefined || value === '') {
@@ -2210,7 +2283,19 @@
                 return '';
             }
 
-            return `Valor HH referencia: ${formatAssignmentMoney(rateAmount, rateCurrencyCode, Number.isNaN(rateMinorUnits) ? 0 : rateMinorUnits)} / HH`;
+            return `Valor HH contractual referencia: ${formatAssignmentMoney(rateAmount, rateCurrencyCode, Number.isNaN(rateMinorUnits) ? 0 : rateMinorUnits)} / HH`;
+        };
+
+        const personRateText = (rateAmount, rateUnitType, rateCurrencyCode, rateMinorUnits) => {
+            if (rateAmount === null || rateAmount <= 0) {
+                return '';
+            }
+
+            const currencyCode = String(rateUnitType || 'CURRENCY').toUpperCase() === 'UF'
+                ? 'UF'
+                : (rateCurrencyCode || 'CLP');
+
+            return `Valor HH base Persona: ${formatAssignmentMoney(rateAmount, currencyCode, Number.isNaN(rateMinorUnits) ? (currencyCode === 'CLP' ? 0 : 2) : rateMinorUnits)} / HH`;
         };
 
         const assignmentSpecificRateMeta = () => {
@@ -2402,6 +2487,7 @@
             }
 
             const option = assignmentProjectSelect.options[assignmentProjectSelect.selectedIndex];
+            const personOption = selectedAssignmentPersonOption();
             const hasProject = Boolean(option?.value);
             const saleNetRaw = option?.dataset?.projectSaleNet || '';
             const saleCurrencyCode = option?.dataset?.projectSaleCurrencyCode || 'CLP';
@@ -2412,6 +2498,10 @@
             const projectRateMinorUnits = Number.parseInt(option?.dataset?.projectRateMinorUnits || '0', 10);
             const projectStartDate = option?.dataset?.projectStartDate || '';
             const projectEndDate = option?.dataset?.projectEndDate || '';
+            const personRateAmount = parseAssignmentNumber(personOption?.dataset?.personRateAmount || '');
+            const personRateUnitType = String(personOption?.dataset?.personRateUnitType || 'CURRENCY').toUpperCase();
+            const personRateCurrencyCode = String(personOption?.dataset?.personRateCurrencyCode || (personRateUnitType === 'UF' ? 'UF' : 'CLP')).toUpperCase();
+            const personRateMinorUnits = Number.parseInt(personOption?.dataset?.personRateMinorUnits || (personRateCurrencyCode === 'CLP' ? '0' : '2'), 10);
             assignmentProjectSaleNet.textContent = projectSaleText(saleNet, saleCurrencyCode, saleMinorUnits, hasProject);
 
             if (assignmentProjectRate) {
@@ -2436,16 +2526,16 @@
             const vigencyWarning = assignmentVigencyWarningText(projectStart, projectEnd, assignmentStartDate, assignmentEndDate);
 
             if (assignmentHourlyReference) {
-                const referenceLabel = hasProject ? projectRateText(projectRateAmount, projectRateCurrencyCode, projectRateMinorUnits) : '';
-                assignmentHourlyReference.textContent = referenceLabel ? `Referencia proyecto: ${referenceLabel.replace('Valor HH referencia: ', '')}` : '';
+                const referenceLabel = personRateText(personRateAmount, personRateUnitType, personRateCurrencyCode, personRateMinorUnits);
+                assignmentHourlyReference.textContent = referenceLabel ? `Referencia Persona: ${referenceLabel.replace('Valor HH base Persona: ', '')}` : '';
                 assignmentHourlyReference.classList.toggle('d-none', referenceLabel === '');
             }
 
             if (assignmentHourlyEffective) {
                 if ((hourlyValue ?? 0) > 0) {
                     assignmentHourlyEffective.textContent = `Efectivo: ${formatAssignmentMoney(hourlyValue, assignmentRateMeta.currencyCode, assignmentRateMeta.decimals)} / HH · Asignación`;
-                } else if ((projectRateAmount ?? 0) > 0) {
-                    assignmentHourlyEffective.textContent = `Efectivo: ${formatAssignmentMoney(projectRateAmount, projectRateCurrencyCode, Number.isNaN(projectRateMinorUnits) ? 0 : projectRateMinorUnits)} / HH · Proyecto`;
+                } else if ((personRateAmount ?? 0) > 0) {
+                    assignmentHourlyEffective.textContent = `Efectivo: ${formatAssignmentMoney(personRateAmount, personRateUnitType === 'UF' ? 'UF' : personRateCurrencyCode, Number.isNaN(personRateMinorUnits) ? (personRateCurrencyCode === 'CLP' ? 0 : 2) : personRateMinorUnits)} / HH · Persona`;
                 } else {
                     assignmentHourlyEffective.textContent = 'Efectivo: No configurado';
                 }
@@ -2503,6 +2593,7 @@
         form.addEventListener('input', syncAssignmentContextOnEvent);
         form.addEventListener('change', syncAssignmentContextOnEvent);
 
+        assignmentPersonSelect?.addEventListener('change', syncAssignmentContext);
         assignmentProjectSelect?.addEventListener('change', syncAssignmentContext);
         assignmentHourlyInput?.addEventListener('input', syncAssignmentContext);
         assignmentHourlyInput?.addEventListener('change', syncAssignmentContext);

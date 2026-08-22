@@ -6,7 +6,6 @@ use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
-use App\Support\UiFormatter;
 use Carbon\CarbonInterface;
 use DomainException;
 use Illuminate\Support\Carbon;
@@ -15,7 +14,6 @@ use Illuminate\Support\Collection;
 class ProjectCommitmentService
 {
     public function __construct(
-        private readonly PayrollService $payroll,
         private readonly HourlyRateService $hourlyRates,
         private readonly LegalParameterService $legalParameters,
         private readonly CurrencyConversionService $conversions,
@@ -141,24 +139,13 @@ class ProjectCommitmentService
             return $this->incompleteEstimate($assignment, 'La asignación no tiene una persona vinculada.');
         }
 
-        $flags = $this->payroll->modalityFlags($person);
-
-        return match (true) {
-            $flags['is_hourly'] => $this->estimateHourlyAssignment($assignment, $project, $person),
-            $flags['is_project'] => $this->estimateProjectAssignment($assignment, $project, $person),
-            default => $this->estimateMonthlyAssignment($assignment, $project, $person),
-        };
-    }
-
-    private function estimateHourlyAssignment(ProjectAssignment $assignment, Project $project, Person $person): array
-    {
         $range = $this->commitmentRange($assignment, $project, $person);
         if (! $range['complete']) {
             return $this->incompleteEstimate($assignment, $range['warning']);
         }
 
         if ($assignment->monthly_hours === null || $assignment->monthly_hours === '') {
-            return $this->incompleteEstimate($assignment, "La asignación {$assignment->code} no tiene horas mensuales comprometidas.");
+            return $this->incompleteEstimate($assignment, "No se puede calcular el compromiso de {$assignment->code}: faltan las horas mensuales comprometidas.");
         }
 
         $monthlyHours = (float) $assignment->monthly_hours;
@@ -166,125 +153,34 @@ class ProjectCommitmentService
             return $this->completeEstimate($assignment, 0.0);
         }
 
-        $warnings = [];
         $total = 0.0;
         foreach ($this->periodsBetween($range['start'], $range['end']) as $periodStart) {
             $overlap = $this->monthOverlap($range['start'], $range['end'], $periodStart);
             $hours = round($monthlyHours * ($overlap['days'] / $periodStart->daysInMonth), 4);
 
             try {
-                $hourlyValue = $this->effectiveHourlyRateClp($assignment, $project, $periodStart);
+                $hourlyValue = $this->effectiveHourlyRateClp($assignment, $periodStart);
                 if ($hourlyValue === null) {
-                    return $this->incompleteEstimate($assignment, "La asignación {$assignment->code} no tiene tarifa HH efectiva configurada.");
+                    return $this->incompleteEstimate($assignment, "No se puede calcular el compromiso de {$assignment->code}: falta el Valor HH de costeo de la Asignación y de la Persona.");
                 }
-
-                $calculation = $this->payroll->calculate($person, $periodStart, [
-                    'project_id' => $project->id,
-                    'hours_approved' => $hours,
-                    'hourly_value' => $hourlyValue,
-                ]);
             } catch (DomainException $exception) {
                 return $this->incompleteEstimate($assignment, $exception->getMessage());
             }
 
-            if (($calculation['calculation_status'] ?? 'OK') !== 'OK') {
-                $warnings[] = trim((string) ($calculation['calculation_notes'] ?? "La asignación {$assignment->code} requiere revisión para proyectar su costo por hora."));
-            }
-
-            $total += (float) ($calculation['employer_cost'] ?? 0);
-        }
-
-        if (! empty($warnings)) {
-            return $this->incompleteEstimate($assignment, implode(' ', array_unique(array_filter($warnings))));
+            $total += round($hours * $hourlyValue, 2);
         }
 
         return $this->completeEstimate($assignment, $total);
     }
 
-    private function estimateProjectAssignment(ProjectAssignment $assignment, Project $project, Person $person): array
-    {
-        $rawProjectValue = $assignment->project_value;
-        if ($rawProjectValue === null || $rawProjectValue === '') {
-            return $this->incompleteEstimate($assignment, "La asignación {$assignment->code} no tiene monto proyecto/hito configurado.");
-        }
-
-        $projectValue = (float) $rawProjectValue;
-        if ($projectValue <= 0) {
-            return $this->completeEstimate($assignment, 0.0);
-        }
-
-        $referenceDate = $this->referenceDateForFixedAmount($assignment, $project, $person);
-        if ($referenceDate === null && strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')) !== 'CURRENCY') {
-            return $this->incompleteEstimate($assignment, "La asignación {$assignment->code} requiere una fecha de referencia para convertir el monto proyecto/hito.");
-        }
-
-        try {
-            $projectValueClp = (float) $this->hourlyRates->resolveAssignmentProjectValue($assignment, $referenceDate ?? now()->toDateString());
-            $calculation = $this->payroll->calculate($person, ($referenceDate ?? now())->toDateString(), [
-                'project_id' => $project->id,
-                'project_value' => $projectValueClp,
-            ]);
-        } catch (DomainException $exception) {
-            return $this->incompleteEstimate($assignment, $exception->getMessage());
-        }
-
-        if (($calculation['calculation_status'] ?? 'OK') !== 'OK') {
-            return $this->incompleteEstimate($assignment, trim((string) ($calculation['calculation_notes'] ?? "La asignación {$assignment->code} requiere revisión para proyectar su costo por proyecto.")));
-        }
-
-        return $this->completeEstimate($assignment, (float) ($calculation['employer_cost'] ?? 0));
-    }
-
-    private function estimateMonthlyAssignment(ProjectAssignment $assignment, Project $project, Person $person): array
-    {
-        $range = $this->commitmentRange($assignment, $project, $person);
-        if (! $range['complete']) {
-            return $this->incompleteEstimate($assignment, $range['warning']);
-        }
-
-        $warnings = [];
-        $total = 0.0;
-        foreach ($this->periodsBetween($range['start'], $range['end']) as $periodStart) {
-            $activeAssignments = $this->personActiveAssignmentsForMonth($person, $periodStart);
-            if ($activeAssignments->count() !== 1 || (int) $activeAssignments->first()->id !== (int) $assignment->id) {
-                return $this->incompleteEstimate($assignment, "La asignación {$assignment->code} no puede distribuir el costo mensual de forma inequívoca en {$periodStart->isoFormat('MMMM YYYY')}.");
-            }
-
-            $overlap = $this->monthOverlap($range['start'], $range['end'], $periodStart);
-            $simulatedPerson = clone $person;
-            $simulatedPerson->start_date = $overlap['start']->toDateString();
-            $simulatedPerson->end_date = $overlap['end']->toDateString();
-
-            try {
-                $calculation = $this->payroll->calculate($simulatedPerson, $periodStart, [
-                    'project_id' => $project->id,
-                ]);
-            } catch (DomainException $exception) {
-                return $this->incompleteEstimate($assignment, $exception->getMessage());
-            }
-
-            if (($calculation['calculation_status'] ?? 'OK') !== 'OK') {
-                $warnings[] = trim((string) ($calculation['calculation_notes'] ?? "La asignación {$assignment->code} requiere revisión para proyectar el costo mensual."));
-            }
-
-            $total += (float) ($calculation['employer_cost'] ?? 0);
-        }
-
-        if (! empty($warnings)) {
-            return $this->incompleteEstimate($assignment, implode(' ', array_unique(array_filter($warnings))));
-        }
-
-        return $this->completeEstimate($assignment, $total);
-    }
-
-    private function effectiveHourlyRateClp(ProjectAssignment $assignment, Project $project, Carbon $periodStart): ?float
+    private function effectiveHourlyRateClp(ProjectAssignment $assignment, Carbon $periodStart): ?float
     {
         if ((float) ($assignment->hourly_value ?? 0) > 0) {
             return (float) $this->hourlyRates->resolveAssignmentRate($assignment, $periodStart);
         }
 
-        if ((float) ($project->contracted_hourly_rate ?? 0) > 0) {
-            return (float) $this->hourlyRates->resolveProjectRate($project, $periodStart);
+        if ((float) ($assignment->person?->hourly_value ?? 0) > 0) {
+            return (float) $this->hourlyRates->resolvePersonRate($assignment->person, $periodStart);
         }
 
         return null;
@@ -361,25 +257,6 @@ class ProjectCommitmentService
             ->values();
     }
 
-    private function personActiveAssignmentsForMonth(Person $person, Carbon $periodStart): Collection
-    {
-        $periodEnd = $periodStart->copy()->endOfMonth();
-
-        return ProjectAssignment::query()
-            ->where('company_id', $person->company_id)
-            ->where('person_id', $person->id)
-            ->with('assignmentStatus')
-            ->where(function ($query) use ($periodEnd) {
-                $query->whereNull('start_date')->orWhereDate('start_date', '<=', $periodEnd);
-            })
-            ->where(function ($query) use ($periodStart) {
-                $query->whereNull('end_date')->orWhereDate('end_date', '>=', $periodStart);
-            })
-            ->get()
-            ->filter(fn (ProjectAssignment $assignment): bool => $this->assignmentIsActive($assignment))
-            ->values();
-    }
-
     private function commitmentRange(ProjectAssignment $assignment, Project $project, Person $person): array
     {
         $start = collect([
@@ -414,17 +291,6 @@ class ProjectCommitmentService
             'end' => $end->copy()->startOfDay(),
             'warning' => null,
         ];
-    }
-
-    private function referenceDateForFixedAmount(ProjectAssignment $assignment, Project $project, Person $person): ?Carbon
-    {
-        $candidates = collect([
-            optional($assignment->start_date)?->toDateString(),
-            optional($project->start_date)?->toDateString(),
-            optional($person->start_date)?->toDateString(),
-        ])->filter()->values();
-
-        return $candidates->isEmpty() ? null : Carbon::parse($candidates->first())->startOfDay();
     }
 
     private function periodsBetween(Carbon $start, Carbon $end): Collection

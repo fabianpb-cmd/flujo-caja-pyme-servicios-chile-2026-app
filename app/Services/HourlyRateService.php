@@ -63,6 +63,81 @@ class HourlyRateService
         );
     }
 
+    public function resolveCostingForAssignment(ProjectAssignment $assignment, CarbonInterface|string $date): array
+    {
+        $assignment->loadMissing(['person.hourlyRateCurrency', 'project.salesCurrency', 'hourlyRateCurrency']);
+        $person = $assignment->person;
+
+        if ((float) ($assignment->hourly_value ?? 0) > 0) {
+            return $this->detailsFromAssignment($assignment, $date);
+        }
+
+        if ($person && (float) ($person->hourly_value ?? 0) > 0) {
+            return $this->detailsFromPerson($person, $date, $assignment);
+        }
+
+        return [
+            'amount' => null,
+            'unit_type' => null,
+            'currency' => null,
+            'currency_code' => null,
+            'currency_symbol' => null,
+            'source_type' => null,
+            'source_label' => null,
+            'assignment_id' => $assignment->id,
+            'effective_date' => $this->dateString($date),
+        ];
+    }
+
+    public function resolveCostingForTimeEntry(Person $person, Project $project, CarbonInterface|string $date): array
+    {
+        $assignment = $this->assignmentFor($person->company_id, $person->id, $project->id, $date);
+
+        if ($assignment && (float) $assignment->hourly_value > 0) {
+            return $this->detailsFromAssignment($assignment, $date);
+        }
+
+        if ((float) ($person->hourly_value ?? 0) > 0) {
+            return $this->detailsFromPerson($person, $date, $assignment);
+        }
+
+        return [
+            'amount' => null,
+            'unit_type' => null,
+            'currency' => null,
+            'currency_code' => null,
+            'currency_symbol' => null,
+            'source_type' => null,
+            'source_label' => null,
+            'assignment_id' => $assignment?->id,
+            'effective_date' => $this->dateString($date),
+        ];
+    }
+
+    public function resolveCostingForEntry(TimeEntry $entry): array
+    {
+        $entry->loadMissing(['person.hourlyRateCurrency', 'project.salesCurrency', 'assignment.hourlyRateCurrency', 'assignment.assignmentStatus']);
+
+        $person = $entry->person;
+        $project = $entry->project;
+        if (! $person || ! $project) {
+            return [
+                'amount' => null,
+                'unit_type' => null,
+                'currency' => null,
+                'currency_code' => null,
+                'currency_symbol' => null,
+                'source_type' => null,
+                'source_label' => null,
+                'assignment_id' => $entry->assignment_id,
+                'effective_date' => optional($entry->entry_date)?->toDateString(),
+            ];
+        }
+
+        return $this->resolveCostingForTimeEntry($person, $project, $entry->entry_date ?? now())
+            + ['assignment_id' => $entry->assignment_id];
+    }
+
     public function resolveForTimeEntry(Person $person, Project $project, CarbonInterface|string $date): array
     {
         $assignment = $this->assignmentFor($person->company_id, $person->id, $project->id, $date);
@@ -180,6 +255,23 @@ class HourlyRateService
             'source_type' => 'assignment',
             'source_label' => trim((string) ($assignment->code ?: $assignment->project?->name ?: 'Asignación')),
             'assignment_id' => $assignment->id,
+            'effective_date' => $this->dateString($date),
+        ];
+    }
+
+    private function detailsFromPerson(Person $person, CarbonInterface|string $date, ?ProjectAssignment $assignment = null): array
+    {
+        $currency = $person->hourlyRateCurrency ?: 'CLP';
+
+        return [
+            'amount' => $person->hourly_value,
+            'unit_type' => strtoupper((string) ($person->hourly_rate_unit_type ?: 'CURRENCY')),
+            'currency' => $currency,
+            'currency_code' => $currency instanceof Currency ? strtoupper((string) $currency->code) : UiFormatter::currencyCode($currency),
+            'currency_symbol' => $currency instanceof Currency ? ($currency->symbol ?: strtoupper((string) $currency->code)) : null,
+            'source_type' => 'person',
+            'source_label' => trim((string) ('Persona · '.($person->full_name ?: $person->name ?: 'No informado'))),
+            'assignment_id' => $assignment?->id,
             'effective_date' => $this->dateString($date),
         ];
     }

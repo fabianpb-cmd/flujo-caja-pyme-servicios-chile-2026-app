@@ -69,142 +69,184 @@ class ProjectCommitmentServiceTest extends TestCase
         }
     }
 
-    public function test_hourly_assignment_projects_committed_cost_from_monthly_hours(): void
+    public function test_commitment_uses_assignment_cost_rate_for_monthly_person_without_affecting_monthly_payroll(): void
     {
         $project = $this->project(['sale_net' => 1000000]);
-        $person = $this->person('PAGO_POR_HORA', ['name' => 'Persona Hora A']);
+        $person = $this->person('HONORARIOS_MENSUAL', [
+            'name' => 'Persona Mensual',
+            'monthly_value' => 900000,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'hourly_value' => 0.50,
+        ]);
+
         $assignment = $this->assignment($person, $project, [
-            'hourly_value' => 1000,
-            'hourly_rate_unit_type' => 'CURRENCY',
-            'hourly_rate_currency_id' => $this->clp->id,
-            'monthly_hours' => 80,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'hourly_value' => 0.70,
+            'monthly_hours' => 10,
         ]);
 
         $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
-        $expected = (float) app(PayrollService::class)->calculate($person, '2026-08-01', [
-            'project_id' => $project->id,
-            'hours_approved' => 80,
-            'hourly_value' => 1000,
-        ])['employer_cost'];
+        $expectedCommitment = round(app(HourlyRateService::class)->resolveAssignmentRate($assignment, '2026-08-01') * 10, 2);
+
+        $payrollWithoutProject = app(PayrollService::class)->calculate($person, '2026-08-01');
+        $payrollWithProject = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id]);
 
         $this->assertTrue($summary['calculation_complete']);
-        $this->assertSame(round($expected, 2), $summary['personnel_committed_cost']);
-        $this->assertSame(round(1000000 - $expected, 2), $summary['projected_personnel_margin']);
-        $this->assertSame(round(($expected / 1000000) * 100, 1), $summary['committed_percentage']);
-        $this->assertSame(1, $summary['assignment_count']);
-        $this->assertEmpty($summary['warnings']);
+        $this->assertSame($expectedCommitment, $summary['personnel_committed_cost']);
+        $this->assertSame(round(1000000 - $expectedCommitment, 2), $summary['projected_personnel_margin']);
+        $this->assertSame($payrollWithoutProject['gross_amount'], $payrollWithProject['gross_amount']);
+        $this->assertSame($payrollWithoutProject['base_salary'], $payrollWithProject['base_salary']);
     }
 
-    public function test_multiple_assignments_use_each_effective_hourly_rate_including_project_fallback(): void
+    public function test_commitment_uses_assignment_cost_hours_while_project_modality_payroll_uses_project_value(): void
     {
-        $project = $this->project([
-            'sale_net' => 2000000,
-            'contracted_hourly_rate' => 1500,
-            'sales_currency_id' => $this->clp->id,
+        $project = $this->project(['sale_net' => 800000]);
+        $person = $this->person('POR_PROYECTO', [
+            'name' => 'Persona Proyecto',
+            'hourly_value' => 0.40,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
         ]);
 
-        $personA = $this->person('PAGO_POR_HORA', ['name' => 'Persona A']);
-        $personB = $this->person('PAGO_POR_HORA', ['name' => 'Persona B']);
+        $assignment = $this->assignment($person, $project, [
+            'hourly_value' => 0.60,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'project_value' => 100,
+            'monthly_hours' => 20,
+        ]);
 
-        $assignmentA = $this->assignment($personA, $project, [
-            'hourly_value' => 1200,
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+        $expectedCommitment = round(app(HourlyRateService::class)->resolveAssignmentRate($assignment, '2026-08-01') * 20, 2);
+        $expectedProjectValue = app(HourlyRateService::class)->resolveAssignmentProjectValue($assignment, '2026-08-01');
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id]);
+
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertSame($expectedCommitment, $summary['personnel_committed_cost']);
+        $this->assertSame($expectedProjectValue, (float) $payroll['gross_amount']);
+        $this->assertNotSame(round($expectedCommitment + $expectedProjectValue, 2), $summary['personnel_committed_cost']);
+    }
+
+    public function test_commitment_and_payroll_remain_separate_for_hourly_person(): void
+    {
+        $project = $this->project(['sale_net' => 1000000]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Hora',
+            'hourly_value' => 0.40,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+        ]);
+
+        $assignment = $this->assignment($person, $project, [
+            'hourly_value' => 0.65,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 15,
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+        $expectedCommitment = round(app(HourlyRateService::class)->resolveAssignmentRate($assignment, '2026-08-01') * 15, 2);
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id, 'hours_approved' => 10]);
+        $expectedPayrollRate = app(HourlyRateService::class)->resolvePersonRate($person, '2026-08-01');
+
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertSame($expectedCommitment, $summary['personnel_committed_cost']);
+        $this->assertSame(round($expectedPayrollRate * 10, 2), (float) $payroll['base_salary']);
+        $this->assertNotSame(round(app(HourlyRateService::class)->resolveAssignmentRate($assignment, '2026-08-01') * 10, 2), (float) $payroll['base_salary']);
+    }
+
+    public function test_commitment_falls_back_to_person_cost_rate_when_assignment_rate_is_missing(): void
+    {
+        $project = $this->project(['sale_net' => 300000]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Fallback',
+            'hourly_value' => 1000,
             'hourly_rate_unit_type' => 'CURRENCY',
             'hourly_rate_currency_id' => $this->clp->id,
-            'monthly_hours' => 40,
         ]);
-        $assignmentB = $this->assignment($personB, $project, [
+
+        $assignment = $this->assignment($person, $project, [
             'hourly_value' => null,
             'hourly_rate_unit_type' => 'CURRENCY',
             'hourly_rate_currency_id' => $this->clp->id,
-            'monthly_hours' => 25,
+            'monthly_hours' => 12,
         ]);
 
         $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
-
-        $expectedA = (float) app(PayrollService::class)->calculate($personA, '2026-08-01', [
-            'project_id' => $project->id,
-            'hours_approved' => 40,
-            'hourly_value' => 1200,
-        ])['employer_cost'];
-        $expectedB = (float) app(PayrollService::class)->calculate($personB, '2026-08-01', [
-            'project_id' => $project->id,
-            'hours_approved' => 25,
-            'hourly_value' => (float) app(HourlyRateService::class)->resolveProjectRate($project, '2026-08-01'),
-        ])['employer_cost'];
+        $expectedCommitment = round(app(HourlyRateService::class)->resolvePersonRate($person, '2026-08-01') * 12, 2);
 
         $this->assertTrue($summary['calculation_complete']);
-        $this->assertSame(round($expectedA + $expectedB, 2), $summary['personnel_committed_cost']);
-        $this->assertSame(2, $summary['assignment_count']);
-
-        $breakdown = collect($summary['assignments'])->keyBy('assignment_id');
-        $this->assertSame(round($expectedA, 2), $breakdown[$assignmentA->id]['committed_cost']);
-        $this->assertSame(round($expectedB, 2), $breakdown[$assignmentB->id]['committed_cost']);
-    }
-
-    public function test_project_modality_uses_project_value_once_without_adding_hourly_rate(): void
-    {
-        $project = $this->project(['sale_net' => 500000]);
-        $person = $this->person('POR_PROYECTO', ['name' => 'Persona Proyecto']);
-        $assignment = $this->assignment($person, $project, [
-            'hourly_value' => 9999,
-            'project_value' => 100000,
-            'hourly_rate_unit_type' => 'CURRENCY',
-            'hourly_rate_currency_id' => $this->clp->id,
-            'monthly_hours' => 999,
-        ]);
-
-        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
-        $expected = (float) app(PayrollService::class)->calculate($person, '2026-08-01', [
-            'project_id' => $project->id,
-            'project_value' => 100000,
-        ])['employer_cost'];
-
-        $this->assertTrue($summary['calculation_complete']);
-        $this->assertSame(round($expected, 2), $summary['personnel_committed_cost']);
-        $this->assertNotSame(round($expected + 9999, 2), $summary['personnel_committed_cost']);
+        $this->assertSame($expectedCommitment, $summary['personnel_committed_cost']);
         $this->assertSame($assignment->id, $summary['assignments'][0]['assignment_id']);
     }
 
-    public function test_summary_reports_zero_and_negative_personnel_margin_cases(): void
+    public function test_commitment_is_incomplete_when_assignment_and_person_cost_rates_are_missing_even_if_project_has_contract_rate(): void
     {
-        $projectExact = $this->project(['code' => 'PRY-EQUAL', 'name' => 'Proyecto Equal', 'sale_net' => 80000]);
-        $personExact = $this->person('PAGO_POR_HORA', ['name' => 'Persona Equal']);
-        $this->assignment($personExact, $projectExact, [
-            'hourly_value' => 1000,
-            'hourly_rate_unit_type' => 'CURRENCY',
-            'hourly_rate_currency_id' => $this->clp->id,
-            'monthly_hours' => 80,
+        $project = $this->project([
+            'sale_net' => 500000,
+            'contracted_hourly_rate' => 35000,
+            'sales_currency_id' => $this->clp->id,
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Sin Valor HH',
+            'hourly_value' => 0,
         ]);
 
-        $equal = app(ProjectCommitmentService::class)->summarizeProject($projectExact);
-        $this->assertTrue($equal['calculation_complete']);
-        $this->assertSame(0.0, $equal['projected_personnel_margin']);
-        $this->assertFalse($equal['negative_margin']);
-
-        $projectNegative = $this->project(['code' => 'PRY-NEG', 'name' => 'Proyecto Negativo', 'sale_net' => 50000]);
-        $personNegative = $this->person('PAGO_POR_HORA', ['name' => 'Persona Negativa']);
-        $this->assignment($personNegative, $projectNegative, [
-            'hourly_value' => 1000,
+        $this->assignment($person, $project, [
+            'hourly_value' => null,
             'hourly_rate_unit_type' => 'CURRENCY',
             'hourly_rate_currency_id' => $this->clp->id,
-            'monthly_hours' => 80,
+            'monthly_hours' => 12,
         ]);
 
-        $negative = app(ProjectCommitmentService::class)->summarizeProject($projectNegative);
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
 
-        $this->assertTrue($negative['calculation_complete']);
-        $this->assertTrue($negative['negative_margin']);
-        $this->assertSame(30000.0, $negative['negative_margin_amount']);
-        $this->assertContains('El costo de personal comprometido supera la venta neta del proyecto.', $negative['warnings']);
+        $this->assertFalse($summary['calculation_complete']);
+        $this->assertNull($summary['personnel_committed_cost']);
+        $this->assertStringContainsString('falta el Valor HH de costeo de la Asignación y de la Persona', implode(' ', $summary['warnings']));
+    }
+
+    public function test_multiple_assignments_for_same_person_keep_project_specific_costing_rates(): void
+    {
+        $projectA = $this->project(['code' => 'PRY-COST-A', 'name' => 'Proyecto Costeo A', 'sale_net' => 500000]);
+        $projectB = $this->project(['code' => 'PRY-COST-B', 'name' => 'Proyecto Costeo B', 'sale_net' => 500000]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Multi Proyecto',
+            'hourly_value' => 0.50,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+        ]);
+
+        $assignmentA = $this->assignment($person, $projectA, [
+            'hourly_value' => 0.70,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+        ]);
+        $assignmentB = $this->assignment($person, $projectB, [
+            'hourly_value' => 0.90,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+        ]);
+
+        $summaryA = app(ProjectCommitmentService::class)->summarizeProject($projectA);
+        $summaryB = app(ProjectCommitmentService::class)->summarizeProject($projectB);
+
+        $this->assertSame(round(app(HourlyRateService::class)->resolveAssignmentRate($assignmentA, '2026-08-01') * 10, 2), $summaryA['personnel_committed_cost']);
+        $this->assertSame(round(app(HourlyRateService::class)->resolveAssignmentRate($assignmentB, '2026-08-01') * 10, 2), $summaryB['personnel_committed_cost']);
+        $this->assertNotSame($summaryA['personnel_committed_cost'], $summaryB['personnel_committed_cost']);
     }
 
     public function test_preview_assignment_excludes_current_assignment_when_editing(): void
     {
         $project = $this->project(['sale_net' => 500000]);
-        $personA = $this->person('PAGO_POR_HORA', ['name' => 'Persona Edit A']);
-        $personB = $this->person('PAGO_POR_HORA', ['name' => 'Persona Edit B']);
+        $personA = $this->person('PAGO_POR_HORA', ['name' => 'Persona Edit A', 'hourly_value' => 1000, 'hourly_rate_currency_id' => $this->clp->id]);
+        $personB = $this->person('PAGO_POR_HORA', ['name' => 'Persona Edit B', 'hourly_value' => 1000, 'hourly_rate_currency_id' => $this->clp->id]);
 
-        $assignmentA = $this->assignment($personA, $project, [
+        $this->assignment($personA, $project, [
             'hourly_value' => 1000,
             'hourly_rate_unit_type' => 'CURRENCY',
             'hourly_rate_currency_id' => $this->clp->id,
@@ -219,67 +261,32 @@ class ProjectCommitmentServiceTest extends TestCase
 
         $preview = app(ProjectCommitmentService::class)->previewAssignment($assignmentB, $assignmentB->id);
 
-        $expectedA = (float) app(PayrollService::class)->calculate($personA, '2026-08-01', [
-            'project_id' => $project->id,
-            'hours_approved' => 80,
-            'hourly_value' => 1000,
-        ])['employer_cost'];
-        $expectedB = (float) app(PayrollService::class)->calculate($personB, '2026-08-01', [
-            'project_id' => $project->id,
-            'hours_approved' => 50,
-            'hourly_value' => 1000,
-        ])['employer_cost'];
-
-        $this->assertSame(round($expectedA, 2), $preview['current_personnel_committed_cost']);
-        $this->assertSame(round($expectedB, 2), $preview['assignment_estimated_cost']);
-        $this->assertSame(round($expectedA + $expectedB, 2), $preview['after_save_personnel_committed_cost']);
+        $this->assertSame(80000.0, $preview['current_personnel_committed_cost']);
+        $this->assertSame(50000.0, $preview['assignment_estimated_cost']);
+        $this->assertSame(130000.0, $preview['after_save_personnel_committed_cost']);
     }
 
-    public function test_missing_conversion_marks_calculation_incomplete_without_fake_zero(): void
+    public function test_negative_margin_warning_is_emitted_when_commitment_exceeds_sale_net(): void
     {
-        UfValue::query()->where('company_id', $this->company->id)->delete();
+        $project = $this->project(['sale_net' => 50000]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Negativa',
+            'hourly_value' => 1000,
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $this->clp->id,
+        ]);
 
-        $project = $this->project(['sale_net' => 1000000]);
-        $person = $this->person('PAGO_POR_HORA', ['name' => 'Persona UF']);
         $this->assignment($person, $project, [
-            'hourly_value' => 0.50,
-            'hourly_rate_unit_type' => 'UF',
-            'hourly_rate_currency_id' => $this->uf->id,
-            'monthly_hours' => 20,
+            'hourly_value' => null,
+            'monthly_hours' => 80,
         ]);
 
         $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
 
-        $this->assertFalse($summary['calculation_complete']);
-        $this->assertNull($summary['personnel_committed_cost']);
-        $this->assertNull($summary['projected_personnel_margin']);
-        $this->assertNotEmpty($summary['warnings']);
-    }
-
-    public function test_monthly_commitment_is_incomplete_when_cost_cannot_be_allocated_unambiguously(): void
-    {
-        $projectA = $this->project(['code' => 'PRY-MTH-A', 'name' => 'Proyecto Mensual A', 'sale_net' => 900000]);
-        $projectB = $this->project(['code' => 'PRY-MTH-B', 'name' => 'Proyecto Mensual B', 'sale_net' => 900000]);
-        $person = $this->person('HONORARIOS_MENSUAL', [
-            'name' => 'Persona Mensual',
-            'monthly_value' => 500000,
-        ]);
-
-        $this->assignment($person, $projectA, [
-            'hourly_rate_unit_type' => 'CURRENCY',
-            'hourly_rate_currency_id' => $this->clp->id,
-        ]);
-        $this->assignment($person, $projectB, [
-            'code' => 'ASI-MTH-B',
-            'hourly_rate_unit_type' => 'CURRENCY',
-            'hourly_rate_currency_id' => $this->clp->id,
-        ]);
-
-        $summary = app(ProjectCommitmentService::class)->summarizeProject($projectA);
-
-        $this->assertFalse($summary['calculation_complete']);
-        $this->assertNull($summary['personnel_committed_cost']);
-        $this->assertStringContainsString('no puede distribuir el costo mensual de forma inequívoca', implode(' ', $summary['warnings']));
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertTrue($summary['negative_margin']);
+        $this->assertSame(30000.0, $summary['negative_margin_amount']);
+        $this->assertContains('El costo de personal comprometido supera la venta neta del proyecto.', $summary['warnings']);
     }
 
     private function project(array $overrides = []): Project
@@ -316,6 +323,8 @@ class ProjectCommitmentServiceTest extends TestCase
             'worker_status_id' => $this->statusId('worker', 'active'),
             'monthly_value' => 0,
             'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $this->clp->id,
             'status' => 'active',
             'start_date' => '2026-08-01',
             'end_date' => '2026-08-31',

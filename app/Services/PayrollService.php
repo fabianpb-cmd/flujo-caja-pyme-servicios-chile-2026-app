@@ -80,31 +80,12 @@ class PayrollService
         $healthAdditionalAuto = $person->additional_health_plan !== null ? (float) $person->additional_health_plan : null;
         $hourlyValueAuto = null;
         $hourlyValueSource = null;
+        $hourlyValueLegacyAuto = null;
         $projectValueAuto = null;
         $projectValueSource = null;
 
         if (! $assignmentContext['ambiguous']) {
-            if ($assignment && (float) $assignment->hourly_value > 0) {
-                $hourlyValueAuto = (float) $this->hourlyRates->resolveAssignmentRate($assignment, $period);
-                $hourlyValueSource = [
-                    'type' => 'assignment',
-                    'code' => $assignment->code,
-                    'project_name' => $assignment->project?->name ?: $project?->name,
-                    'rate_value' => $assignment->hourly_value,
-                    'rate_unit_type' => strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')),
-                    'currency' => $assignment->hourlyRateDisplayCurrency ?? 'CLP',
-                ];
-            } elseif ($project && (float) $project->contracted_hourly_rate > 0) {
-                $hourlyValueAuto = (float) $this->hourlyRates->resolveProjectRate($project, $period);
-                $hourlyValueSource = [
-                    'type' => 'project',
-                    'project_name' => $project->name,
-                    'project_code' => $project->code,
-                    'rate_value' => $project->contracted_hourly_rate,
-                    'rate_unit_type' => 'CURRENCY',
-                    'currency' => $project->salesCurrency?->code ?: 'CLP',
-                ];
-            } elseif ((float) $person->hourly_value > 0) {
+            if ((float) $person->hourly_value > 0) {
                 $hourlyValueAuto = (float) $this->hourlyRates->resolvePersonRate($person, $period);
                 $hourlyValueSource = [
                     'type' => 'person',
@@ -113,6 +94,14 @@ class PayrollService
                     'rate_unit_type' => strtoupper((string) ($person->hourly_rate_unit_type ?: 'CURRENCY')),
                     'currency' => $person->hourlyRateDisplayCurrency ?? 'CLP',
                 ];
+            }
+
+            if ($assignment) {
+                if ((float) $assignment->hourly_value > 0) {
+                    $hourlyValueLegacyAuto = (float) $this->hourlyRates->resolveAssignmentRate($assignment, $period);
+                } elseif ((float) $person->hourly_value > 0) {
+                    $hourlyValueLegacyAuto = (float) $this->hourlyRates->resolvePersonRate($person, $period);
+                }
             }
 
             if ($assignment && (float) $assignment->project_value > 0) {
@@ -138,6 +127,7 @@ class PayrollService
             'monthly_value_auto' => $monthlyValueAuto,
             'hourly_value_auto' => $hourlyValueAuto,
             'hourly_value_source' => $hourlyValueSource,
+            'hourly_value_legacy_auto' => $hourlyValueLegacyAuto,
             'project_value_auto' => $projectValueAuto,
             'project_value_source' => $projectValueSource,
             'health_additional_auto' => $healthAdditionalAuto,
@@ -251,7 +241,7 @@ class PayrollService
         }
 
         if ($isHourly && ($hourlyValue === null || $hourlyValue <= 0)) {
-            $notes[] = 'Tarifa HH no configurada para la asignación vigente.';
+            $notes[] = 'Tarifa de remuneración por hora no configurada en la ficha de Personal.';
             $requiresReview = true;
         }
 
@@ -839,7 +829,13 @@ class PayrollService
             'fields' => [
                 'hours_approved' => $this->payrollFieldState($record->hours_approved, $adjustments['hours_approved'], $context['hours_approved_auto'], 2),
                 'monthly_value' => $this->payrollFieldState($record->monthly_value, $adjustments['monthly_value'], $context['monthly_value_auto'], 2),
-                'hourly_value' => $this->payrollFieldState($record->hourly_value, $adjustments['hourly_value'], $context['hourly_value_auto'], 2),
+                'hourly_value' => $this->payrollFieldState(
+                    $record->hourly_value,
+                    $adjustments['hourly_value'],
+                    $context['hourly_value_auto'],
+                    2,
+                    [$context['hourly_value_legacy_auto'] ?? null],
+                ),
                 'project_value' => $this->payrollFieldState($record->project_value, $adjustments['project_value'], $context['project_value_auto'], 2),
             ],
         ];
@@ -937,6 +933,7 @@ class PayrollService
                 'monthly_value_auto' => null,
                 'hourly_value_auto' => null,
                 'hourly_value_source' => null,
+                'hourly_value_legacy_auto' => null,
                 'project_value_auto' => null,
                 'project_value_source' => null,
                 'health_additional_auto' => null,
@@ -963,7 +960,7 @@ class PayrollService
         ];
     }
 
-    private function payrollFieldState(mixed $storedValue, ?float $adjustmentOverride, ?float $automaticValue, int $scale): array
+    private function payrollFieldState(mixed $storedValue, ?float $adjustmentOverride, ?float $automaticValue, int $scale, array $legacyAutomaticCandidates = []): array
     {
         $stored = $this->payrollNumericValue($storedValue);
         $stored = $stored !== null ? round($stored, $scale) : null;
@@ -971,14 +968,20 @@ class PayrollService
         $override = $adjustmentOverride !== null ? round((float) $adjustmentOverride, $scale) : null;
         $source = null;
         $tolerance = 0.00001;
+        $legacyAutomaticCandidates = array_values(array_filter(array_map(
+            fn (mixed $candidate): ?float => $candidate !== null ? round((float) $candidate, $scale) : null,
+            $legacyAutomaticCandidates,
+        ), static fn (?float $candidate): bool => $candidate !== null));
 
         if ($override !== null) {
             $source = 'adjustment';
         } elseif ($stored !== null) {
             $matchesAutomatic = $automatic !== null && abs($stored - $automatic) <= $tolerance;
             $matchesZeroFallback = $automatic === null && abs($stored) <= $tolerance;
+            $matchesLegacyAutomatic = collect($legacyAutomaticCandidates)
+                ->contains(fn (float $candidate): bool => abs($stored - $candidate) <= $tolerance);
 
-            if (! $matchesAutomatic && ! $matchesZeroFallback) {
+            if (! $matchesAutomatic && ! $matchesZeroFallback && ! $matchesLegacyAutomatic) {
                 $override = $stored;
                 $source = 'record';
             }
