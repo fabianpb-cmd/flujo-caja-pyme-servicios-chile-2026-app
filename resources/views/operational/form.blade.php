@@ -155,9 +155,9 @@
     'title' => '¿Cómo completar la asignación?',
         'bullets' => [
             'Define cómo se remunera la participación de esta persona y durante qué período aplica en el proyecto.',
-            'Usa Valor HH cuando el acuerdo considera una tarifa por cada hora de trabajo registrada.',
+            'Valor HH es específico de la asignación cuando se informa. Si se deja vacío y el proyecto tiene tarifa contractual, Horas y Remuneraciones usarán esa referencia del proyecto.',
             'Usa Monto pactado de la asignación cuando existe un monto fijo para la participación o para un hito acordado.',
-            'Un valor 0,00 significa que esa modalidad no se utilizará en la asignación.',
+            'Monto pactado y Horas mensuales son datos propios de esta asignación; no se completan automáticamente desde la venta neta del proyecto.',
             'Si completas Valor HH y Monto pactado de la asignación, el sistema mostrará una advertencia para que revises el acuerdo contractual.',
             'Las fechas corresponden a la vigencia de la asignación y pueden diferir de las del proyecto, pero se advertirá si quedan fuera de su rango.',
         ],
@@ -199,9 +199,9 @@
         'start_date' => 'Fecha desde la cual comienza la vigencia de esta asignación. Puede ser distinta a la del proyecto, pero se advertirá si inicia antes de su rango.',
         'end_date' => 'Fecha hasta la cual se mantiene vigente esta asignación. Puede ser distinta a la del proyecto, pero se advertirá si termina después de su rango.',
         'hourly_rate_unit_type' => 'Unidad monetaria usada para expresar la tarifa por hora de esta asignación.',
-        'hourly_value' => 'Monto correspondiente a una hora de trabajo. Si ingresa 0,00, el sistema entiende que no se utilizará tarifa por hora.',
-        'project_value' => 'Monto fijo acordado para la participación o para un hito de esta asignación. Si ingresa 0,00, el sistema entiende que no se utilizará monto fijo.',
-        'monthly_hours' => 'Cantidad de horas de esta asignación consideradas por mes. Se usan como capacidad referencial cuando el sistema necesita estimar horas vigentes.',
+        'hourly_value' => 'Tarifa específica de esta asignación. Si queda sin informar y el proyecto tiene tarifa contractual, Horas y Remuneraciones usarán esa referencia del proyecto.',
+        'project_value' => 'Monto fijo pactado específicamente para esta asignación. No corresponde a la venta neta del proyecto.',
+        'monthly_hours' => 'Cantidad de horas mensuales consideradas para esta asignación. No corresponde a una capacidad definida a nivel de proyecto.',
     ],
     'time-entries' => [
         'person_id' => 'Persona a la que corresponde este registro de horas.',
@@ -290,6 +290,10 @@
 @php($assignmentProjectSaleCurrencyCode = data_get($assignmentSelectedProject, 'project_sale_currency_code', 'CLP'))
 @php($assignmentProjectSaleCurrencySymbol = data_get($assignmentSelectedProject, 'project_sale_currency_symbol', '$'))
 @php($assignmentProjectSaleMinorUnits = (int) data_get($assignmentSelectedProject, 'project_sale_minor_units', 0))
+@php($assignmentProjectRateAmount = data_get($assignmentSelectedProject, 'project_rate_amount'))
+@php($assignmentProjectRateCurrencyCode = data_get($assignmentSelectedProject, 'project_rate_currency_code', 'CLP'))
+@php($assignmentProjectRateCurrencySymbol = data_get($assignmentSelectedProject, 'project_rate_currency_symbol', '$'))
+@php($assignmentProjectRateMinorUnits = (int) data_get($assignmentSelectedProject, 'project_rate_minor_units', 0))
 @php($assignmentProjectStartDate = data_get($assignmentSelectedProject, 'project_start_date'))
 @php($assignmentProjectEndDate = data_get($assignmentSelectedProject, 'project_end_date'))
 @php($assignmentProjectSaleDisplay = match (true) {
@@ -299,6 +303,27 @@
 })
 @php($assignmentHourlyValue = old('hourly_value', $item->hourly_value ?? null))
 @php($assignmentProjectValue = old('project_value', $item->project_value ?? null))
+@php($assignmentSpecificHourlyValueActive = is_numeric($assignmentHourlyValue) && (float) $assignmentHourlyValue > 0)
+@php($assignmentSpecificRateCurrency = $selectedRateUnitType === 'UF'
+    ? 'UF'
+    : ($selectedRateCurrency
+        ? [
+            'code' => (string) ($selectedRateCurrency['currency_code'] ?? 'CLP'),
+            'symbol' => (string) ($selectedRateCurrency['currency_symbol'] ?? '$'),
+            'minor_units' => (int) ($selectedRateCurrency['minor_units'] ?? 0),
+        ]
+        : 'CLP'))
+@php($assignmentProjectRateReferenceDisplay = is_numeric($assignmentProjectRateAmount) && (float) $assignmentProjectRateAmount > 0
+    ? 'Valor HH referencia: '.\App\Support\UiFormatter::formatMoney($assignmentProjectRateAmount, $assignmentProjectRateCurrencyCode).' / HH'
+    : null)
+@php($assignmentEffectiveHourlyDisplay = match (true) {
+    $assignmentSpecificHourlyValueActive => 'Efectivo: '.\App\Support\UiFormatter::formatMoney($assignmentHourlyValue, $assignmentSpecificRateCurrency).' / HH · Asignación',
+    is_numeric($assignmentProjectRateAmount) && (float) $assignmentProjectRateAmount > 0 => 'Efectivo: '.\App\Support\UiFormatter::formatMoney($assignmentProjectRateAmount, $assignmentProjectRateCurrencyCode).' / HH · Proyecto',
+    default => 'Efectivo: No configurado',
+})
+@php($assignmentEffectiveProjectValueDisplay = is_numeric($assignmentProjectValue)
+    ? 'Efectivo: '.\App\Support\UiFormatter::formatMoney($assignmentProjectValue, $assignmentSpecificRateCurrency).' · Asignación'
+    : 'Efectivo: No informado')
 @php($assignmentHasBothValues = is_numeric($assignmentHourlyValue) && (float) $assignmentHourlyValue > 0 && is_numeric($assignmentProjectValue) && (float) $assignmentProjectValue > 0)
 @php($assignmentProjectExceedsSale = $assignmentProjectSaleNet !== null && is_numeric($assignmentProjectValue) && (float) $assignmentProjectValue > (float) $assignmentProjectSaleNet)
 @php($assignmentStartDate = old('start_date', optional($item->start_date)->format('d/m/Y')))
@@ -1233,6 +1258,11 @@
                                                 data-project-sale-currency-code="{{ $option['project_sale_currency_code'] ?? '' }}"
                                                 data-project-sale-currency-symbol="{{ $option['project_sale_currency_symbol'] ?? '' }}"
                                                 data-project-sale-minor-units="{{ $option['project_sale_minor_units'] ?? '' }}"
+                                                data-project-rate-amount="{{ $option['project_rate_amount'] ?? '' }}"
+                                                data-project-rate-unit-type="{{ $option['project_rate_unit_type'] ?? '' }}"
+                                                data-project-rate-currency-code="{{ $option['project_rate_currency_code'] ?? '' }}"
+                                                data-project-rate-currency-symbol="{{ $option['project_rate_currency_symbol'] ?? '' }}"
+                                                data-project-rate-minor-units="{{ $option['project_rate_minor_units'] ?? '' }}"
                                                 data-project-start-date="{{ $option['project_start_date'] ?? '' }}"
                                                 data-project-end-date="{{ $option['project_end_date'] ?? '' }}"
                                             @endif
@@ -1243,6 +1273,9 @@
                                     <div class="small fw-semibold text-muted mb-1">Referencia del proyecto</div>
                                     <div class="small text-muted" data-assignments-project-sale-net>
                                         {{ $assignmentProjectSaleDisplay }}
+                                    </div>
+                                    <div class="small text-muted {{ $assignmentProjectRateReferenceDisplay ? '' : 'd-none' }}" data-assignments-project-rate>
+                                        {{ $assignmentProjectRateReferenceDisplay }}
                                     </div>
                                     <div class="small text-muted" data-assignments-project-vigency>
                                         {{ $assignmentProjectVigencyDisplay }}
@@ -1287,6 +1320,7 @@
                                                     value="currency:{{ $currencyId }}"
                                                     data-currency-symbol="{{ $currencySymbol }}"
                                                     data-currency-code="{{ $currencyCode }}"
+                                                    data-currency-minor-units="{{ $currencyOption['minor_units'] ?? 2 }}"
                                                     @selected($selectedRateUnitType !== 'UF' && (string) $selectedRateCurrencyId === (string) $currencyId)
                                                 >
                                                     {{ $currencyCode ?: ($currencyOption['label'] ?? 'Moneda') }}
@@ -1303,6 +1337,19 @@
                             @error($field)
                                 <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror
+                            @if ($resource === 'assignments' && $field === 'hourly_value')
+                                <div class="small text-muted mt-2 {{ $assignmentProjectRateReferenceDisplay ? '' : 'd-none' }}" data-assignments-hourly-reference>
+                                    Referencia proyecto: {{ $assignmentProjectRateReferenceDisplay ? str_replace('Valor HH referencia: ', '', $assignmentProjectRateReferenceDisplay) : '' }}
+                                </div>
+                                <div class="small text-muted mt-1" data-assignments-hourly-effective>
+                                    {{ $assignmentEffectiveHourlyDisplay }}
+                                </div>
+                            @endif
+                            @if ($resource === 'assignments' && $field === 'project_value')
+                                <div class="small text-muted mt-2" data-assignments-project-value-effective>
+                                    {{ $assignmentEffectiveProjectValueDisplay }}
+                                </div>
+                            @endif
                             @if ($resource === 'time-entries' && $field === 'hours_approved')
                                 <div class="mt-2 d-none" data-time-entry-approved-warning-box>
                                     <div class="small text-danger" data-time-entry-approved-warning></div>
@@ -1995,12 +2042,16 @@
 
         const assignmentProjectSelect = form.querySelector('[data-assignments-project-select="true"]');
         const assignmentProjectSaleNet = form.querySelector('[data-assignments-project-sale-net]');
+        const assignmentProjectRate = form.querySelector('[data-assignments-project-rate]');
         const assignmentProjectVigency = form.querySelector('[data-assignments-project-vigency]');
         const assignmentTariffWarningBox = form.querySelector('[data-assignments-tariff-warning-box]');
         const assignmentVigencyWarningBox = form.querySelector('[data-assignments-vigency-warning-box]');
         const assignmentWarningDouble = form.querySelector('[data-assignments-warning-double]');
         const assignmentWarningSale = form.querySelector('[data-assignments-warning-sale]');
         const assignmentWarningVigency = form.querySelector('[data-assignments-warning-vigency]');
+        const assignmentHourlyReference = form.querySelector('[data-assignments-hourly-reference]');
+        const assignmentHourlyEffective = form.querySelector('[data-assignments-hourly-effective]');
+        const assignmentProjectValueEffective = form.querySelector('[data-assignments-project-value-effective]');
         const assignmentHourlyInput = form.querySelector('#hourly_value');
         const assignmentProjectInput = form.querySelector('#project_value');
         const assignmentStartInput = form.querySelector('#start_date');
@@ -2080,6 +2131,33 @@
             return `Venta neta proyecto: ${formatAssignmentMoney(saleNet, saleCurrencyCode, Number.isNaN(saleMinorUnits) ? 0 : saleMinorUnits)}`;
         };
 
+        const projectRateText = (rateAmount, rateCurrencyCode, rateMinorUnits) => {
+            if (rateAmount === null || rateAmount <= 0) {
+                return '';
+            }
+
+            return `Valor HH referencia: ${formatAssignmentMoney(rateAmount, rateCurrencyCode, Number.isNaN(rateMinorUnits) ? 0 : rateMinorUnits)} / HH`;
+        };
+
+        const assignmentSpecificRateMeta = () => {
+            if (!rateUnitTypeField) {
+                return { currencyCode: 'UF', decimals: 2 };
+            }
+
+            if (String(rateUnitTypeField.value || 'UF').toUpperCase() === 'UF') {
+                return { currencyCode: 'UF', decimals: 2 };
+            }
+
+            const selectedOption = rateUnitSelector?.options?.[rateUnitSelector.selectedIndex];
+            const currencyCode = String(selectedOption?.dataset?.currencyCode || 'CLP').toUpperCase();
+            const decimals = Number.parseInt(selectedOption?.dataset?.currencyMinorUnits || (currencyCode === 'CLP' ? '0' : '2'), 10);
+
+            return {
+                currencyCode,
+                decimals: Number.isNaN(decimals) ? (currencyCode === 'CLP' ? 0 : 2) : decimals,
+            };
+        };
+
         const assignmentVigencyWarningText = (projectStart, projectEnd, assignmentStartDate, assignmentEndDate) => {
             const startsBeforeProject = projectStart && assignmentStartDate && assignmentStartDate < projectStart;
             const endsAfterProject = projectEnd && assignmentEndDate && assignmentEndDate > projectEnd;
@@ -2110,9 +2188,18 @@
             const saleCurrencyCode = option?.dataset?.projectSaleCurrencyCode || 'CLP';
             const saleMinorUnits = Number.parseInt(option?.dataset?.projectSaleMinorUnits || '0', 10);
             const saleNet = parseAssignmentNumber(saleNetRaw);
+            const projectRateAmount = parseAssignmentNumber(option?.dataset?.projectRateAmount || '');
+            const projectRateCurrencyCode = option?.dataset?.projectRateCurrencyCode || 'CLP';
+            const projectRateMinorUnits = Number.parseInt(option?.dataset?.projectRateMinorUnits || '0', 10);
             const projectStartDate = option?.dataset?.projectStartDate || '';
             const projectEndDate = option?.dataset?.projectEndDate || '';
             assignmentProjectSaleNet.textContent = projectSaleText(saleNet, saleCurrencyCode, saleMinorUnits, hasProject);
+
+            if (assignmentProjectRate) {
+                const projectRateLabel = hasProject ? projectRateText(projectRateAmount, projectRateCurrencyCode, projectRateMinorUnits) : '';
+                assignmentProjectRate.textContent = projectRateLabel;
+                assignmentProjectRate.classList.toggle('d-none', projectRateLabel === '');
+            }
 
             if (assignmentProjectVigency) {
                 assignmentProjectVigency.textContent = projectVigencyText(projectStartDate, projectEndDate, hasProject);
@@ -2120,6 +2207,7 @@
 
             const hourlyValue = parseAssignmentNumber(assignmentHourlyInput?.value);
             const projectValue = parseAssignmentNumber(assignmentProjectInput?.value);
+            const assignmentRateMeta = assignmentSpecificRateMeta();
             const assignmentStartDate = parseChileanDate(assignmentStartInput?.value || '');
             const assignmentEndDate = parseChileanDate(assignmentEndInput?.value || '');
             const projectStart = projectStartDate ? new Date(`${projectStartDate}T00:00:00`) : null;
@@ -2127,6 +2215,28 @@
             const hasBothValues = (hourlyValue ?? 0) > 0 && (projectValue ?? 0) > 0;
             const exceedsSaleNet = saleNet !== null && projectValue !== null && projectValue > saleNet;
             const vigencyWarning = assignmentVigencyWarningText(projectStart, projectEnd, assignmentStartDate, assignmentEndDate);
+
+            if (assignmentHourlyReference) {
+                const referenceLabel = hasProject ? projectRateText(projectRateAmount, projectRateCurrencyCode, projectRateMinorUnits) : '';
+                assignmentHourlyReference.textContent = referenceLabel ? `Referencia proyecto: ${referenceLabel.replace('Valor HH referencia: ', '')}` : '';
+                assignmentHourlyReference.classList.toggle('d-none', referenceLabel === '');
+            }
+
+            if (assignmentHourlyEffective) {
+                if ((hourlyValue ?? 0) > 0) {
+                    assignmentHourlyEffective.textContent = `Efectivo: ${formatAssignmentMoney(hourlyValue, assignmentRateMeta.currencyCode, assignmentRateMeta.decimals)} / HH · Asignación`;
+                } else if ((projectRateAmount ?? 0) > 0) {
+                    assignmentHourlyEffective.textContent = `Efectivo: ${formatAssignmentMoney(projectRateAmount, projectRateCurrencyCode, Number.isNaN(projectRateMinorUnits) ? 0 : projectRateMinorUnits)} / HH · Proyecto`;
+                } else {
+                    assignmentHourlyEffective.textContent = 'Efectivo: No configurado';
+                }
+            }
+
+            if (assignmentProjectValueEffective) {
+                assignmentProjectValueEffective.textContent = projectValue === null
+                    ? 'Efectivo: No informado'
+                    : `Efectivo: ${formatAssignmentMoney(projectValue, assignmentRateMeta.currencyCode, assignmentRateMeta.decimals)} · Asignación`;
+            }
 
             if (assignmentWarningDouble) {
                 assignmentWarningDouble.classList.toggle('d-none', !hasBothValues);
@@ -2181,6 +2291,7 @@
         assignmentEndInput?.addEventListener('input', syncAssignmentContext);
         assignmentEndInput?.addEventListener('change', syncAssignmentContext);
         assignmentEndInput?.addEventListener('blur', syncAssignmentContext);
+        rateUnitSelector?.addEventListener('change', syncAssignmentContext);
         syncAssignmentContext();
     })();
 </script>

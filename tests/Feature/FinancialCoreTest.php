@@ -195,6 +195,8 @@ class FinancialCoreTest extends TestCase
             'client_id' => $client->id,
             'code' => 'PRY-PRL-01',
             'name' => 'Proyecto Payroll',
+            'sales_currency_id' => Currency::query()->where('company_id', $this->company->id)->where('code', 'UF')->value('id'),
+            'contracted_hourly_rate' => 0.50,
             'project_status_id' => $this->statusId('project', 'EN_EJECUCION'),
             'billing_status_id' => $this->statusId('billing', 'pending'),
         ]);
@@ -297,6 +299,120 @@ class FinancialCoreTest extends TestCase
         $this->assertStringContainsString('Tarifa pactada', $explanationJson);
         $this->assertStringContainsString('ASI-PRL-01 · Proyecto Payroll', $explanationJson);
         $this->assertStringContainsString('UF 1,30 / HH', $explanationJson);
+    }
+
+    public function test_payroll_uses_project_contract_rate_when_assignment_hourly_value_is_empty(): void
+    {
+        $client = Client::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'CLI-PRL-02',
+            'legal_name' => 'Cliente Payroll Proyecto',
+            'client_status_id' => $this->statusId('client', 'active'),
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $this->company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => Currency::query()->where('company_id', $this->company->id)->where('code', 'UF')->value('id'),
+            'code' => 'PRY-PRL-02',
+            'name' => 'Proyecto Tarifa Proyecto',
+            'contracted_hourly_rate' => 0.50,
+            'project_status_id' => $this->statusId('project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId('billing', 'pending'),
+        ]);
+
+        $person = $this->person([
+            'modality' => 'Dependiente por hora',
+            'hourly_value' => 0,
+            'monthly_value' => 0,
+        ]);
+
+        $assignmentStatus = RecordStatus::query()->create([
+            'company_id' => $this->company->id,
+            'domain' => 'assignment',
+            'code' => 'active',
+            'name' => 'Activo',
+            'active' => true,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $this->company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_status_id' => $assignmentStatus->id,
+            'code' => 'ASI-PRL-02',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => null,
+        ]);
+
+        $approvalStatus = ApprovalStatus::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'approved',
+            'name' => 'Aprobado',
+            'active' => true,
+        ]);
+
+        $activity = Activity::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'ACT-PRL-02',
+            'name' => 'Actividad Payroll Proyecto',
+            'active' => true,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HRS-PRL-02',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-12',
+            'activity' => 'Actividad Payroll Proyecto',
+            'activity_id' => $activity->id,
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 0.50,
+            'calculated_amount' => 5,
+            'approval_status_id' => $approvalStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id]);
+        $expectedProjectRate = app(HourlyRateService::class)->resolveProjectRate($project->fresh(['salesCurrency']), '2026-08-01');
+
+        $this->assertSame(10.0, $payroll['hours_approved']);
+        $this->assertSame($expectedProjectRate, (float) $payroll['hourly_value']);
+
+        $record = PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'REM-PRL-02',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => $payroll['hours_approved'],
+            'hourly_value' => $payroll['hourly_value'],
+            'project_value' => $payroll['project_value'],
+            'base_salary' => $payroll['base_salary'],
+            'gross_amount' => $payroll['gross_amount'],
+            'taxable_amount' => $payroll['taxable_amount'],
+            'taxable_gross' => $payroll['taxable_gross'],
+            'employee_retention' => $payroll['employee_retention'],
+            'retention_rate' => $payroll['retention_rate'],
+            'employer_cost' => $payroll['employer_cost'],
+            'net_pay' => $payroll['net_pay'],
+            'calculation_status' => $payroll['calculation_status'],
+            'calculation_notes' => $payroll['calculation_notes'],
+            'legal_snapshot' => $payroll['legal_snapshot'],
+            'status' => 'Borrador',
+        ]);
+
+        $explanationJson = json_encode(app(PayrollService::class)->explain($record), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $this->assertStringContainsString('Proyecto Tarifa Proyecto', $explanationJson);
+        $this->assertStringContainsString('Proyecto · Proyecto Tarifa Proyecto', $explanationJson);
     }
 
     public function test_payroll_status_without_payment_date_remains_recalculable_and_specific(): void

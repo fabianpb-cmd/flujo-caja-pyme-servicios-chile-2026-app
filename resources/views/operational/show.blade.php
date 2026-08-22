@@ -4,6 +4,25 @@
 @php
     $fields = $config['fields'];
     $isCatalog = (bool) ($config['catalog'] ?? false);
+    $assignmentEffectiveHourlyDisplay = null;
+    $assignmentEffectiveHourlyOrigin = null;
+    $assignmentProjectValueDisplay = null;
+
+    if ($resource === 'assignments' && $item instanceof \App\Models\ProjectAssignment) {
+        $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency']);
+
+        if ((float) ($item->hourly_value ?? 0) > 0) {
+            $assignmentEffectiveHourlyDisplay = \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH';
+            $assignmentEffectiveHourlyOrigin = 'Asignación';
+        } elseif ((float) ($item->project?->contracted_hourly_rate ?? 0) > 0) {
+            $assignmentEffectiveHourlyDisplay = \App\Support\UiFormatter::formatMoney($item->project->contracted_hourly_rate, $item->project->salesCurrency ?: 'CLP').' / HH';
+            $assignmentEffectiveHourlyOrigin = 'Proyecto · '.($item->project->name ?: $item->project->code ?: 'No informado');
+        }
+
+        $assignmentProjectValueDisplay = $item->project_value !== null
+            ? \App\Support\UiFormatter::formatMoney($item->project_value, $item->hourlyRateDisplayCurrency ?: 'CLP')
+            : 'No informado';
+    }
 @endphp
 <div class="page-header">
     <div>
@@ -104,14 +123,20 @@
         @endif
         <div class="row mb-3">
             <dt class="col-sm-4">{{ $resource === 'payroll-records' && $field === 'hours_approved' ? 'Horas aprobadas del período' : $definition['label'] }}</dt>
-            @php($display = $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay)
-                ? $payrollHoursApprovedDisplay
-                : \App\Support\UiFormatter::display($item, $field, $definition))
+            @php($display = match (true) {
+                $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay) => $payrollHoursApprovedDisplay,
+                $resource === 'assignments' && $field === 'hourly_value' => $assignmentEffectiveHourlyDisplay ?: 'No configurado',
+                $resource === 'assignments' && $field === 'project_value' => $assignmentProjectValueDisplay,
+                default => \App\Support\UiFormatter::display($item, $field, $definition),
+            })
             <dd class="col-sm-8 mb-0 {{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-sm-end amount-cell' : '' }}">
                 @if (str_contains(mb_strtolower($definition['label']), 'estado') || in_array($field, ['status', 'payment_status', 'approval_status', 'project_status', 'billing_status'], true))
                     <x-status-badge :status="$display" />
                 @else
                     {{ $display }}
+                    @if ($resource === 'assignments' && $field === 'hourly_value' && $assignmentEffectiveHourlyOrigin)
+                        <div class="small text-muted mt-1">Origen: {{ $assignmentEffectiveHourlyOrigin }}</div>
+                    @endif
                 @endif
             </dd>
         </div>

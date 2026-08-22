@@ -237,9 +237,9 @@ class OperationalUiTest extends TestCase
         $response->assertSeeText('Centro de costo');
         $response->assertSee('data-bs-toggle="tooltip"', false);
         $response->assertSeeText('Los cálculos financieros asociados se actualizan al guardar.');
-        $response->assertSeeText('Usa Valor HH cuando el acuerdo considera una tarifa por cada hora de trabajo registrada.');
+        $response->assertSeeText('Valor HH es específico de la asignación cuando se informa. Si se deja vacío y el proyecto tiene tarifa contractual, Horas y Remuneraciones usarán esa referencia del proyecto.');
         $response->assertSeeText('Usa Monto pactado de la asignación cuando existe un monto fijo para la participación o para un hito acordado.');
-        $response->assertSeeText('Un valor 0,00 significa que esa modalidad no se utilizará en la asignación.');
+        $response->assertSeeText('Monto pactado y Horas mensuales son datos propios de esta asignación; no se completan automáticamente desde la venta neta del proyecto.');
         $response->assertSeeText('Si completas Valor HH y Monto pactado de la asignación, el sistema mostrará una advertencia para que revises el acuerdo contractual.');
         $response->assertSeeText('Las fechas corresponden a la vigencia de la asignación y pueden diferir de las del proyecto, pero se advertirá si quedan fuera de su rango.');
         $response->assertSeeText('Referencia del proyecto');
@@ -251,6 +251,182 @@ class OperationalUiTest extends TestCase
         $response->assertSee('assignmentStartInput?.addEventListener(\'input\', syncAssignmentContext);', false);
         $response->assertSee('assignmentEndInput?.addEventListener(\'input\', syncAssignmentContext);', false);
         $response->assertDontSee('data-assignments-warning-box', false);
+    }
+
+    public function test_assignments_show_effective_project_rate_when_specific_hourly_value_is_empty(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $uf = $this->currency($company->id, 'UF', 'Unidad de Fomento');
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-ASS-RATE',
+            'legal_name' => 'Cliente Tarifa Proyecto',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-ASS-RATE',
+            'first_names' => 'Jaime',
+            'paternal_surname' => 'Tarifa',
+            'name' => 'Jaime Tarifa',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-ASS-RATE',
+            'name' => 'Alerta Matrículas',
+            'sale_net' => 160,
+            'contracted_hourly_rate' => 0.50,
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-ASS-RATE',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+
+        $edit->assertOk();
+        $edit->assertSee('Valor HH referencia: UF 0,50 / HH', false);
+        $edit->assertSee('Referencia proyecto: UF 0,50 / HH', false);
+        $edit->assertSee('Efectivo: UF 0,50 / HH · Proyecto', false);
+        $this->assertMatchesRegularExpression('/name="hourly_value"[^>]*value=""/', $edit->getContent());
+        $this->assertMatchesRegularExpression('/name="project_value"[^>]*value=""/', $edit->getContent());
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['assignments', $assignment->id]));
+
+        $show->assertOk();
+        $show->assertSee('UF 0,50 / HH');
+        $show->assertSee('Origen: Proyecto · Alerta Matrículas');
+        $show->assertSee('No informado');
+        $this->assertDoesNotMatchRegularExpression('/<dt class="col-sm-4">Valor HH<\/dt>\s*<dd[^>]*>\s*—/u', $show->getContent());
+    }
+
+    public function test_assignments_specific_hourly_value_prevails_over_project_reference(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $uf = $this->currency($company->id, 'UF', 'Unidad de Fomento');
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-ASS-OWN',
+            'legal_name' => 'Cliente Tarifa Específica',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-ASS-OWN',
+            'first_names' => 'Paula',
+            'paternal_surname' => 'Específica',
+            'name' => 'Paula Específica',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-ASS-OWN',
+            'name' => 'Proyecto Tarifa Específica',
+            'sale_net' => 160,
+            'contracted_hourly_rate' => 0.50,
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-ASS-OWN',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.60,
+        ]);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+
+        $edit->assertOk();
+        $edit->assertSee('Referencia proyecto: UF 0,50 / HH', false);
+        $edit->assertSee('Efectivo: UF 0,60 / HH · Asignación', false);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['assignments', $assignment->id]));
+
+        $show->assertOk();
+        $show->assertSee('UF 0,60 / HH');
+        $show->assertSee('Origen: Asignación');
+    }
+
+    public function test_assignments_do_not_inherit_project_value_from_sale_net(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $uf = $this->currency($company->id, 'UF', 'Unidad de Fomento');
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-ASS-NET',
+            'legal_name' => 'Cliente Venta Neta',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-ASS-NET',
+            'first_names' => 'Monto',
+            'paternal_surname' => 'Neto',
+            'name' => 'Monto Neto',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-ASS-NET',
+            'name' => 'Proyecto Venta Neta',
+            'sale_net' => 160,
+            'contracted_hourly_rate' => 0.50,
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'assignments'), [
+            'code' => 'ASI-ASS-NET',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => '',
+            'project_value' => '',
+            'monthly_hours' => 10,
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+
+        $response->assertRedirect(route('operational.index', 'assignments'));
+        $assignment = ProjectAssignment::query()->where('code', 'ASI-ASS-NET')->firstOrFail();
+        $this->assertNull($assignment->project_value);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+
+        $edit->assertOk();
+        $edit->assertSee('Venta neta proyecto: UF 160,00');
+        $edit->assertSee('Efectivo: No informado', false);
+        $edit->assertDontSee('Efectivo: UF 160,00 · Proyecto', false);
+        $this->assertMatchesRegularExpression('/name="project_value"[^>]*value=""/', $edit->getContent());
     }
 
     public function test_assignments_bind_reactive_warnings_to_the_operational_form(): void
@@ -1023,6 +1199,65 @@ class OperationalUiTest extends TestCase
         $this->assertSame($client->id, $projectEntry->client_id);
         $this->assertSame(35000.0, (float) $projectEntry->hourly_value);
         $this->assertSame(70000.0, (float) $projectEntry->calculated_amount);
+
+        $uf = Currency::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'UF'],
+            ['name' => 'Unidad de Fomento', 'symbol' => 'UF', 'minor_units' => 2, 'active' => true, 'sort_order' => 2]
+        );
+
+        $personProjectUf = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-HH-03',
+            'first_names' => 'Tarifa',
+            'paternal_surname' => 'Project UF',
+            'name' => 'Tarifa Project UF',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $projectUf = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-HH-UF',
+            'name' => 'Proyecto Horas UF',
+            'contracted_hourly_rate' => 0.50,
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personProjectUf->id,
+            'client_id' => $client->id,
+            'project_id' => $projectUf->id,
+            'code' => 'ASI-HH-03',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => null,
+            'start_date' => '2026-08-01',
+        ]);
+
+        $projectRateUf = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'code' => 'HOR-003',
+            'person_id' => $personProjectUf->id,
+            'project_id' => $projectUf->id,
+            'client_id' => $client->id,
+            'entry_date' => '10/08/2026',
+            'activity_id' => $activity->id,
+            'hours_worked' => 2,
+            'hours_approved' => 2,
+            'hourly_value' => 1,
+            'approval_status_id' => $approvalStatus->id,
+            'payment_status' => 'pending',
+        ]);
+
+        $projectRateUf->assertRedirect(route('operational.index', 'time-entries'));
+        $projectUfEntry = TimeEntry::query()->where('code', 'HOR-003')->firstOrFail();
+        $this->assertSame($client->id, $projectUfEntry->client_id);
+        $this->assertSame(0.5, (float) $projectUfEntry->hourly_value);
+        $this->assertSame(1.0, (float) $projectUfEntry->calculated_amount);
     }
 
     public function test_time_entries_show_clarified_titles_help_and_assignment_context(): void
