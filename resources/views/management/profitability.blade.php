@@ -4,7 +4,7 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Rentabilidad por proyecto</h1>
-        <div class="page-subtitle">Calculada desde ventas netas, HH aprobadas/costo HH real y gastos directos, sin usar caja para el margen.</div>
+        <div class="page-subtitle">Separa el margen real del período del compromiso proyectado de personal, sin usar caja para el margen.</div>
     </div>
     <form method="GET" class="d-flex flex-wrap gap-2">
         <input class="form-control" type="search" name="q" value="{{ $query }}" placeholder="Proyecto o cliente">
@@ -65,6 +65,11 @@
             <th class="text-end">Venta prom. HH</th>
             <th class="text-end">Costo HH prom.</th>
             <th class="text-end">Margen HH</th>
+            <th class="text-end">Venta contractual</th>
+            <th class="text-end">Personal comprometido</th>
+            <th class="text-end">Margen proyectado personal</th>
+            <th class="text-end">% comprometido</th>
+            <th>Alertas proyección</th>
             <th>Alertas</th>
             <th>Estado</th>
         </tr>
@@ -105,6 +110,21 @@
                 <td class="text-end amount-cell">{{ $row['effective_rate'] !== null ? \App\Support\UiFormatter::formatMoney($row['effective_rate']) : '—' }}</td>
                 <td class="text-end amount-cell">{{ $row['hour_cost'] !== null ? \App\Support\UiFormatter::formatMoney($row['hour_cost']) : '—' }}</td>
                 <td class="text-end amount-cell {{ ($row['hour_margin'] ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">{{ $row['hour_margin'] !== null ? \App\Support\UiFormatter::formatMoney($row['hour_margin']) : '—' }}</td>
+                <td class="text-end amount-cell">{{ $row['projected_personnel_sale'] !== null ? \App\Support\UiFormatter::formatMoney($row['projected_personnel_sale']) : '—' }}</td>
+                <td class="text-end amount-cell">{{ $row['personnel_committed_cost'] !== null ? \App\Support\UiFormatter::formatMoney($row['personnel_committed_cost']) : 'No disponible' }}</td>
+                <td class="text-end amount-cell {{ ($row['projected_personnel_margin'] ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">{{ $row['projected_personnel_margin'] !== null ? \App\Support\UiFormatter::formatMoney($row['projected_personnel_margin']) : 'No disponible' }}</td>
+                <td class="text-end amount-cell">{{ $row['committed_percentage'] !== null ? \App\Support\UiFormatter::formatPercent($row['committed_percentage'] / 100, 1) : 'No disponible' }}</td>
+                <td>
+                    @if (! empty($row['commitment_warnings']))
+                        <ul class="mb-0 ps-3 small">
+                            @foreach ($row['commitment_warnings'] as $warning)
+                                <li>{{ $warning }}</li>
+                            @endforeach
+                        </ul>
+                    @else
+                        <span class="text-muted">—</span>
+                    @endif
+                </td>
                 <td>
                     @if (! empty($row['alerts']))
                         <ul class="mb-0 ps-3 small">
@@ -119,7 +139,7 @@
                 <td><x-status-badge :status="$row['status']" /></td>
             </tr>
         @empty
-            <tr><td colspan="21" class="text-center text-muted py-5">Sin proyectos para mostrar.</td></tr>
+            <tr><td colspan="26" class="text-center text-muted py-5">Sin proyectos para mostrar.</td></tr>
         @endforelse
         </tbody>
     </table>

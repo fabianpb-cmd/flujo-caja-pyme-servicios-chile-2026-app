@@ -2533,6 +2533,179 @@ class OperationalUiTest extends TestCase
         $this->assertSame($projectCode, $project->refresh()->code);
     }
 
+    public function test_assignments_render_project_commitment_preview_and_preview_endpoint(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        $clp = $this->currency($company->id, 'CLP', 'Peso chileno');
+
+        LegalParameter::query()->create([
+            'company_id' => $company->id,
+            'parameter_code' => 'RETENCION_HONORARIOS',
+            'parameter_name' => 'Retención honorarios',
+            'valid_from' => '2026-01-01',
+            'valid_to' => '2026-12-31',
+            'value' => 0.1525,
+            'unit' => '%',
+        ]);
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-COMMIT-UI',
+            'legal_name' => 'Cliente Compromiso UI',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $clp->id,
+            'code' => 'PRY-COMMIT-UI',
+            'name' => 'Proyecto Compromiso UI',
+            'sale_net' => 50000,
+            'contracted_hourly_rate' => 1000,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-COMMIT-UI',
+            'first_names' => 'Persona',
+            'paternal_surname' => 'Compromiso',
+            'name' => 'Persona Compromiso',
+            'modality' => 'Pago por hora',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-COMMIT-UI',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => null,
+            'monthly_hours' => 40,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+
+        $edit->assertOk();
+        $edit->assertSee('Compromiso del proyecto');
+        $edit->assertSee('data-assignment-commitment-preview-url="'.route('operational.assignment-commitment-preview', 'assignments').'"', false);
+        $edit->assertSee('Venta neta: $ 50.000', false);
+        $edit->assertSee('Costo estimado de esta asignación: $ 40.000', false);
+        $edit->assertSee('Compromiso después de guardar: $ 40.000', false);
+        $edit->assertSee('Margen proyectado después de guardar: $ 10.000', false);
+
+        $preview = $this->actingAs($admin)->post(route('operational.assignment-commitment-preview', 'assignments'), [
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => '',
+            'project_value' => '',
+            'monthly_hours' => 60,
+            'start_date' => '01/08/2026',
+            'end_date' => '31/08/2026',
+            'exclude_assignment_id' => $assignment->id,
+        ]);
+
+        $preview->assertOk()
+            ->assertJsonPath('sale_net_clp', 50000)
+            ->assertJsonPath('current_personnel_committed_cost', 0)
+            ->assertJsonPath('assignment_estimated_cost', 60000)
+            ->assertJsonPath('after_save_personnel_committed_cost', 60000)
+            ->assertJsonPath('projected_personnel_margin', -10000)
+            ->assertJsonPath('negative_margin', true)
+            ->assertJsonPath('negative_margin_amount', 10000);
+    }
+
+    public function test_project_show_displays_personnel_commitment_summary(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        $clp = $this->currency($company->id, 'CLP', 'Peso chileno');
+
+        LegalParameter::query()->create([
+            'company_id' => $company->id,
+            'parameter_code' => 'RETENCION_HONORARIOS',
+            'parameter_name' => 'Retención honorarios',
+            'valid_from' => '2026-01-01',
+            'valid_to' => '2026-12-31',
+            'value' => 0.1525,
+            'unit' => '%',
+        ]);
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-COMMIT-SHOW',
+            'legal_name' => 'Cliente Show',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $clp->id,
+            'code' => 'PRY-COMMIT-SHOW',
+            'name' => 'Proyecto Show',
+            'sale_net' => 50000,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-COMMIT-SHOW',
+            'name' => 'Persona Show',
+            'modality' => 'Pago por hora',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-COMMIT-SHOW',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => 1000,
+            'monthly_hours' => 40,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['projects', $project->id]));
+
+        $show->assertOk();
+        $show->assertSee('Compromiso de personal');
+        $show->assertSee('Venta neta');
+        $show->assertSee('$ 50.000', false);
+        $show->assertSee('Personal comprometido');
+        $show->assertSee('$ 40.000', false);
+        $show->assertSee('Margen proyectado de personal');
+        $show->assertSee('$ 10.000', false);
+        $show->assertSee('80 %', false);
+    }
+
     private function companyWithAdmin(): array
     {
         $company = Company::query()->create([

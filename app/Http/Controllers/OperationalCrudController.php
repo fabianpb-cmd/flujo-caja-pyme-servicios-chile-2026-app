@@ -20,11 +20,13 @@ use App\Services\HourlyCostService;
 use App\Services\OperationalDependencyService;
 use App\Services\PayablesService;
 use App\Services\PayrollService;
+use App\Services\ProjectCommitmentService;
 use App\Services\SalesPrefacturationService;
 use App\Services\ReceivablesService;
 use App\Support\MassAssignment;
 use DomainException;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +43,7 @@ class OperationalCrudController extends Controller
         private readonly ReceivablesService $receivables,
         private readonly PayablesService $payables,
         private readonly PayrollService $payroll,
+        private readonly ProjectCommitmentService $commitments,
         private readonly SalesPrefacturationService $salesPrefacturation,
         private readonly HourlyRateService $hourlyRates,
         private readonly HourlyCostService $hourlyCosts,
@@ -122,6 +125,7 @@ class OperationalCrudController extends Controller
             'payrollViewMeta' => $this->payrollViewMeta($resource),
             'payrollFormState' => [],
             'payrollHourlyCost' => null,
+            'assignmentCommitmentPreview' => $resource === 'assignments' ? $this->assignmentCommitmentPreviewData($request, $item) : null,
         ]);
     }
 
@@ -159,8 +163,9 @@ class OperationalCrudController extends Controller
         $payrollCalculationBreakdown = $resource === 'payroll-records' ? $this->payroll->explain($item) : null;
         $salesCalculationBreakdown = $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null;
         $payrollFormState = $resource === 'payroll-records' ? $this->payroll->formState($item) : [];
+        $projectCommitment = $resource === 'projects' ? $this->commitments->summarizeProject($item) : null;
 
-        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState'));
+        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment'));
     }
 
     public function edit(Request $request, string $resource, int $record): View
@@ -180,7 +185,36 @@ class OperationalCrudController extends Controller
             'payrollHourlyCost' => $resource === 'payroll-records' ? $this->hourlyCosts->forPayroll($item) : null,
             'payrollCalculationBreakdown' => $resource === 'payroll-records' ? $this->payroll->explain($item) : null,
             'salesCalculationBreakdown' => $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null,
+            'assignmentCommitmentPreview' => $resource === 'assignments' ? $this->assignmentCommitmentPreviewData($request, $item) : null,
         ]);
+    }
+
+    public function assignmentCommitmentPreview(Request $request): JsonResponse
+    {
+        abort_unless($request->route('resource') === 'assignments', 404);
+
+        $config = $this->config('assignments');
+        $this->authorizeResource($request, $config, 'create');
+
+        $assignment = $this->assignmentDraftFromInput($request);
+        $excludeAssignmentId = $request->integer('exclude_assignment_id') ?: null;
+
+        return response()->json(
+            $assignment?->project_id && $assignment->person_id
+                ? $this->commitments->previewAssignment($assignment, $excludeAssignmentId)
+                : [
+                    'sale_net_clp' => null,
+                    'current_personnel_committed_cost' => null,
+                    'assignment_estimated_cost' => null,
+                    'after_save_personnel_committed_cost' => null,
+                    'projected_personnel_margin' => null,
+                    'committed_percentage' => null,
+                    'calculation_complete' => false,
+                    'warnings' => ['Seleccione una persona y un proyecto para estimar el compromiso.'],
+                    'negative_margin' => false,
+                    'negative_margin_amount' => null,
+                ]
+        );
     }
 
     public function update(CrudResourceRequest $request, string $resource, int $record): RedirectResponse
@@ -812,5 +846,97 @@ class OperationalCrudController extends Controller
     {
         return collect($config['usage'] ?? [])
             ->sum(fn (array $usage) => $usage['model']::query()->where($usage['column'], $item->getKey())->count());
+    }
+
+    private function assignmentCommitmentPreviewData(Request $request, ProjectAssignment $item): ?array
+    {
+        $draft = $this->assignmentDraftFromInput($request, $item);
+        if (! $draft?->project_id || ! $draft->person_id) {
+            return null;
+        }
+
+        return $this->commitments->previewAssignment(
+            $draft,
+            $item->exists ? (int) $item->id : null,
+        );
+    }
+
+    private function assignmentDraftFromInput(Request $request, ?ProjectAssignment $item = null): ?ProjectAssignment
+    {
+        $old = fn (string $field, mixed $default = null): mixed => session()->hasOldInput($field)
+            ? old($field)
+            : $request->input($field, $default);
+
+        $projectId = $this->nullableInteger($old('project_id', $item?->project_id));
+        $personId = $this->nullableInteger($old('person_id', $item?->person_id));
+
+        if (! $projectId || ! $personId) {
+            return null;
+        }
+
+        $assignment = $item?->exists ? $item->replicate() : new ProjectAssignment();
+        $assignment->id = $item?->id;
+        $assignment->exists = false;
+        $assignment->company_id = $request->user()->company_id;
+        $assignment->project_id = $projectId;
+        $assignment->person_id = $personId;
+        $assignment->client_id = $this->nullableInteger($old('client_id', $item?->client_id));
+        $assignment->assignment_status_id = $this->nullableInteger($old('assignment_status_id', $item?->assignment_status_id));
+        $assignment->hourly_rate_unit_type = strtoupper((string) ($old('hourly_rate_unit_type', $item?->hourly_rate_unit_type ?: 'UF') ?: 'UF'));
+        $assignment->hourly_rate_currency_id = $this->nullableInteger($old('hourly_rate_currency_id', $item?->hourly_rate_currency_id));
+        $assignment->hourly_value = $this->nullableDecimal($old('hourly_value', $item?->hourly_value));
+        $assignment->project_value = $this->nullableDecimal($old('project_value', $item?->project_value));
+        $assignment->monthly_hours = $this->nullableDecimal($old('monthly_hours', $item?->monthly_hours));
+        $assignment->start_date = \App\Support\UiFormatter::parseDateInput((string) ($old('start_date', optional($item?->start_date)->format('d/m/Y')) ?: ''));
+        $assignment->end_date = \App\Support\UiFormatter::parseDateInput((string) ($old('end_date', optional($item?->end_date)->format('d/m/Y')) ?: ''));
+        $assignment->code = $item?->code ?: 'BORRADOR';
+
+        $person = Person::query()
+            ->forCompany($request->user()->company_id)
+            ->with(['employmentMode', 'employmentContractType', 'afp', 'healthSystemCatalog', 'hourlyRateCurrency'])
+            ->find($personId);
+        $project = Project::query()
+            ->forCompany($request->user()->company_id)
+            ->with(['salesCurrency', 'client'])
+            ->find($projectId);
+
+        if (! $person || ! $project) {
+            return null;
+        }
+
+        $assignment->setRelation('person', $person);
+        $assignment->setRelation('project', $project);
+
+        if ($assignment->assignment_status_id) {
+            $assignment->setRelation('assignmentStatus', \App\Models\RecordStatus::query()->find($assignment->assignment_status_id));
+        }
+
+        if ($assignment->hourly_rate_currency_id) {
+            $assignment->setRelation('hourlyRateCurrency', Currency::query()->find($assignment->hourly_rate_currency_id));
+        }
+
+        return $assignment;
+    }
+
+    private function nullableInteger(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (int) $value;
+    }
+
+    private function nullableDecimal(mixed $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_string($value)) {
+            $value = str_replace(',', '.', trim($value));
+        }
+
+        return is_numeric($value) ? (float) $value : null;
     }
 }

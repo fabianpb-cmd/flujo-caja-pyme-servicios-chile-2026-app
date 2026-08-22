@@ -39,6 +39,24 @@ class PayrollService
         ];
     }
 
+    public function modalityFlags(Person $person): array
+    {
+        $person->loadMissing(['employmentMode', 'employmentContractType']);
+
+        $modeCode = strtoupper((string) $person->employmentMode?->code);
+        $contractCode = strtoupper((string) $person->employmentContractType?->code);
+        $modality = mb_strtolower((string) ($modeCode ?: $person->modality));
+
+        return [
+            'mode_code' => $modeCode,
+            'contract_code' => $contractCode,
+            'modality' => $modality,
+            'is_dependent' => $this->isDependent($modeCode, $contractCode, $modality),
+            'is_hourly' => $this->isHourly($modeCode, $modality),
+            'is_project' => $this->isProject($modeCode, $modality),
+        ];
+    }
+
     private function payrollContext(Person $person, Carbon $period, ?int $projectId = null): array
     {
         $person->loadMissing(['employmentMode', 'employmentContractType', 'afp', 'healthSystemCatalog']);

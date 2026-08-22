@@ -113,6 +113,43 @@
         </div>
     @endif
 
+    @if ($resource === 'projects' && ! empty($projectCommitment))
+        <div class="app-panel p-3 mb-4">
+            <div class="section-title mb-2">Compromiso de personal</div>
+            <div class="row g-3">
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Venta neta</div>
+                    <div class="fw-semibold">{{ $projectCommitment['sale_net_clp'] !== null ? \App\Support\UiFormatter::formatMoney($projectCommitment['sale_net_clp']) : 'No disponible' }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Personal comprometido</div>
+                    <div class="fw-semibold">{{ $projectCommitment['personnel_committed_cost'] !== null ? \App\Support\UiFormatter::formatMoney($projectCommitment['personnel_committed_cost']) : 'No disponible' }}</div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">{{ ($projectCommitment['projected_personnel_margin'] ?? 0) < 0 ? 'Pérdida proyectada' : 'Margen proyectado de personal' }}</div>
+                    <div class="fw-semibold {{ ($projectCommitment['projected_personnel_margin'] ?? 0) < 0 ? 'text-danger' : 'text-success' }}">
+                        {{ $projectCommitment['projected_personnel_margin'] !== null ? \App\Support\UiFormatter::formatMoney(abs($projectCommitment['projected_personnel_margin'])) : 'No disponible' }}
+                    </div>
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <div class="text-muted small">Comprometido</div>
+                    <div class="fw-semibold {{ ($projectCommitment['committed_percentage'] ?? 0) > 100 ? 'text-danger' : '' }}">
+                        {{ $projectCommitment['committed_percentage'] !== null ? \App\Support\UiFormatter::formatPercent($projectCommitment['committed_percentage'] / 100, 1) : 'No disponible' }}
+                    </div>
+                </div>
+            </div>
+            @if (! empty($projectCommitment['warnings']))
+                <div class="alert {{ $projectCommitment['negative_margin'] ? 'alert-warning' : 'alert-secondary' }} py-2 mt-3 mb-0">
+                    <ul class="mb-0 ps-3 small">
+                        @foreach ($projectCommitment['warnings'] as $warning)
+                            <li>{{ $warning }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+        </div>
+    @endif
+
     @php($currentSection = null)
     @foreach ($fields as $field => $definition)
         @if (($definition['section'] ?? null) !== $currentSection)

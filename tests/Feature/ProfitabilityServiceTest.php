@@ -13,9 +13,12 @@ use App\Models\ExchangeRate;
 use App\Models\PayrollRecord;
 use App\Models\Person;
 use App\Models\Project;
+use App\Models\ProjectAssignment;
+use App\Models\RecordStatus;
 use App\Models\SalesDocument;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Models\LegalParameter;
 use App\Services\ProfitabilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -234,6 +237,86 @@ class ProfitabilityServiceTest extends TestCase
         $response->assertSee('Venta generada');
         $response->assertSee('HH pendientes');
         $response->assertSee('Costo laboral');
+        $response->assertSee('Personal comprometido');
+        $response->assertSee('Margen proyectado personal');
+    }
+
+    public function test_profitability_keeps_projected_personnel_commitment_separate_from_real_cost(): void
+    {
+        $clp = $this->currency('CLP', 'Peso chileno');
+        $this->project->forceFill([
+            'sales_currency_id' => $clp->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ])->save();
+
+        LegalParameter::query()->create([
+            'company_id' => $this->company->id,
+            'parameter_code' => 'RETENCION_HONORARIOS',
+            'parameter_name' => 'Retención honorarios',
+            'valid_from' => '2026-01-01',
+            'valid_to' => '2026-12-31',
+            'value' => 0.1525,
+            'unit' => '%',
+        ]);
+
+        $assignmentStatusId = RecordStatus::query()->create([
+            'company_id' => $this->company->id,
+            'domain' => 'assignment',
+            'code' => 'active',
+            'name' => 'Activo',
+            'active' => true,
+        ])->id;
+
+        $person = $this->person([
+            'modality' => 'Pago por hora',
+            'monthly_value' => 0,
+            'hourly_value' => 0,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $this->company->id,
+            'client_id' => $this->client->id,
+            'person_id' => $person->id,
+            'project_id' => $this->project->id,
+            'assignment_status_id' => $assignmentStatusId,
+            'code' => 'ASI-PRF-COMMIT',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => 1000,
+            'monthly_hours' => 50,
+        ]);
+
+        $this->payroll($person, $this->project, '2026-08-01', 200000, 0);
+        $this->approvedTime($person, $this->project, '2026-08-05', 20);
+
+        SalesDocument::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'ING-PRF-COMMIT',
+            'client_id' => $this->client->id,
+            'project_id' => $this->project->id,
+            'document_type' => 'Factura',
+            'issue_date' => '2026-08-09',
+            'net_amount' => 900000,
+            'vat_amount' => 171000,
+            'gross_amount' => 1071000,
+            'status' => 'Confirmado',
+            'is_voided' => false,
+        ]);
+
+        $row = collect(app(ProfitabilityService::class)->byProject($this->company->id, ['period' => '2026-08-01']))
+            ->firstWhere('project_id', $this->project->id);
+
+        $this->assertSame(200000.0, $row['cost_personal']);
+        $this->assertSame(50000.0, $row['personnel_committed_cost']);
+        $this->assertSame(950000.0, $row['projected_personnel_margin']);
+        $this->assertSame(200000.0, $row['total_cost']);
+        $this->assertSame(700000.0, $row['margin']);
+        $this->assertSame([], $row['commitment_warnings']);
     }
 
     public function test_project_sales_currency_is_converted_to_clp_for_profitability(): void
@@ -263,16 +346,16 @@ class ProfitabilityServiceTest extends TestCase
         $this->assertSame(924780.0, $row['sale']);
     }
 
-    private function person(): Person
+    private function person(array $overrides = []): Person
     {
-        return Person::query()->create([
+        return Person::query()->create(array_merge([
             'company_id' => $this->company->id,
             'code' => 'PER-'.uniqid(),
             'name' => 'Persona Rentabilidad',
             'modality' => 'Dependiente mensual',
             'monthly_hours' => 160,
             'status' => 'active',
-        ]);
+        ], $overrides));
     }
 
     private function payroll(Person $person, Project $project, string $period, float $companyCost, float $vacationProvision): PayrollRecord

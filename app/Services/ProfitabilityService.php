@@ -19,6 +19,7 @@ class ProfitabilityService
     public function __construct(
         private readonly CompanySettingsService $settings,
         private readonly HourlyCostService $hourlyCosts,
+        private readonly ProjectCommitmentService $commitments,
         private readonly LegalParameterService $legalParameters,
         private readonly CurrencyConversionService $conversions,
     )
@@ -59,6 +60,7 @@ class ProfitabilityService
                 $expensesByProject,
                 $collectedByProject,
             ): array {
+                $commitment = $this->commitments->summarizeProject($project);
                 $allocationRow = $allocation['projects'][$project->id] ?? ['cost' => 0.0, 'hours' => 0.0, 'vacation_provision' => 0.0];
                 $salesRow = $salesByProject[$project->id] ?? ['generated' => 0.0, 'invoiced' => 0.0];
                 $hoursRow = $hoursByProject[$project->id] ?? ['worked' => 0.0, 'approved' => 0.0];
@@ -93,6 +95,8 @@ class ProfitabilityService
                     $alerts[] = 'Proyecto con margen negativo';
                 }
 
+                $projectedAlerts = $commitment['warnings'] ?? [];
+
                 return [
                     'project_id' => $project->id,
                     'project_code' => $project->code,
@@ -117,6 +121,12 @@ class ProfitabilityService
                     'hour_cost' => $averageCostHour,
                     'hour_margin' => $hourMargin,
                     'alerts' => $alerts,
+                    'projected_personnel_sale' => $commitment['sale_net_clp'],
+                    'personnel_committed_cost' => $commitment['personnel_committed_cost'],
+                    'projected_personnel_margin' => $commitment['projected_personnel_margin'],
+                    'committed_percentage' => $commitment['committed_percentage'],
+                    'commitment_calculation_complete' => $commitment['calculation_complete'],
+                    'commitment_warnings' => $projectedAlerts,
                     'status' => $marginPct < 0 ? 'Pérdida' : ($marginPct < $minimumMargin ? 'Bajo mínimo' : 'OK'),
                     'calculation_breakdown' => [
                         'result' => [
@@ -137,6 +147,16 @@ class ProfitabilityService
                                     ['label' => 'Costo total directo', 'value' => UiFormatter::formatMoney($totalDirectCost), 'strong' => true],
                                     ['label' => 'Margen', 'value' => UiFormatter::formatMoney($margin), 'strong' => true],
                                     ['label' => 'Margen %', 'value' => UiFormatter::formatPercent($marginPct)],
+                                ],
+                            ],
+                            [
+                                'title' => 'Compromiso de personal proyectado',
+                                'rows' => [
+                                    ['label' => 'Venta contractual', 'value' => $commitment['sale_net_clp'] !== null ? UiFormatter::formatMoney($commitment['sale_net_clp']) : 'No disponible'],
+                                    ['label' => 'Personal comprometido', 'value' => $commitment['personnel_committed_cost'] !== null ? UiFormatter::formatMoney($commitment['personnel_committed_cost']) : 'No disponible'],
+                                    ['label' => 'Margen proyectado personal', 'value' => $commitment['projected_personnel_margin'] !== null ? UiFormatter::formatMoney($commitment['projected_personnel_margin']) : 'No disponible', 'strong' => true],
+                                    ['label' => '% comprometido', 'value' => $commitment['committed_percentage'] !== null ? UiFormatter::formatPercent($commitment['committed_percentage'] / 100, 1) : 'No disponible'],
+                                    ['label' => 'Cálculo completo', 'value' => $commitment['calculation_complete'] ? 'Sí' : 'No'],
                                 ],
                             ],
                             [

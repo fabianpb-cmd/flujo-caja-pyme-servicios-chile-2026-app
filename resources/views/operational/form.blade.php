@@ -328,6 +328,44 @@
 @php($assignmentProjectExceedsSale = $assignmentProjectSaleNet !== null && is_numeric($assignmentProjectValue) && (float) $assignmentProjectValue > (float) $assignmentProjectSaleNet)
 @php($assignmentStartDate = old('start_date', optional($item->start_date)->format('d/m/Y')))
 @php($assignmentEndDate = old('end_date', optional($item->end_date)->format('d/m/Y')))
+@php($assignmentCommitmentPreview = $assignmentCommitmentPreview ?? null)
+@php($assignmentCommitmentSaleDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => 'Venta neta: Seleccione una persona y un proyecto.',
+    ($assignmentCommitmentPreview['sale_net_clp'] ?? null) !== null => 'Venta neta: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['sale_net_clp']),
+    default => 'Venta neta: No disponible',
+})
+@php($assignmentCommitmentCurrentDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => 'Personal comprometido actualmente: —',
+    ($assignmentCommitmentPreview['current_personnel_committed_cost'] ?? null) !== null => 'Personal comprometido actualmente: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['current_personnel_committed_cost']),
+    default => 'Personal comprometido actualmente: No disponible',
+})
+@php($assignmentCommitmentEstimateDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => 'Costo estimado de esta asignación: —',
+    ($assignmentCommitmentPreview['assignment_estimated_cost'] ?? null) !== null => 'Costo estimado de esta asignación: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['assignment_estimated_cost']),
+    default => 'Costo estimado de esta asignación: No disponible',
+})
+@php($assignmentCommitmentAfterDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => 'Compromiso después de guardar: —',
+    ($assignmentCommitmentPreview['after_save_personnel_committed_cost'] ?? null) !== null => 'Compromiso después de guardar: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['after_save_personnel_committed_cost']),
+    default => 'Compromiso después de guardar: No disponible',
+})
+@php($assignmentCommitmentMarginDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => 'Margen proyectado después de guardar: —',
+    ($assignmentCommitmentPreview['projected_personnel_margin'] ?? null) !== null => 'Margen proyectado después de guardar: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['projected_personnel_margin']),
+    default => 'Margen proyectado después de guardar: No disponible',
+})
+@php($assignmentCommitmentPercentageDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => 'Comprometido: —',
+    ($assignmentCommitmentPreview['committed_percentage'] ?? null) !== null => 'Comprometido: '.\App\Support\UiFormatter::formatPercent(($assignmentCommitmentPreview['committed_percentage'] ?? 0) / 100, 1),
+    default => 'Comprometido: No disponible',
+})
+@php($assignmentCommitmentNegativeWarning = is_array($assignmentCommitmentPreview) && !empty($assignmentCommitmentPreview['negative_margin']) && ($assignmentCommitmentPreview['negative_margin_amount'] ?? null) !== null
+    ? 'El costo de personal comprometido superaría la venta neta del proyecto en '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['negative_margin_amount']).'. El proyecto quedaría con margen proyectado de personal negativo.'
+    : null)
+@php($assignmentCommitmentDisplayWarnings = collect($assignmentCommitmentPreview['warnings'] ?? [])
+    ->filter(fn ($warning) => $warning !== 'El costo de personal comprometido supera la venta neta del proyecto.')
+    ->values()
+    ->all())
 @php($assignmentProjectVigencyDisplay = match (true) {
     $assignmentSelectedProject === null => 'Vigencia proyecto: Seleccione un proyecto.',
     filled($assignmentProjectStartDate) && filled($assignmentProjectEndDate) => 'Vigencia proyecto: '.\App\Support\UiFormatter::formatDate($assignmentProjectStartDate).' al '.\App\Support\UiFormatter::formatDate($assignmentProjectEndDate),
@@ -797,7 +835,7 @@
     </div>
 @endif
 
-<form method="POST" action="{{ $editing ? route('operational.update', [$resource, $item->id]) : route('operational.store', $resource) }}" class="app-panel p-4" data-operational-form="true">
+<form method="POST" action="{{ $editing ? route('operational.update', [$resource, $item->id]) : route('operational.store', $resource) }}" class="app-panel p-4" data-operational-form="true" @if($resource === 'assignments') data-assignment-commitment-preview-url="{{ route('operational.assignment-commitment-preview', 'assignments') }}" data-assignment-current-id="{{ $editing && $item->exists ? $item->id : '' }}" @endif>
     @csrf
     @if ($editing)
         @method('PUT')
@@ -1280,6 +1318,23 @@
                                     <div class="small text-muted" data-assignments-project-vigency>
                                         {{ $assignmentProjectVigencyDisplay }}
                                     </div>
+                                </div>
+                                <div class="app-panel bg-light border-0 p-2 mt-2" data-assignments-commitment-reference>
+                                    <div class="small fw-semibold text-muted mb-1">Compromiso del proyecto</div>
+                                    <div class="small text-muted" data-assignments-commitment-sale-net>{{ $assignmentCommitmentSaleDisplay }}</div>
+                                    <div class="small text-muted" data-assignments-commitment-current>{{ $assignmentCommitmentCurrentDisplay }}</div>
+                                    <div class="small text-muted" data-assignments-commitment-estimate>{{ $assignmentCommitmentEstimateDisplay }}</div>
+                                    <div class="small text-muted" data-assignments-commitment-after>{{ $assignmentCommitmentAfterDisplay }}</div>
+                                    <div class="small text-muted" data-assignments-commitment-margin>{{ $assignmentCommitmentMarginDisplay }}</div>
+                                    <div class="small text-muted" data-assignments-commitment-percentage>{{ $assignmentCommitmentPercentageDisplay }}</div>
+                                </div>
+                                <div class="mt-2 {{ ($assignmentCommitmentNegativeWarning || !empty($assignmentCommitmentDisplayWarnings)) ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-assignments-commitment-warning-box>
+                                    <div class="{{ $assignmentCommitmentNegativeWarning ? '' : 'd-none' }}" data-assignments-commitment-warning-negative>{{ $assignmentCommitmentNegativeWarning }}</div>
+                                    <ul class="small mb-0 ps-3 {{ !empty($assignmentCommitmentDisplayWarnings) ? '' : 'd-none' }}" data-assignments-commitment-warning-list>
+                                        @foreach ($assignmentCommitmentDisplayWarnings as $warning)
+                                            <li>{{ $warning }}</li>
+                                        @endforeach
+                                    </ul>
                                 </div>
                             @elseif ($resource === 'time-entries' && $field === 'person_id')
                                 <select
@@ -2052,10 +2107,29 @@
         const assignmentHourlyReference = form.querySelector('[data-assignments-hourly-reference]');
         const assignmentHourlyEffective = form.querySelector('[data-assignments-hourly-effective]');
         const assignmentProjectValueEffective = form.querySelector('[data-assignments-project-value-effective]');
+        const assignmentCommitmentBox = form.querySelector('[data-assignments-commitment-reference]');
+        const assignmentCommitmentWarningBox = form.querySelector('[data-assignments-commitment-warning-box]');
+        const assignmentCommitmentSale = form.querySelector('[data-assignments-commitment-sale-net]');
+        const assignmentCommitmentCurrent = form.querySelector('[data-assignments-commitment-current]');
+        const assignmentCommitmentEstimate = form.querySelector('[data-assignments-commitment-estimate]');
+        const assignmentCommitmentAfter = form.querySelector('[data-assignments-commitment-after]');
+        const assignmentCommitmentMargin = form.querySelector('[data-assignments-commitment-margin]');
+        const assignmentCommitmentPercentage = form.querySelector('[data-assignments-commitment-percentage]');
+        const assignmentCommitmentNegative = form.querySelector('[data-assignments-commitment-warning-negative]');
+        const assignmentCommitmentWarningList = form.querySelector('[data-assignments-commitment-warning-list]');
+        const assignmentPersonInput = form.querySelector('#person_id');
+        const assignmentClientInput = form.querySelector('#client_id');
+        const assignmentMonthlyHoursInput = form.querySelector('#monthly_hours');
+        const assignmentStatusInput = form.querySelector('#assignment_status_id');
+        const assignmentCommitmentPreviewUrl = form.dataset.assignmentCommitmentPreviewUrl || '';
+        const assignmentCurrentId = form.dataset.assignmentCurrentId || '';
         const assignmentHourlyInput = form.querySelector('#hourly_value');
         const assignmentProjectInput = form.querySelector('#project_value');
         const assignmentStartInput = form.querySelector('#start_date');
         const assignmentEndInput = form.querySelector('#end_date');
+        const csrfToken = form.querySelector('input[name="_token"]')?.value || '';
+        let assignmentCommitmentTimer = null;
+        let assignmentCommitmentAbortController = null;
 
         const parseAssignmentNumber = (value) => {
             if (value === null || value === undefined || value === '') {
@@ -2177,6 +2251,151 @@
             return '';
         };
 
+        const assignmentCommitmentText = (label, value) => `${label}: ${value}`;
+
+        const renderAssignmentCommitmentPreview = (preview) => {
+            if (!assignmentCommitmentBox) {
+                return;
+            }
+
+            const sale = preview?.sale_net_clp;
+            const current = preview?.current_personnel_committed_cost;
+            const estimate = preview?.assignment_estimated_cost;
+            const after = preview?.after_save_personnel_committed_cost;
+            const margin = preview?.projected_personnel_margin;
+            const percentage = preview?.committed_percentage;
+            const negativeAmount = preview?.negative_margin_amount;
+            const warnings = Array.isArray(preview?.warnings)
+                ? preview.warnings.filter((warning) => warning && warning !== 'El costo de personal comprometido supera la venta neta del proyecto.')
+                : [];
+
+            if (assignmentCommitmentSale) {
+                assignmentCommitmentSale.textContent = assignmentCommitmentText('Venta neta', sale !== null && sale !== undefined ? formatAssignmentMoney(sale, 'CLP', 0) : 'No disponible');
+            }
+
+            if (assignmentCommitmentCurrent) {
+                assignmentCommitmentCurrent.textContent = assignmentCommitmentText('Personal comprometido actualmente', current !== null && current !== undefined ? formatAssignmentMoney(current, 'CLP', 0) : 'No disponible');
+            }
+
+            if (assignmentCommitmentEstimate) {
+                assignmentCommitmentEstimate.textContent = assignmentCommitmentText('Costo estimado de esta asignación', estimate !== null && estimate !== undefined ? formatAssignmentMoney(estimate, 'CLP', 0) : 'No disponible');
+            }
+
+            if (assignmentCommitmentAfter) {
+                assignmentCommitmentAfter.textContent = assignmentCommitmentText('Compromiso después de guardar', after !== null && after !== undefined ? formatAssignmentMoney(after, 'CLP', 0) : 'No disponible');
+            }
+
+            if (assignmentCommitmentMargin) {
+                assignmentCommitmentMargin.textContent = assignmentCommitmentText('Margen proyectado después de guardar', margin !== null && margin !== undefined ? formatAssignmentMoney(margin, 'CLP', 0) : 'No disponible');
+            }
+
+            if (assignmentCommitmentPercentage) {
+                assignmentCommitmentPercentage.textContent = assignmentCommitmentText('Comprometido', percentage !== null && percentage !== undefined
+                    ? `${new Intl.NumberFormat('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Number(percentage))} %`
+                    : 'No disponible');
+            }
+
+            if (assignmentCommitmentNegative) {
+                const text = preview?.negative_margin && negativeAmount !== null && negativeAmount !== undefined
+                    ? `El costo de personal comprometido superaría la venta neta del proyecto en ${formatAssignmentMoney(negativeAmount, 'CLP', 0)}. El proyecto quedaría con margen proyectado de personal negativo.`
+                    : '';
+                assignmentCommitmentNegative.textContent = text;
+                assignmentCommitmentNegative.classList.toggle('d-none', text === '');
+            }
+
+            if (assignmentCommitmentWarningList) {
+                assignmentCommitmentWarningList.innerHTML = warnings.map((warning) => `<li>${warning}</li>`).join('');
+                assignmentCommitmentWarningList.classList.toggle('d-none', warnings.length === 0);
+            }
+
+            if (assignmentCommitmentWarningBox) {
+                assignmentCommitmentWarningBox.classList.toggle('d-none', (!preview?.negative_margin && warnings.length === 0));
+            }
+        };
+
+        const requestAssignmentCommitmentPreview = () => {
+            if (!assignmentCommitmentPreviewUrl || !assignmentCommitmentBox) {
+                return;
+            }
+
+            const personId = assignmentPersonInput?.value || '';
+            const projectId = assignmentProjectSelect?.value || '';
+
+            if (!personId || !projectId) {
+                renderAssignmentCommitmentPreview({
+                    sale_net_clp: null,
+                    current_personnel_committed_cost: null,
+                    assignment_estimated_cost: null,
+                    after_save_personnel_committed_cost: null,
+                    projected_personnel_margin: null,
+                    committed_percentage: null,
+                    calculation_complete: false,
+                    warnings: ['Seleccione una persona y un proyecto para estimar el compromiso.'],
+                    negative_margin: false,
+                    negative_margin_amount: null,
+                });
+                return;
+            }
+
+            const payload = new URLSearchParams();
+            payload.set('_token', csrfToken);
+            payload.set('person_id', personId);
+            payload.set('client_id', assignmentClientInput?.value || '');
+            payload.set('project_id', projectId);
+            payload.set('assignment_status_id', assignmentStatusInput?.value || '');
+            payload.set('hourly_rate_unit_type', rateUnitTypeField?.value || 'UF');
+            payload.set('hourly_rate_currency_id', rateCurrencyField?.value || '');
+            payload.set('hourly_value', assignmentHourlyInput?.value || '');
+            payload.set('project_value', assignmentProjectInput?.value || '');
+            payload.set('monthly_hours', assignmentMonthlyHoursInput?.value || '');
+            payload.set('start_date', assignmentStartInput?.value || '');
+            payload.set('end_date', assignmentEndInput?.value || '');
+            payload.set('exclude_assignment_id', assignmentCurrentId);
+
+            assignmentCommitmentAbortController?.abort();
+            assignmentCommitmentAbortController = new AbortController();
+
+            fetch(assignmentCommitmentPreviewUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: payload.toString(),
+                signal: assignmentCommitmentAbortController.signal,
+            })
+                .then((response) => response.ok ? response.json() : Promise.reject(new Error(`preview-${response.status}`)))
+                .then((preview) => renderAssignmentCommitmentPreview(preview))
+                .catch((error) => {
+                    if (error.name === 'AbortError') {
+                        return;
+                    }
+
+                    renderAssignmentCommitmentPreview({
+                        sale_net_clp: null,
+                        current_personnel_committed_cost: null,
+                        assignment_estimated_cost: null,
+                        after_save_personnel_committed_cost: null,
+                        projected_personnel_margin: null,
+                        committed_percentage: null,
+                        calculation_complete: false,
+                        warnings: ['No fue posible actualizar el compromiso del proyecto en este momento.'],
+                        negative_margin: false,
+                        negative_margin_amount: null,
+                    });
+                });
+        };
+
+        const scheduleAssignmentCommitmentPreview = () => {
+            if (!assignmentCommitmentBox) {
+                return;
+            }
+
+            window.clearTimeout(assignmentCommitmentTimer);
+            assignmentCommitmentTimer = window.setTimeout(requestAssignmentCommitmentPreview, 180);
+        };
+
         const syncAssignmentContext = () => {
             if (!assignmentProjectSelect || !assignmentProjectSaleNet) {
                 return;
@@ -2258,12 +2477,16 @@
             if (assignmentVigencyWarningBox) {
                 assignmentVigencyWarningBox.classList.toggle('d-none', vigencyWarning === '');
             }
+
+            scheduleAssignmentCommitmentPreview();
         };
 
         const assignmentReactiveFieldIds = new Set([
+            'person_id',
             'project_id',
             'hourly_value',
             'project_value',
+            'monthly_hours',
             'start_date',
             'end_date',
         ]);
