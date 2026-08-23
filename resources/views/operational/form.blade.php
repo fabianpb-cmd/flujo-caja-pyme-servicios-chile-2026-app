@@ -368,6 +368,14 @@
     ($assignmentCommitmentPreview['committed_percentage'] ?? null) !== null => 'Comprometido: '.\App\Support\UiFormatter::formatPercent(($assignmentCommitmentPreview['committed_percentage'] ?? 0) / 100, 1),
     default => 'Comprometido: No disponible',
 })
+@php($assignmentCommitmentExchangeRateInfo = is_array($assignmentCommitmentPreview) ? ($assignmentCommitmentPreview['exchange_rate_info'] ?? null) : null)
+@php($assignmentCommitmentUsesProjectedExchangeRate = is_array($assignmentCommitmentPreview) ? (bool) ($assignmentCommitmentPreview['uses_projected_exchange_rate'] ?? false) : false)
+@php($assignmentCommitmentExchangeRateNote = is_array($assignmentCommitmentPreview) ? ($assignmentCommitmentPreview['exchange_rate_note'] ?? null) : null)
+@php($assignmentCommitmentExchangeRateNote = filled($assignmentCommitmentExchangeRateNote)
+    ? $assignmentCommitmentExchangeRateNote
+    : ($assignmentCommitmentUsesProjectedExchangeRate && is_array($assignmentCommitmentExchangeRateInfo) && ! empty($assignmentCommitmentExchangeRateInfo['value']) && ! empty($assignmentCommitmentExchangeRateInfo['value_date'])
+        ? 'Proyección calculada con UF de referencia de '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentExchangeRateInfo['value'], 'CLP').' correspondiente al '.\Illuminate\Support\Carbon::parse($assignmentCommitmentExchangeRateInfo['value_date'])->format('d/m/Y').', última UF oficial disponible.'
+        : null))
 @php($assignmentCommitmentNegativeWarning = is_array($assignmentCommitmentPreview) && !empty($assignmentCommitmentPreview['negative_margin']) && ($assignmentCommitmentPreview['negative_margin_amount'] ?? null) !== null
     ? 'El costo de personal comprometido superaría la venta neta del proyecto en '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['negative_margin_amount']).'. El proyecto quedaría con margen proyectado de personal negativo.'
     : null)
@@ -1360,6 +1368,7 @@
                                     <div class="small text-muted" data-assignments-commitment-after>{{ $assignmentCommitmentAfterDisplay }}</div>
                                     <div class="small text-muted" data-assignments-commitment-margin>{{ $assignmentCommitmentMarginDisplay }}</div>
                                     <div class="small text-muted" data-assignments-commitment-percentage>{{ $assignmentCommitmentPercentageDisplay }}</div>
+                                    <div class="small text-muted mt-1 {{ filled($assignmentCommitmentExchangeRateNote) ? '' : 'd-none' }}" data-assignments-commitment-exchange-note>{{ $assignmentCommitmentExchangeRateNote }}</div>
                                 </div>
                                 <div class="mt-2 {{ ($assignmentCommitmentNegativeWarning || !empty($assignmentCommitmentDisplayWarnings)) ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-assignments-commitment-warning-box>
                                     <div class="{{ $assignmentCommitmentNegativeWarning ? '' : 'd-none' }}" data-assignments-commitment-warning-negative>{{ $assignmentCommitmentNegativeWarning }}</div>
@@ -2180,6 +2189,7 @@
         const assignmentCommitmentAfter = form.querySelector('[data-assignments-commitment-after]');
         const assignmentCommitmentMargin = form.querySelector('[data-assignments-commitment-margin]');
         const assignmentCommitmentPercentage = form.querySelector('[data-assignments-commitment-percentage]');
+        const assignmentCommitmentExchangeNote = form.querySelector('[data-assignments-commitment-exchange-note]');
         const assignmentCommitmentNegative = form.querySelector('[data-assignments-commitment-warning-negative]');
         const assignmentCommitmentWarningList = form.querySelector('[data-assignments-commitment-warning-list]');
         const assignmentPersonInput = form.querySelector('#person_id');
@@ -2350,6 +2360,7 @@
             const margin = preview?.projected_personnel_margin;
             const percentage = preview?.committed_percentage;
             const negativeAmount = preview?.negative_margin_amount;
+            const exchangeNote = preview?.exchange_rate_note;
             const warnings = Array.isArray(preview?.warnings)
                 ? preview.warnings.filter((warning) => warning && warning !== 'El costo de personal comprometido supera la venta neta del proyecto.')
                 : [];
@@ -2378,6 +2389,14 @@
                 assignmentCommitmentPercentage.textContent = assignmentCommitmentText('Comprometido', percentage !== null && percentage !== undefined
                     ? `${new Intl.NumberFormat('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Number(percentage))} %`
                     : 'No disponible');
+            }
+
+        if (assignmentCommitmentExchangeNote) {
+                const projectedExchangeNote = !exchangeNote && preview?.uses_projected_exchange_rate && preview?.exchange_rate_info?.value && preview?.exchange_rate_info?.value_date
+                    ? `Proyección calculada con UF de referencia de ${formatAssignmentMoney(preview.exchange_rate_info.value, 'CLP', 0)} correspondiente al ${formatAssignmentDate(preview.exchange_rate_info.value_date)}, última UF oficial disponible.`
+                    : '';
+                assignmentCommitmentExchangeNote.textContent = exchangeNote || projectedExchangeNote;
+                assignmentCommitmentExchangeNote.classList.toggle('d-none', !(exchangeNote || projectedExchangeNote));
             }
 
             if (assignmentCommitmentNegative) {

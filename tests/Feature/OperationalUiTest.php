@@ -251,6 +251,10 @@ class OperationalUiTest extends TestCase
         $response->assertSee('assignmentStartInput?.addEventListener(\'input\', syncAssignmentContext);', false);
         $response->assertSee('assignmentEndInput?.addEventListener(\'input\', syncAssignmentContext);', false);
         $response->assertDontSee('data-assignments-warning-box', false);
+        $this->assertDoesNotMatchRegularExpression(
+            '/<div class="page-breadcrumb">[^<]*;[^<]*<\/div>\s*<div>\s*<h1 class="page-title">Nueva asignación<\/h1>/s',
+            $response->getContent(),
+        );
     }
 
     public function test_assignments_show_effective_project_rate_when_specific_hourly_value_is_empty(): void
@@ -307,6 +311,10 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('Efectivo: UF 0,50 / HH · Persona', false);
         $this->assertMatchesRegularExpression('/name="hourly_value"[^>]*value=""/', $edit->getContent());
         $this->assertMatchesRegularExpression('/name="project_value"[^>]*value=""/', $edit->getContent());
+        $this->assertDoesNotMatchRegularExpression(
+            '/<div class="page-breadcrumb">[^<]*;[^<]*<\/div>\s*<div>\s*<h1 class="page-title">Editar asignación<\/h1>/s',
+            $edit->getContent(),
+        );
 
         $show = $this->actingAs($admin)->get(route('operational.show', ['assignments', $assignment->id]));
 
@@ -2636,6 +2644,71 @@ class OperationalUiTest extends TestCase
             ->assertJsonPath('projected_personnel_margin', -10000)
             ->assertJsonPath('negative_margin', true)
             ->assertJsonPath('negative_margin_amount', 10000);
+    }
+
+    public function test_assignments_render_project_commitment_preview_with_projected_uf_note_for_future_periods(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        $uf = $this->currency($company->id, 'UF', 'Unidad de Fomento');
+        $clp = $this->currency($company->id, 'CLP', 'Peso chileno');
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-COMMIT-UF',
+            'legal_name' => 'Cliente UF UI',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-COMMIT-UF',
+            'name' => 'Proyecto UF UI',
+            'sale_net' => 50000,
+            'contracted_hourly_rate' => 1000,
+            'start_date' => '2027-10-01',
+            'end_date' => '2027-10-31',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-COMMIT-UF',
+            'first_names' => 'Persona',
+            'paternal_surname' => 'UF',
+            'name' => 'Persona UF',
+            'modality' => 'Pago por hora',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $uf->id,
+            'hourly_value' => 0,
+            'start_date' => '2027-10-01',
+            'end_date' => '2027-10-31',
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-COMMIT-UF',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $uf->id,
+            'hourly_value' => 1,
+            'monthly_hours' => 10,
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-31',
+        ]);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+
+        $edit->assertOk();
+        $edit->assertSee('Compromiso del proyecto', false);
+        $edit->assertSee('data-assignment-commitment-preview-url', false);
     }
 
     public function test_project_show_displays_personnel_commitment_summary(): void

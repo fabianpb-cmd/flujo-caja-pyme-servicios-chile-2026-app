@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Person;
+use App\Models\Currency;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
+use App\Models\UfValue;
 use Carbon\CarbonInterface;
 use DomainException;
 use Illuminate\Support\Carbon;
@@ -29,18 +31,21 @@ class ProjectCommitmentService
         $excludeAssignmentId = isset($options['exclude_assignment_id']) ? (int) $options['exclude_assignment_id'] : null;
         $includeAssignment = $options['include_assignment'] ?? null;
 
-        $warnings = [];
-        $saleNetClp = $this->projectSaleNetToClp($project, $warnings);
         $assignments = $this->projectAssignments($project, $excludeAssignmentId);
 
         if ($includeAssignment instanceof ProjectAssignment && (int) $includeAssignment->project_id === (int) $project->id && $this->assignmentIsActive($includeAssignment)) {
             $assignments->push($this->hydrateAssignment($includeAssignment));
         }
 
+        $warnings = [];
+        $projectExchangeInfo = null;
+        $commitmentReferenceDate = $this->commitmentReferenceDate($project, $assignments);
+        $saleNetClp = $this->projectSaleNetToClp($project, $warnings, $commitmentReferenceDate, $projectExchangeInfo);
         $assignmentCount = $assignments->count();
         $assignmentBreakdown = [];
         $totalCommittedCost = 0.0;
         $assignmentsComplete = true;
+        $projectedExchangeInfo = $projectExchangeInfo && ! empty($projectExchangeInfo['projected']) ? $projectExchangeInfo : null;
 
         foreach ($assignments as $assignment) {
             $estimate = $this->estimateAssignment($assignment, $project);
@@ -53,6 +58,10 @@ class ProjectCommitmentService
             $warnings = array_merge($warnings, $estimate['warnings']);
             if ($estimate['committed_cost'] !== null) {
                 $totalCommittedCost += (float) $estimate['committed_cost'];
+            }
+
+            if (! empty($estimate['uses_projected_exchange_rate']) && ! $projectedExchangeInfo) {
+                $projectedExchangeInfo = $estimate['exchange_rate_info'] ?? null;
             }
         }
 
@@ -68,6 +77,8 @@ class ProjectCommitmentService
             $warnings[] = 'El costo de personal comprometido supera la venta neta del proyecto.';
         }
 
+        $exchangeRateNote = $this->exchangeRateNote($projectedExchangeInfo);
+
         return [
             'project_id' => $project->id,
             'sale_net_clp' => $saleNetClp !== null ? round((float) $saleNetClp, 2) : null,
@@ -79,6 +90,9 @@ class ProjectCommitmentService
             'warnings' => array_values(array_unique(array_filter($warnings))),
             'negative_margin' => $calculationComplete && $projectedPersonnelMargin < 0,
             'negative_margin_amount' => $calculationComplete && $projectedPersonnelMargin < 0 ? abs($projectedPersonnelMargin) : null,
+            'uses_projected_exchange_rate' => (bool) $projectedExchangeInfo,
+            'exchange_rate_info' => $projectedExchangeInfo,
+            'exchange_rate_note' => $exchangeRateNote,
             'assignments' => $assignmentBreakdown,
         ];
     }
@@ -100,6 +114,9 @@ class ProjectCommitmentService
                 'warnings' => ['Seleccione una persona y un proyecto para estimar el compromiso.'],
                 'negative_margin' => false,
                 'negative_margin_amount' => null,
+                'uses_projected_exchange_rate' => false,
+                'exchange_rate_info' => null,
+                'exchange_rate_note' => null,
             ];
         }
 
@@ -127,6 +144,9 @@ class ProjectCommitmentService
             )))),
             'negative_margin' => (bool) ($after['negative_margin'] ?? false),
             'negative_margin_amount' => $after['negative_margin_amount'] ?? null,
+            'uses_projected_exchange_rate' => (bool) ($current['uses_projected_exchange_rate'] ?? false) || (bool) ($assignmentEstimate['uses_projected_exchange_rate'] ?? false) || (bool) ($after['uses_projected_exchange_rate'] ?? false),
+            'exchange_rate_info' => $after['exchange_rate_info'] ?? ($assignmentEstimate['exchange_rate_info'] ?? ($current['exchange_rate_info'] ?? null)),
+            'exchange_rate_note' => $this->exchangeRateNote($after['exchange_rate_info'] ?? ($assignmentEstimate['exchange_rate_info'] ?? ($current['exchange_rate_info'] ?? null))),
         ];
     }
 
@@ -154,39 +174,72 @@ class ProjectCommitmentService
         }
 
         $total = 0.0;
+        $usesProjectedExchangeRate = false;
+        $exchangeRateInfo = null;
+        $exchangeRateNotes = [];
         foreach ($this->periodsBetween($range['start'], $range['end']) as $periodStart) {
             $overlap = $this->monthOverlap($range['start'], $range['end'], $periodStart);
             $hours = round($monthlyHours * ($overlap['days'] / $periodStart->daysInMonth), 4);
 
             try {
-                $hourlyValue = $this->effectiveHourlyRateClp($assignment, $periodStart);
+                $hourlyWarnings = [];
+                $hourlyValue = $this->effectiveHourlyRateClp($assignment, $periodStart, $hourlyWarnings, $exchangeRateInfo, $usesProjectedExchangeRate);
                 if ($hourlyValue === null) {
-                    return $this->incompleteEstimate($assignment, "No se puede calcular el compromiso de {$assignment->code}: falta el Valor HH de costeo de la Asignación y de la Persona.");
+                    return $this->incompleteEstimate($assignment, $hourlyWarnings[0] ?? "No se puede calcular el compromiso de {$assignment->code}: falta el Valor HH de costeo de la Asignación y de la Persona.");
                 }
             } catch (DomainException $exception) {
                 return $this->incompleteEstimate($assignment, $exception->getMessage());
             }
 
+            if (! empty($exchangeRateInfo['projected']) && ! empty($exchangeRateInfo['note'])) {
+                $exchangeRateNotes[] = $exchangeRateInfo['note'];
+            }
+
             $total += round($hours * $hourlyValue, 2);
         }
 
-        return $this->completeEstimate($assignment, $total);
+        return array_merge($this->completeEstimate($assignment, $total), [
+            'uses_projected_exchange_rate' => $usesProjectedExchangeRate,
+            'exchange_rate_info' => $exchangeRateInfo,
+            'exchange_rate_note' => $exchangeRateNotes[0] ?? null,
+        ]);
     }
 
-    private function effectiveHourlyRateClp(ProjectAssignment $assignment, Carbon $periodStart): ?float
+    private function effectiveHourlyRateClp(ProjectAssignment $assignment, Carbon $periodStart, array &$warnings = [], ?array &$exchangeRateInfo = null, bool &$usesProjectedExchangeRate = false): ?float
     {
-        if ((float) ($assignment->hourly_value ?? 0) > 0) {
-            return (float) $this->hourlyRates->resolveAssignmentRate($assignment, $periodStart);
+        $costing = $this->hourlyRates->resolveCostingForAssignment($assignment, $periodStart);
+
+        if (($costing['amount'] ?? null) === null) {
+            return null;
         }
 
-        if ((float) ($assignment->person?->hourly_value ?? 0) > 0) {
-            return (float) $this->hourlyRates->resolvePersonRate($assignment->person, $periodStart);
+        $exchangeRateInfo = null;
+        $converted = $this->convertToClp(
+            companyId: (int) $assignment->company_id,
+            amount: (float) $costing['amount'],
+            unitType: (string) ($costing['unit_type'] ?? 'CURRENCY'),
+            currency: $costing['currency'] ?? null,
+            date: $periodStart,
+            warnings: $warnings,
+            exchangeRateInfo: $exchangeRateInfo,
+            allowProjectedUfFallback: true,
+            contextLabel: "No se puede calcular el compromiso de {$assignment->code}:",
+        );
+
+        $usesProjectedExchangeRate = (bool) ($exchangeRateInfo['projected'] ?? false);
+
+        if ($converted === null) {
+            return null;
         }
 
-        return null;
+        if (strtoupper((string) ($costing['unit_type'] ?? 'CURRENCY')) === 'UF') {
+            return \App\Support\UiFormatter::roundAmount($converted, 'CLP');
+        }
+
+        return $converted;
     }
 
-    private function projectSaleNetToClp(Project $project, array &$warnings): ?float
+    private function projectSaleNetToClp(Project $project, array &$warnings, CarbonInterface|string $referenceDate, ?array &$exchangeRateInfo = null): ?float
     {
         if ($project->sale_net === null || $project->sale_net === '') {
             $warnings[] = 'El proyecto no tiene venta neta configurada.';
@@ -195,45 +248,17 @@ class ProjectCommitmentService
         }
 
         $saleNet = (float) $project->sale_net;
-        $currency = $project->salesCurrency ?: null;
-        $currencyCode = strtoupper((string) ($currency?->code ?? 'CLP'));
-
-        if ($currencyCode === 'CLP' || $saleNet <= 0) {
-            return round($saleNet, 2);
-        }
-
-        if ($currencyCode === 'UF') {
-            $latest = $this->legalParameters->latestOfficialUfOnOrBefore($project->company_id, now());
-            if (! $latest) {
-                $warnings[] = 'Falta UF oficial para convertir la venta neta del proyecto.';
-
-                return null;
-            }
-
-            return round($saleNet * (float) $latest['value'], 2);
-        }
-
-        if (! $currency) {
-            $warnings[] = 'Falta moneda de venta para convertir la venta neta del proyecto.';
-
-            return null;
-        }
-
-        try {
-            $rate = (float) $this->legalParameters->exchangeRate($project->company_id, (int) $currency->id, now());
-        } catch (DomainException $exception) {
-            $warnings[] = $exception->getMessage();
-
-            return null;
-        }
-
-        return (float) $this->conversions->convert(
+        return $this->convertToClp(
+            companyId: $project->company_id,
             amount: $saleNet,
-            fromCurrency: $currency,
-            toCurrency: 'CLP',
-            exchangeRate: $rate,
-            date: now(),
-        )['converted_amount'];
+            unitType: 'CURRENCY',
+            currency: $project->salesCurrency ?: null,
+            date: $referenceDate,
+            warnings: $warnings,
+            exchangeRateInfo: $exchangeRateInfo,
+            allowProjectedUfFallback: true,
+            contextLabel: 'Falta UF oficial para convertir la venta neta del proyecto.',
+        );
     }
 
     private function projectAssignments(Project $project, ?int $excludeAssignmentId = null): Collection
@@ -375,6 +400,9 @@ class ProjectCommitmentService
             'committed_cost' => round($cost, 2),
             'calculation_complete' => true,
             'warnings' => [],
+            'uses_projected_exchange_rate' => false,
+            'exchange_rate_info' => null,
+            'exchange_rate_note' => null,
         ];
     }
 
@@ -386,6 +414,140 @@ class ProjectCommitmentService
             'committed_cost' => null,
             'calculation_complete' => false,
             'warnings' => [$warning],
+            'uses_projected_exchange_rate' => false,
+            'exchange_rate_info' => null,
+            'exchange_rate_note' => null,
         ];
+    }
+
+    private function commitmentReferenceDate(Project $project, Collection $assignments): Carbon
+    {
+        $dates = collect([
+            $project->start_date,
+            $project->end_date,
+        ])->filter()->map(fn ($date) => Carbon::parse($date)->startOfDay());
+
+        foreach ($assignments as $assignment) {
+            if (filled($assignment->start_date)) {
+                $dates->push(Carbon::parse($assignment->start_date)->startOfDay());
+            }
+
+            if (filled($assignment->end_date)) {
+                $dates->push(Carbon::parse($assignment->end_date)->startOfDay());
+            }
+        }
+
+        $dates->push(now()->startOfDay());
+
+        return $dates->filter()->max() ?? now()->startOfDay();
+    }
+
+    private function convertToClp(
+        int $companyId,
+        float $amount,
+        string $unitType,
+        Currency|array|string|null $currency,
+        CarbonInterface|string $date,
+        array &$warnings,
+        ?array &$exchangeRateInfo = null,
+        bool $allowProjectedUfFallback = false,
+        string $contextLabel = '',
+    ): ?float {
+        $amount = round($amount, 2);
+        $requestedDate = Carbon::parse($date)->startOfDay();
+        $exchangeRateInfo = null;
+
+        if ($amount <= 0) {
+            return round($amount, 2);
+        }
+
+        if (strtoupper($unitType) === 'UF') {
+            $exact = UfValue::query()
+                ->where('company_id', $companyId)
+                ->whereDate('value_date', $requestedDate->toDateString())
+                ->first();
+
+            if ($exact) {
+                $exchangeRateInfo = [
+                    'currency_code' => 'UF',
+                    'reference_date' => $requestedDate->toDateString(),
+                    'value_date' => Carbon::parse($exact->value_date)->toDateString(),
+                    'value' => (float) $exact->value,
+                    'projected' => false,
+                    'note' => null,
+                ];
+
+                return round($amount * (float) $exact->value, 2);
+            }
+
+            if ($allowProjectedUfFallback && $requestedDate->gt(now()->startOfDay())) {
+                $latest = $this->legalParameters->latestOfficialUfOnOrBefore($companyId, $requestedDate);
+                if ($latest) {
+                    $exchangeRateInfo = [
+                        'currency_code' => 'UF',
+                        'reference_date' => $requestedDate->toDateString(),
+                        'value_date' => Carbon::parse($latest['value_date'])->toDateString(),
+                        'value' => (float) $latest['value'],
+                        'projected' => true,
+                        'note' => 'Proyección calculada con UF de referencia de '.\App\Support\UiFormatter::formatMoney($latest['value'], 'CLP').' correspondiente al '.Carbon::parse($latest['value_date'])->format('d/m/Y').', última UF oficial disponible.',
+                    ];
+
+                    return round($amount * (float) $latest['value'], 2);
+                }
+            }
+
+            $warnings[] = $contextLabel !== ''
+                ? $contextLabel.' Falta UF oficial para '.$requestedDate->toDateString().'.'
+                : 'Falta UF oficial para '.$requestedDate->toDateString().'.';
+
+            return null;
+        }
+
+        $currencyCode = strtoupper((string) ($currency instanceof Currency ? $currency->code : ($currency ?: 'CLP')));
+        if ($currencyCode === 'CLP') {
+            return round($amount, 2);
+        }
+
+        if (! $currency instanceof Currency) {
+            $warnings[] = $contextLabel !== ''
+                ? $contextLabel.' Falta configuración de moneda para convertir '.$currencyCode.' a CLP.'
+                : 'Falta configuración de moneda para convertir '.$currencyCode.' a CLP.';
+
+            return null;
+        }
+
+        try {
+            $rate = (float) $this->legalParameters->exchangeRate($companyId, $currency->id, $requestedDate);
+        } catch (DomainException $exception) {
+            $warnings[] = $exception->getMessage();
+
+            return null;
+        }
+
+        $exchangeRateInfo = [
+            'currency_code' => $currencyCode,
+            'reference_date' => $requestedDate->toDateString(),
+            'value_date' => $requestedDate->toDateString(),
+            'value' => $rate,
+            'projected' => false,
+            'note' => null,
+        ];
+
+        return (float) $this->conversions->convert(
+            amount: $amount,
+            fromCurrency: $currency,
+            toCurrency: 'CLP',
+            exchangeRate: $rate,
+            date: $requestedDate,
+        )['converted_amount'];
+    }
+
+    private function exchangeRateNote(?array $exchangeRateInfo): ?string
+    {
+        if (! is_array($exchangeRateInfo) || empty($exchangeRateInfo['projected'])) {
+            return null;
+        }
+
+        return $exchangeRateInfo['note'] ?? null;
     }
 }

@@ -182,6 +182,105 @@ class ProjectCommitmentServiceTest extends TestCase
         $this->assertSame($assignment->id, $summary['assignments'][0]['assignment_id']);
     }
 
+    public function test_commitment_uses_exact_uf_when_available_for_the_requested_period(): void
+    {
+        $project = $this->project([
+            'sale_net' => 1000000,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona UF Exacta',
+            'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $this->assignment($person, $project, [
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertFalse($summary['uses_projected_exchange_rate']);
+        $this->assertNull($summary['exchange_rate_note']);
+        $this->assertSame(408450.0, $summary['personnel_committed_cost']);
+    }
+
+    public function test_commitment_uses_latest_official_uf_for_future_planning_dates(): void
+    {
+        $project = $this->project([
+            'sale_net' => 1000000,
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-31',
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona UF Proyectada',
+            'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-31',
+        ]);
+
+        $this->assignment($person, $project, [
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-31',
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertTrue($summary['uses_projected_exchange_rate']);
+        $this->assertNotNull($summary['exchange_rate_note']);
+        $this->assertStringContainsString('última UF oficial disponible', $summary['exchange_rate_note']);
+        $this->assertSame(408450.0, $summary['personnel_committed_cost']);
+    }
+
+    public function test_commitment_stays_strict_for_past_dates_without_an_exact_uf(): void
+    {
+        $project = $this->project([
+            'sale_net' => 1000000,
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-30',
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona UF Histórica',
+            'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-30',
+        ]);
+
+        $this->assignment($person, $project, [
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+            'start_date' => '2026-06-01',
+            'end_date' => '2026-06-30',
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertFalse($summary['calculation_complete']);
+        $this->assertNull($summary['personnel_committed_cost']);
+        $this->assertStringContainsString('Falta UF oficial para 2026-06-01', implode(' ', $summary['warnings']));
+    }
+
     public function test_commitment_is_incomplete_when_assignment_and_person_cost_rates_are_missing_even_if_project_has_contract_rate(): void
     {
         $project = $this->project([

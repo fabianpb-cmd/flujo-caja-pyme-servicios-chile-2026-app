@@ -57,6 +57,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | `projected_personnel_margin` | `sale_net_clp - personnel_committed_cost` | No aplica | No | No | Si falta información, el cálculo queda incompleto | Proyecto, rentabilidad proyectada |
 | `real_cost` | Remuneraciones, Horas reales y egresos según el servicio vigente | No aplica | No | No | No mezclar con compromiso | Rentabilidad real |
 | `real_margin` | Venta real/facturación real vs costo real | No aplica | No | No | No mezclar con proyectado | Rentabilidad real |
+| `ProjectCommitmentService` UF proyectada | Última UF oficial disponible cuando la fecha de proyección es futura y aún no existe UF oficial exacta | No aplica | No | No | Solo planificación proyectada; no altera Payroll ni transacciones reales | Compromiso de personal, rentabilidad proyectada |
 
 ## Presupuesto
 

@@ -7,6 +7,7 @@
     $assignmentEffectiveHourlyDisplay = null;
     $assignmentEffectiveHourlyOrigin = null;
     $assignmentProjectValueDisplay = null;
+    $projectCommitmentExchangeRateNote = null;
 
     if ($resource === 'assignments' && $item instanceof \App\Models\ProjectAssignment) {
         $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency', 'person.hourlyRateCurrency']);
@@ -114,6 +115,7 @@
     @endif
 
     @if ($resource === 'projects' && ! empty($projectCommitment))
+        @php($projectCommitmentExchangeRateNote = data_get($projectCommitment, 'exchange_rate_note'))
         <div class="app-panel p-3 mb-4">
             <div class="section-title mb-2">Compromiso de personal</div>
             <div class="row g-3">
@@ -138,6 +140,9 @@
                     </div>
                 </div>
             </div>
+            @if (filled($projectCommitmentExchangeRateNote))
+                <div class="small text-muted mt-3">{{ $projectCommitmentExchangeRateNote }}</div>
+            @endif
             @if (! empty($projectCommitment['warnings']))
                 <div class="alert {{ $projectCommitment['negative_margin'] ? 'alert-warning' : 'alert-secondary' }} py-2 mt-3 mb-0">
                     <ul class="mb-0 ps-3 small">
