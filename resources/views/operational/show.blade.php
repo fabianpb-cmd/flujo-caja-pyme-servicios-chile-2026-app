@@ -9,6 +9,7 @@
     $assignmentProjectValueDisplay = null;
     $projectCommitmentExchangeRateNote = null;
     $projectCommitmentSaleCurrencyCode = null;
+    $payrollDetailRowIndex = 0;
 
     if ($resource === 'assignments' && $item instanceof \App\Models\ProjectAssignment) {
         $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency', 'person.hourlyRateCurrency']);
@@ -168,7 +169,8 @@
                 <div class="section-title">{{ $currentSection }}</div>
             @endif
         @endif
-        <div class="row mb-3">
+        @php($payrollDetailRowIndex++)
+        <div class="row mb-3 payroll-detail-row {{ $resource === 'payroll-records' && $payrollDetailRowIndex % 2 === 1 ? 'payroll-detail-row-alt' : '' }}">
             <dt class="col-sm-4">{{ $resource === 'payroll-records' && $field === 'hours_approved' ? 'Horas aprobadas del período' : $definition['label'] }}</dt>
             @php($display = match (true) {
                 $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay) => $payrollHoursApprovedDisplay,
@@ -204,3 +206,26 @@
     @endif
 </div>
 @endsection
+
+@push('styles')
+    <style>
+        .payroll-detail-row {
+            border-radius: 0.75rem;
+            padding: 0.45rem 0.75rem;
+            transition: background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .payroll-detail-row-alt {
+            background-color: rgba(13, 110, 253, 0.045);
+        }
+
+        .payroll-detail-row:hover {
+            background-color: rgba(13, 110, 253, 0.075);
+        }
+
+        .payroll-detail-row dt,
+        .payroll-detail-row dd {
+            margin-bottom: 0;
+        }
+    </style>
+@endpush
