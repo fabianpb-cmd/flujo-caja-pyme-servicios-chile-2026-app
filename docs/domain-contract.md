@@ -83,6 +83,8 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | ProjectCommitmentService | Calcula costo comprometido de personal desde HH comprometidas y valor HH de costeo; no depende de la modalidad de payroll y no usa `project_value` como base del compromiso. |
 | ProjectCommitmentService temporalidad mensual | Un intervalo desde una fecha hasta la misma fecha del mes siguiente equivale exactamente a un mes de compromiso; la fecha término no genera un período parcial adicional. |
 | Horas | Representa ejecución real. No es compromiso ni presupuesto. |
+| Carga por período de Horas | Mantiene granularidad diaria: una carga por período genera múltiples `TimeEntry` diarios (`1 persona + 1 proyecto + 1 fecha` por fila). |
+| Carga por período transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
 | Remuneraciones incompletas | Si falta una fuente obligatoria para la modalidad vigente, la remuneración queda en revisión/incompleta; un valor persistido en cero no equivale a un cálculo válido. |
 | Horas automáticas en Remuneraciones | Un snapshot automático de horas aprobadas proveniente de Horas no equivale por sí mismo a un override manual. |

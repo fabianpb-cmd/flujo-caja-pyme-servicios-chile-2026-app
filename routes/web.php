@@ -85,6 +85,7 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->prefix('operacion/
     Route::get('/', 'index')->name('index');
     Route::get('/crear', 'create')->name('create');
     Route::post('/commitment-preview', 'assignmentCommitmentPreview')->name('assignment-commitment-preview');
+    Route::post('/period-preview', 'timeEntryPeriodPreview')->name('time-entry-period-preview');
     Route::post('/', 'store')->name('store');
     Route::get('/{record}', 'show')->name('show');
     Route::get('/{record}/editar', 'edit')->name('edit');

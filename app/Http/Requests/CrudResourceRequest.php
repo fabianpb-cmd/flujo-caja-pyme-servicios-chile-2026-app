@@ -32,6 +32,8 @@ class CrudResourceRequest extends FormRequest
         abort_unless($config, 404);
 
         $rules = $config['rules'];
+        $resource = (string) $this->route('resource');
+        $timeEntryEntryMode = strtolower((string) $this->input('entry_mode', 'daily'));
         $recordId = $this->route('record') ?? null;
         $autoManagedCode = $this->autoManagedCode($config['model']);
 
@@ -65,9 +67,26 @@ class CrudResourceRequest extends FormRequest
             $rules['code'][] = $unique;
         }
 
-        if ($this->route('resource') === 'projects' && isset($rules['sale_net'])) {
+        if ($resource === 'projects' && isset($rules['sale_net'])) {
             $currency = $this->projectSalesCurrency();
             $rules['sale_net'][] = 'decimal:0,'.$this->moneyMinorUnits($currency);
+        }
+
+        if ($resource === 'time-entries') {
+            $rules['entry_mode'] = ['required', Rule::in(['daily', 'period'])];
+
+            if ($timeEntryEntryMode === 'period') {
+                $rules['entry_date'] = ['nullable', 'date'];
+                $rules['hours_worked'] = ['nullable', 'numeric', 'gt:0', 'max:24'];
+                $rules['hours_approved'] = ['nullable', 'numeric', 'min:0', 'max:24'];
+                $rules['period_start_date'] = ['required', 'date'];
+                $rules['period_end_date'] = ['required', 'date', 'after_or_equal:period_start_date'];
+                $rules['period_distribution_mode'] = ['required', Rule::in(['equal', 'total', 'manual'])];
+                $rules['period_hours_per_day'] = ['nullable', 'numeric', 'gt:0', 'max:24', 'required_if:period_distribution_mode,equal'];
+                $rules['period_total_hours'] = ['nullable', 'numeric', 'gt:0', 'required_if:period_distribution_mode,total'];
+                $rules['period_rows_payload'] = ['nullable', 'string'];
+                $rules['period_rows'] = ['nullable', 'array'];
+            }
         }
 
         foreach ($config['fields'] as $field => $definition) {
@@ -139,8 +158,9 @@ class CrudResourceRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $config = config('operational.'.$this->route('resource').'.fields', []);
+        $resource = (string) $this->route('resource');
 
-        if ($this->route('resource') === 'people') {
+        if ($resource === 'people') {
             $this->merge([
                 'phone_country_code' => $this->input('phone_country_code') ?: '+56',
                 'phone_number' => $this->normalizeDigits($this->input('phone_number')),
@@ -175,11 +195,34 @@ class CrudResourceRequest extends FormRequest
             $this->merge([$field => $this->boolean($field)]);
         }
 
-        if ($this->route('resource') === 'payroll-records' && filled($this->input('period_date'))) {
+        if ($resource === 'payroll-records' && filled($this->input('period_date'))) {
             $period = UiFormatter::parseDateInput($this->input('period_date'));
             if ($period) {
                 $this->merge(['period_date' => $period->copy()->startOfMonth()->toDateString()]);
             }
+        }
+
+        if ($resource === 'time-entries') {
+            $this->merge([
+                'entry_mode' => strtolower((string) $this->input('entry_mode', 'daily')),
+                'period_distribution_mode' => strtolower((string) $this->input('period_distribution_mode', 'equal')),
+            ]);
+
+            foreach (['period_start_date', 'period_end_date'] as $field) {
+                if (filled($this->input($field))) {
+                    $this->merge([$field => $this->normalizeDateInput($this->input($field))]);
+                }
+            }
+
+            $decodedRows = [];
+            if (filled($this->input('period_rows_payload'))) {
+                $decoded = json_decode((string) $this->input('period_rows_payload'), true);
+                if (is_array($decoded)) {
+                    $decodedRows = $decoded;
+                }
+            }
+
+            $this->merge(['period_rows' => $decodedRows]);
         }
     }
 
@@ -223,8 +266,12 @@ class CrudResourceRequest extends FormRequest
                 }
             }
 
-            if ($resource === 'time-entries' && filled($this->input('project_id')) && filled($this->input('person_id')) && filled($this->input('entry_date'))) {
-                $this->validateTimeEntryIntegrity($validator);
+            if ($resource === 'time-entries') {
+                if (strtolower((string) $this->input('entry_mode', 'daily')) === 'period') {
+                    $this->validateTimeEntryPeriodIntegrity($validator);
+                } elseif (filled($this->input('project_id')) && filled($this->input('person_id')) && filled($this->input('entry_date'))) {
+                    $this->validateTimeEntryIntegrity($validator);
+                }
             }
 
             $this->validateTechnicalFieldLimits($validator, $resource, $config);
@@ -568,6 +615,24 @@ class CrudResourceRequest extends FormRequest
         $paymentStatus = strtolower(trim((string) $this->input('payment_status')));
         if ($paymentStatus === 'paid' && $approvalCode !== 'approved') {
             $validator->errors()->add('payment_status', 'Un registro solo puede marcarse como pagado cuando su aprobación está en estado Aprobado.');
+        }
+    }
+
+    private function validateTimeEntryPeriodIntegrity(Validator $validator): void
+    {
+        if (! filled($this->input('project_id')) || ! filled($this->input('person_id')) || ! filled($this->input('period_start_date')) || ! filled($this->input('period_end_date'))) {
+            return;
+        }
+
+        $preview = app(\App\Services\TimeEntryPeriodService::class)->preview(
+            $this->user()->company_id,
+            $this->all()
+        );
+
+        foreach ($preview['field_errors'] ?? [] as $field => $messages) {
+            foreach ((array) $messages as $message) {
+                $validator->errors()->add($field, $message);
+            }
         }
     }
 

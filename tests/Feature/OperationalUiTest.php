@@ -1586,6 +1586,426 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('/ HH');
     }
 
+    public function test_time_entries_create_view_exposes_period_load_mode_without_replacing_daily_mode(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-PERIOD-UI',
+            'first_names' => 'Patricia',
+            'paternal_surname' => 'Periodo',
+            'name' => 'Patricia Periodo',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.55,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-PERIOD-UI',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-24',
+            'end_date' => '2026-09-30',
+        ]);
+
+        $create = $this->actingAs($admin)->get(route('operational.create', 'time-entries'));
+
+        $create->assertOk();
+        $create->assertSee('Carga diaria');
+        $create->assertSee('Carga por período');
+        $create->assertSee('data-time-entry-period-preview-url', false);
+        $create->assertSee('period_start_date', false);
+        $create->assertSee('period_end_date', false);
+        $create->assertSee('Horas iguales por día');
+        $create->assertSee('Total del período');
+        $create->assertSee('Manual');
+        $create->assertSee('data-time-entry-period-table', false);
+        $create->assertSee('data-time-entry-period-rows-payload', false);
+        $create->assertSee('La carga por período genera múltiples registros diarios', false);
+    }
+
+    public function test_time_entries_period_load_creates_daily_entries_with_equal_total_and_manual_distribution(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-PERIOD',
+            'legal_name' => 'Cliente Período',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-PERIOD',
+            'name' => 'Proyecto Período',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-PERIOD'],
+            ['name' => 'Actividad Período', 'active' => true, 'sort_order' => 1]
+        );
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $personSplit = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-SPLIT',
+            'first_names' => 'Sandra',
+            'paternal_surname' => 'Tramo',
+            'name' => 'Sandra Tramo',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.5,
+        ]);
+
+        $assignmentA = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personSplit->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-A',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.5,
+            'start_date' => '2026-08-24',
+            'end_date' => '2026-08-26',
+        ]);
+
+        $assignmentB = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personSplit->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-B',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.75,
+            'start_date' => '2026-08-27',
+            'end_date' => '2026-08-28',
+        ]);
+
+        $equal = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $personSplit->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '24/08/2026',
+            'period_end_date' => '28/08/2026',
+            'period_distribution_mode' => 'equal',
+            'period_hours_per_day' => 8,
+            'period_rows_payload' => '',
+        ]);
+
+        $equal->assertRedirect(route('operational.index', 'time-entries'));
+        $equal->assertSessionHas('status', 'Se registraron 5 días y 40 h.');
+
+        $splitEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $personSplit->id)
+            ->orderBy('entry_date')
+            ->get();
+
+        $this->assertCount(5, $splitEntries);
+        $this->assertSame(40.0, round((float) $splitEntries->sum('hours_worked'), 2));
+        $this->assertSame(40.0, round((float) $splitEntries->sum('hours_approved'), 2));
+        $this->assertSame([$assignmentA->id, $assignmentA->id, $assignmentA->id, $assignmentB->id, $assignmentB->id], $splitEntries->pluck('assignment_id')->all());
+
+        $personTotal = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-TOTAL',
+            'first_names' => 'Tomás',
+            'paternal_surname' => 'Total',
+            'name' => 'Tomás Total',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.65,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personTotal->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-TOTAL',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.65,
+            'start_date' => '2026-08-31',
+            'end_date' => '2026-09-04',
+        ]);
+
+        $total = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $personTotal->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '31/08/2026',
+            'period_end_date' => '04/09/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 40,
+            'period_rows_payload' => '',
+        ]);
+
+        $total->assertRedirect(route('operational.index', 'time-entries'));
+
+        $totalEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $personTotal->id)
+            ->orderBy('entry_date')
+            ->get();
+
+        $this->assertCount(5, $totalEntries);
+        $this->assertSame(40.0, round((float) $totalEntries->sum('hours_worked'), 2));
+        $this->assertSame([8.0, 8.0, 8.0, 8.0, 8.0], $totalEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
+
+        $personManual = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-MANUAL',
+            'first_names' => 'Mónica',
+            'paternal_surname' => 'Manual',
+            'name' => 'Mónica Manual',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.6,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personManual->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-MANUAL',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.6,
+            'start_date' => '2026-09-07',
+            'end_date' => '2026-09-09',
+        ]);
+
+        $manualRows = json_encode([
+            ['entry_date' => '2026-09-07', 'included' => true, 'hours_worked' => 3.33],
+            ['entry_date' => '2026-09-08', 'included' => true, 'hours_worked' => 3.33],
+            ['entry_date' => '2026-09-09', 'included' => true, 'hours_worked' => 3.34],
+        ], JSON_THROW_ON_ERROR);
+
+        $manual = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $personManual->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '07/09/2026',
+            'period_end_date' => '09/09/2026',
+            'period_distribution_mode' => 'manual',
+            'period_rows_payload' => $manualRows,
+        ]);
+
+        $manual->assertRedirect(route('operational.index', 'time-entries'));
+
+        $manualEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $personManual->id)
+            ->orderBy('entry_date')
+            ->get();
+
+        $this->assertCount(3, $manualEntries);
+        $this->assertSame([3.33, 3.33, 3.34], $manualEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
+        $this->assertSame(10.0, round((float) $manualEntries->sum('hours_worked'), 2));
+    }
+
+    public function test_time_entries_period_load_blocks_invalid_rows_transactionally(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-PERIOD-ERR',
+            'legal_name' => 'Cliente Período Error',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-PERIOD-ERR',
+            'name' => 'Proyecto Período Error',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-PERIOD-ERR'],
+            ['name' => 'Actividad Período Error', 'active' => true, 'sort_order' => 1]
+        );
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+        $pendingStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'pending'],
+            ['name' => 'Pendiente', 'active' => true, 'sort_order' => 2]
+        );
+        $rejectedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'rejected'],
+            ['name' => 'Rechazado', 'active' => true, 'sort_order' => 3]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-PERIOD-ERR',
+            'first_names' => 'Elena',
+            'paternal_surname' => 'Error',
+            'name' => 'Elena Error',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.55,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-PERIOD-ERR',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-24',
+            'end_date' => '2026-08-31',
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HOR-TIME-PERIOD-BASE',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => ProjectAssignment::query()->where('code', 'ASI-TIME-PERIOD-ERR')->valueOrFail('id'),
+            'entry_date' => '2026-08-24',
+            'activity_id' => $activity->id,
+            'activity' => 'Actividad Período Error',
+            'hours_worked' => 20,
+            'hours_approved' => 0,
+            'approval_status_id' => $pendingStatus->id,
+            'approval_status' => 'pending',
+            'payment_status' => 'pending',
+        ]);
+
+        $dailyOverflow = $this->actingAs($admin)
+            ->from(route('operational.create', 'time-entries'))
+            ->post(route('operational.store', 'time-entries'), [
+                'entry_mode' => 'period',
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'approval_status_id' => $approvedStatus->id,
+                'payment_status' => 'pending',
+                'period_start_date' => '24/08/2026',
+                'period_end_date' => '25/08/2026',
+                'period_distribution_mode' => 'equal',
+                'period_hours_per_day' => 8,
+                'period_rows_payload' => '',
+            ]);
+
+        $dailyOverflow->assertRedirect(route('operational.create', 'time-entries'));
+        $dailyOverflow->assertSessionHasErrors('period_rows');
+        $this->assertSame(1, TimeEntry::query()->where('company_id', $company->id)->count());
+
+        $outOfRange = $this->actingAs($admin)
+            ->from(route('operational.create', 'time-entries'))
+            ->post(route('operational.store', 'time-entries'), [
+                'entry_mode' => 'period',
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'approval_status_id' => $approvedStatus->id,
+                'payment_status' => 'pending',
+                'period_start_date' => '01/09/2026',
+                'period_end_date' => '02/09/2026',
+                'period_distribution_mode' => 'equal',
+                'period_hours_per_day' => 8,
+                'period_rows_payload' => '',
+            ]);
+
+        $outOfRange->assertSessionHasErrors('period_rows');
+        $this->assertSame(1, TimeEntry::query()->where('company_id', $company->id)->count());
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-PERIOD-AMB',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-25',
+            'end_date' => '2026-08-26',
+        ]);
+
+        $ambiguous = $this->actingAs($admin)
+            ->from(route('operational.create', 'time-entries'))
+            ->post(route('operational.store', 'time-entries'), [
+                'entry_mode' => 'period',
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'approval_status_id' => $approvedStatus->id,
+                'payment_status' => 'pending',
+                'period_start_date' => '25/08/2026',
+                'period_end_date' => '26/08/2026',
+                'period_distribution_mode' => 'equal',
+                'period_hours_per_day' => 2,
+                'period_rows_payload' => '',
+            ]);
+
+        $ambiguous->assertSessionHasErrors('period_rows');
+        $this->assertSame(1, TimeEntry::query()->where('company_id', $company->id)->count());
+
+        $invalidPayment = $this->actingAs($admin)
+            ->from(route('operational.create', 'time-entries'))
+            ->post(route('operational.store', 'time-entries'), [
+                'entry_mode' => 'period',
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'approval_status_id' => $rejectedStatus->id,
+                'payment_status' => 'paid',
+                'period_start_date' => '27/08/2026',
+                'period_end_date' => '28/08/2026',
+                'period_distribution_mode' => 'equal',
+                'period_hours_per_day' => 2,
+                'period_rows_payload' => '',
+            ]);
+
+        $invalidPayment->assertSessionHasErrors('payment_status');
+        $this->assertSame(1, TimeEntry::query()->where('company_id', $company->id)->count());
+    }
+
     public function test_people_and_assignments_rate_rows_keep_horizontal_dom_structure(): void
     {
         [$company, $admin] = $this->companyWithAdmin();

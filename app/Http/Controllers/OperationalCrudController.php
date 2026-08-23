@@ -23,7 +23,9 @@ use App\Services\PayrollService;
 use App\Services\ProjectCommitmentService;
 use App\Services\SalesPrefacturationService;
 use App\Services\ReceivablesService;
+use App\Services\TimeEntryPeriodService;
 use App\Support\MassAssignment;
+use App\Support\UiFormatter;
 use DomainException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
@@ -49,6 +51,7 @@ class OperationalCrudController extends Controller
         private readonly HourlyCostService $hourlyCosts,
         private readonly CatalogService $catalogs,
         private readonly OperationalDependencyService $dependencies,
+        private readonly TimeEntryPeriodService $timeEntryPeriods,
         private readonly AuditService $audit,
     ) {
     }
@@ -133,6 +136,24 @@ class OperationalCrudController extends Controller
     {
         $config = $this->config($resource);
         $this->authorizeResource($request, $config, 'create');
+
+        if ($resource === 'time-entries' && $request->input('entry_mode') === 'period') {
+            $result = $this->timeEntryPeriods->create($request->user()->company_id, $request->validated());
+
+            foreach ($result['created'] as $entry) {
+                $this->refreshDerivedState($entry);
+                $this->audit->record('operational.created', $entry->refresh(), $request->user());
+            }
+
+            return redirect()
+                ->route('operational.index', $resource)
+                ->with('status', sprintf(
+                    'Se registraron %d días y %s.',
+                    $result['days_count'],
+                    UiFormatter::formatHours($result['total_hours'])
+                ));
+        }
+
         try {
             $data = $this->prepareData($request, $resource, $request->validated());
         } catch (DomainException $exception) {
@@ -221,6 +242,18 @@ class OperationalCrudController extends Controller
         );
     }
 
+    public function timeEntryPeriodPreview(Request $request): JsonResponse
+    {
+        abort_unless($request->route('resource') === 'time-entries', 404);
+
+        $config = $this->config('time-entries');
+        $this->authorizeResource($request, $config, 'create');
+
+        return response()->json(
+            $this->timeEntryPeriods->preview($request->user()->company_id, $request->all())
+        );
+    }
+
     public function update(CrudResourceRequest $request, string $resource, int $record): RedirectResponse
     {
         $config = $this->config($resource);
@@ -296,6 +329,19 @@ class OperationalCrudController extends Controller
 
     private function prepareData(Request $request, string $resource, array $data): array
     {
+        if ($resource === 'time-entries') {
+            unset(
+                $data['entry_mode'],
+                $data['period_start_date'],
+                $data['period_end_date'],
+                $data['period_distribution_mode'],
+                $data['period_hours_per_day'],
+                $data['period_total_hours'],
+                $data['period_rows_payload'],
+                $data['period_rows']
+            );
+        }
+
         $table = (new (config('operational.'.$resource.'.model')))->getTable();
         if (Schema::hasColumn($table, 'company_id')) {
             $data['company_id'] = $request->user()->company_id;
