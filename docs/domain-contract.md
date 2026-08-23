@@ -94,6 +94,9 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | `sale_net` | Es referencia contractual/comercial de venta del Proyecto. |
 | Normalización monetaria del compromiso | Las comparaciones de compromiso y margen siempre normalizan venta contractual y costos a una misma moneda. `projects.sale_net` conserva su moneda definida por `projects.sales_currency_id` y nunca debe interpretarse como CLP por el solo hecho de ser numérico. |
 | Compromiso, costo real, presupuesto y caja | Son conceptos separados y no deben sumarse indiscriminadamente. |
+| ExpenseDocument | Representa costo/gasto reconocido. En rentabilidad, otros costos reales provienen del documento según su tratamiento de IVA. |
+| Cuentas por pagar | Representan saldo pendiente del gasto; no son un costo adicional. |
+| Pago de egreso / CashMovement | Representa salida efectiva de caja y reduce CxP, pero no vuelve a reconocer el costo del ExpenseDocument. |
 
 ## Reglas deliberadamente no incorporadas
 

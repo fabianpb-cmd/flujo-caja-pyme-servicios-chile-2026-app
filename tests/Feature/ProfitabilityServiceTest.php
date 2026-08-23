@@ -165,6 +165,42 @@ class ProfitabilityServiceTest extends TestCase
         $this->assertSame(100000.0, $row['margin']);
     }
 
+    public function test_expense_payments_do_not_duplicate_recognized_other_costs(): void
+    {
+        ExpenseDocument::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'EGR-PRF-PAY-1',
+            'project_id' => $this->project->id,
+            'vendor_name' => 'Proveedor Pago',
+            'issue_date' => '2026-08-08',
+            'net_amount' => 100000,
+            'vat_amount' => 19000,
+            'gross_amount' => 119000,
+            'deductible_vat' => false,
+            'payment_status' => 'Pendiente',
+        ]);
+
+        CashMovement::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'MOV-PRF-EGR-1',
+            'movement_type' => 'expense',
+            'source_document_type' => 'expense_document',
+            'source_document_code' => 'EGR-PRF-PAY-1',
+            'project_id' => $this->project->id,
+            'movement_date' => '2026-08-15',
+            'income' => 0,
+            'expense' => 119000,
+            'status' => 'posted',
+        ]);
+
+        $row = collect(app(ProfitabilityService::class)->byProject($this->company->id, ['period' => '2026-08-01']))
+            ->firstWhere('project_id', $this->project->id);
+
+        $this->assertSame(119000.0, $row['other_costs']);
+        $this->assertSame(0.0, $row['cost_personal']);
+        $this->assertSame(-119000.0, $row['margin']);
+    }
+
     public function test_pending_billing_hours_are_calculated_without_double_billing(): void
     {
         $person = $this->person();

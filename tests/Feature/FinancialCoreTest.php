@@ -751,6 +751,29 @@ class FinancialCoreTest extends TestCase
         $this->assertSame(0.0, $payables->accountsPayable($this->company->id, '2026-09-30'));
     }
 
+    public function test_expense_payments_update_balance_and_reject_overpayment(): void
+    {
+        $expense = $this->expense('EGR-PAY-001', 1000000, '2026-08-01');
+        $service = app(CashMovementService::class);
+
+        $service->create($this->cashData('MOV-EGR-001', 'expense_document', 'EGR-PAY-001', '2026-08-15', 0, 400000), $this->user);
+        $this->assertSame(600000.0, app(PayablesService::class)->balance($expense->refresh()));
+        $this->assertSame('Parcial', $expense->refresh()->payment_status);
+
+        try {
+            $service->create($this->cashData('MOV-EGR-002', 'expense_document', 'EGR-PAY-001', '2026-08-20', 0, 600001), $this->user);
+            $this->fail('Expected overpayment to be rejected.');
+        } catch (DomainException $exception) {
+            $this->assertStringContainsString('excede el saldo pendiente del gasto', $exception->getMessage());
+        }
+
+        $this->assertSame(1, \App\Models\CashMovement::query()->where('source_document_code', 'EGR-PAY-001')->count());
+
+        $service->create($this->cashData('MOV-EGR-003', 'expense_document', 'EGR-PAY-001', '2026-08-25', 0, 600000), $this->user);
+        $this->assertSame(0.0, app(PayablesService::class)->balance($expense->refresh()));
+        $this->assertSame('Pagado', $expense->refresh()->payment_status);
+    }
+
     public function test_legal_parameter_is_selected_by_vigency(): void
     {
         $service = app(LegalParameterService::class);

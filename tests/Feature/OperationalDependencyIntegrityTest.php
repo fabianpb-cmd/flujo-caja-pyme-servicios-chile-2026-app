@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\CashMovement;
 use App\Models\Company;
+use App\Models\ExpenseDocument;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
@@ -108,6 +110,48 @@ class OperationalDependencyIntegrityTest extends TestCase
         $deleteUnused = $this->actingAs($admin)->delete(route('operational.destroy', ['clients', $unusedClient->id]));
         $deleteUnused->assertRedirect(route('operational.index', 'clients'));
         $this->assertDatabaseMissing('clients', ['id' => $unusedClient->id]);
+    }
+
+    public function test_expense_document_with_payments_cannot_be_deleted(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        $client = $this->client($company);
+        $project = $this->project($company, $client);
+
+        $expense = ExpenseDocument::query()->create([
+            'company_id' => $company->id,
+            'code' => 'EGR-DEP-001',
+            'vendor_name' => 'Proveedor Dependencias',
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'issue_date' => '2026-08-01',
+            'due_date' => '2026-08-15',
+            'net_amount' => 100000,
+            'vat_amount' => 19000,
+            'gross_amount' => 119000,
+            'paid_amount' => 0,
+            'payment_status' => 'Pendiente',
+        ]);
+
+        CashMovement::query()->create([
+            'company_id' => $company->id,
+            'code' => 'MOV-DEP-001',
+            'movement_type' => 'expense',
+            'source_document_type' => 'expense_document',
+            'source_document_code' => $expense->code,
+            'project_id' => $project->id,
+            'movement_date' => '2026-08-10',
+            'income' => 0,
+            'expense' => 119000,
+            'status' => 'posted',
+        ]);
+
+        $response = $this->actingAs($admin)->delete(route('operational.destroy', ['expense-documents', $expense->id]));
+
+        $response->assertRedirect(route('operational.show', ['expense-documents', $expense->id]));
+        $response->assertSessionHasErrors('dependencies');
+        $this->assertStringContainsString('movimientos de caja', $this->dependencyError($response));
+        $this->assertDatabaseHas('expense_documents', ['id' => $expense->id]);
     }
 
     /** @return array{Company, User} */

@@ -35,9 +35,7 @@ class OperationalDependencyService
         return collect($this->dependenciesFor($record))
             ->map(fn (array $dependency): array => [
                 'label' => $dependency['label'],
-                'count' => $dependency['model']::query()
-                    ->where($dependency['column'], $record->getKey())
-                    ->count(),
+                'count' => $this->dependencyCount($dependency, $record),
             ])
             ->filter(fn (array $dependency): bool => $dependency['count'] > 0)
             ->values();
@@ -101,6 +99,14 @@ class OperationalDependencyService
             SalesDocument::class => [
                 $this->dependency(SalesDocumentTimeEntry::class, 'sales_document_id', 'líneas de prefacturación'),
             ],
+            ExpenseDocument::class => [
+                $this->queryDependency(
+                    'movimientos de caja',
+                    fn (Model $record) => CashMovement::query()
+                        ->where('source_document_type', 'expense_document')
+                        ->where('source_document_code', $record->getAttribute('code'))
+                ),
+            ],
             CashAccount::class => [
                 $this->dependency(CashMovement::class, 'cash_account_id', 'movimientos de caja'),
             ],
@@ -118,5 +124,27 @@ class OperationalDependencyService
     private function dependency(string $model, string $column, string $label): array
     {
         return compact('model', 'column', 'label');
+    }
+
+    /**
+     * @param array{model?: class-string<Model>, column?: string, label: string, query?: callable(Model): \Illuminate\Database\Eloquent\Builder} $dependency
+     */
+    private function dependencyCount(array $dependency, Model $record): int
+    {
+        if (isset($dependency['query'])) {
+            return (int) $dependency['query']($record)->count();
+        }
+
+        return (int) $dependency['model']::query()
+            ->where($dependency['column'], $record->getKey())
+            ->count();
+    }
+
+    /**
+     * @return array{label: string, query: callable(Model): \Illuminate\Database\Eloquent\Builder}
+     */
+    private function queryDependency(string $label, callable $query): array
+    {
+        return compact('label', 'query');
     }
 }
