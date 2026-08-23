@@ -414,14 +414,17 @@
         => 'La vigencia de la asignación termina después de la vigencia del proyecto seleccionado.',
     default => null,
 })
-@php($formTitle = match ($resource) {
-    'assignments' => $editing ? 'Editar asignación' : 'Nueva asignación',
-    default => $editing ? ($config['edit_title'] ?? ('Editar '.$config['title'])) : ($config['create_title'] ?? ('Nuevo '.$config['title'])),
-})
-@php($formSubtitle = match ($resource) {
-    'time-entries' => 'La asignación vigente, el cliente y la tarifa aplicable se validan y actualizan automáticamente antes de guardar.',
-    default => 'Los cálculos financieros asociados se actualizan al guardar.',
-})
+<?php
+    $formTitle = match ($resource) {
+        'assignments' => $editing ? 'Editar asignación' : 'Nueva asignación',
+        default => $editing ? ($config['edit_title'] ?? ('Editar '.$config['title'])) : ($config['create_title'] ?? ('Nuevo '.$config['title'])),
+    };
+
+    $formSubtitle = match ($resource) {
+        'time-entries' => 'La asignación vigente, el cliente y la tarifa aplicable se validan y actualizan automáticamente antes de guardar.',
+        default => 'Los cálculos financieros asociados se actualizan al guardar.',
+    };
+?>
 @php($timeEntrySelectedPersonId = $resource === 'time-entries' ? old('person_id', $item->person_id ?? null) : null)
 @php($timeEntrySelectedProjectId = $resource === 'time-entries' ? old('project_id', $item->project_id ?? null) : null)
 @php($timeEntrySelectedProject = $resource === 'time-entries' && $timeEntrySelectedProjectId !== null ? ($options['project_id'][$timeEntrySelectedProjectId] ?? null) : null)
