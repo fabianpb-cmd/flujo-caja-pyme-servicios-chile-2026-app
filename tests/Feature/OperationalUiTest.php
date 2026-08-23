@@ -181,8 +181,6 @@ class OperationalUiTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('data-rate-unit-selector="true"', false);
-        $response->assertSee('data-rate-unit-prefix-for="hourly_value"', false);
-        $response->assertSee('data-rate-unit-prefix-for="project_value"', false);
         $response->assertDontSee('Moneda valor HH');
     }
 
@@ -2606,6 +2604,92 @@ class OperationalUiTest extends TestCase
         $response->assertDontSee('/ HH / HH', false);
         $this->assertDoesNotMatchRegularExpression('/Costo HH ref\\.\\s*<\\/div>\\s*<div class=\"fw-semibold\">\\$ 0/s', $response->getContent());
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar remuneración/s', $response->getContent());
+    }
+
+    public function test_payroll_project_mode_missing_project_value_can_be_saved_with_numeric_zero_adjustments(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+        UfValue::query()->create([
+            'company_id' => $company->id,
+            'value_date' => '2026-08-01',
+            'value' => 40844.79,
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REM-SAVE-ZERO',
+            'first_names' => 'Jaime',
+            'paternal_surname' => 'Soriano',
+            'maternal_surname' => 'Caso',
+            'name' => 'Jaime Soriano',
+            'modality' => 'Honorarios por proyecto',
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'POR_PROYECTO'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-000019',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+            'project_value' => null,
+        ]);
+
+        $payroll = PayrollRecord::query()->create([
+            'company_id' => $company->id,
+            'code' => 'REM-SAVE-ZERO-01',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => 10,
+            'base_salary' => 0,
+            'gross_amount' => 0,
+            'taxable_gross' => 0,
+            'employee_retention' => 0,
+            'employer_cost' => 0,
+            'net_pay' => 0,
+            'calculation_status' => 'REQUIERE_REVISION',
+            'calculation_notes' => 'Valor proyecto/hito no configurado para la asignación vigente.',
+            'status' => 'Requiere revisión',
+            'bonuses' => 0,
+            'non_taxable_allowances' => 0,
+            'advances' => 0,
+            'other_deductions' => 0,
+            'project_value' => null,
+        ]);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['payroll-records', $payroll->id]));
+        $edit->assertOk();
+        $this->assertMatchesRegularExpression('/name="bonuses"[^>]*value="0(?:\.0+)?"/', $edit->getContent());
+        $this->assertMatchesRegularExpression('/name="non_taxable_allowances"[^>]*value="0(?:\.0+)?"/', $edit->getContent());
+        $this->assertMatchesRegularExpression('/name="advances"[^>]*value="0(?:\.0+)?"/', $edit->getContent());
+        $this->assertMatchesRegularExpression('/name="other_deductions"[^>]*value="0(?:\.0+)?"/', $edit->getContent());
+
+        $update = $this->actingAs($admin)->put(route('operational.update', ['payroll-records', $payroll->id]), [
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'payment_date' => '',
+            'amount_basis' => 'GROSS',
+            'hours_approved' => 10,
+            'monthly_value' => '',
+            'hourly_value' => '',
+            'project_value' => '',
+            'bonuses' => '10000',
+            'non_taxable_allowances' => '20000',
+            'advances' => '3000',
+            'other_deductions' => '1500',
+            'status' => 'Requiere revisión',
+        ]);
+
+        $update->assertRedirect(route('operational.index', 'payroll-records').'/'.$payroll->id);
     }
 
     public function test_payroll_index_does_not_show_automatic_hours_as_override_when_no_manual_override_exists(): void

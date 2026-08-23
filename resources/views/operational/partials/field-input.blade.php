@@ -1,11 +1,36 @@
 @php
     $renderedFieldInput = null;
     $fieldErrorClass = $errors->has($field) ? ' is-invalid' : '';
+    $rawNumericValue = function (mixed $input): ?string {
+        if ($input === null || $input === '') {
+            return null;
+        }
+
+        $normalized = preg_replace('/[^0-9,\.\-]/', '', (string) $input);
+        if ($normalized === null || $normalized === '') {
+            return null;
+        }
+
+        $hasComma = str_contains($normalized, ',');
+        $hasDot = str_contains($normalized, '.');
+
+        if ($hasComma && $hasDot) {
+            $normalized = str_replace('.', '', $normalized);
+            $normalized = str_replace(',', '.', $normalized);
+        } elseif ($hasComma) {
+            $normalized = str_replace(',', '.', $normalized);
+        }
+
+        return $normalized;
+    };
 
     if (($definition['readonly'] ?? false) === true) {
         $renderedFieldInput = '<input id="'.e($field).'" class="form-control'.e($fieldErrorClass).'" value="'.e($genericDisplayValue($field, $definition, $value)).'" readonly aria-readonly="true">';
     } elseif ($type === 'textarea') {
         $renderedFieldInput = '<textarea id="'.e($field).'" name="'.e($field).'" class="form-control'.e($fieldErrorClass).'" rows="3">'.e($value).'</textarea>';
+    } elseif ($type === 'money') {
+        $inputValue = $rawNumericValue($value);
+        $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="number" step="0.01" min="0" inputmode="decimal" class="form-control'.e($fieldErrorClass).'" value="'.e($inputValue ?? '').'">';
     } elseif ($type === 'select') {
         $optionsHtml = '<option value="">Seleccione</option>';
         foreach (($definition['options'] ?? []) as $key => $label) {

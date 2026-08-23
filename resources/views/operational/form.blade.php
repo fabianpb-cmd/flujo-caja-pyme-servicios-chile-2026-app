@@ -532,7 +532,29 @@
 
     return (string) $value;
 })
-@php($payrollEditableValue = function (string $field, array $definition, mixed $value) use ($item) {
+@php($normalizeEditableNumericValue = function (mixed $input): ?string {
+    if ($input === null || $input === '') {
+        return null;
+    }
+
+    $normalized = preg_replace('/[^0-9,\.\-]/', '', (string) $input);
+    if ($normalized === null || $normalized === '') {
+        return null;
+    }
+
+    $hasComma = str_contains($normalized, ',');
+    $hasDot = str_contains($normalized, '.');
+
+    if ($hasComma && $hasDot) {
+        $normalized = str_replace('.', '', $normalized);
+        $normalized = str_replace(',', '.', $normalized);
+    } elseif ($hasComma) {
+        $normalized = str_replace(',', '.', $normalized);
+    }
+
+    return $normalized;
+})
+@php($payrollEditableValue = function (string $field, array $definition, mixed $value) use ($item, $normalizeEditableNumericValue) {
     if ($value === null || $value === '') {
         return '';
     }
@@ -541,7 +563,7 @@
     $presentation = $definition['presentation'] ?? null;
 
     return match (true) {
-        $type === 'money' => \App\Support\UiFormatter::display($item, $field, $definition),
+        $type === 'money' => $normalizeEditableNumericValue($value) ?? '',
         $presentation === 'rut' => \App\Support\ChileanRut::format((string) $value) ?? '',
         $presentation === 'percent' => \App\Support\UiFormatter::formatPercent($value),
         $presentation === 'hours' => \App\Support\UiFormatter::formatHours($value),
