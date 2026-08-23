@@ -593,7 +593,9 @@
 @php($payrollProjectValueOverrideDisplay = ($payrollProjectValueState['override'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollProjectValueState['override'], 'CLP') : 'No informado')
 @php($payrollModeReference = mb_strtolower((string) (is_array($selectedPayrollPerson) ? ($selectedPayrollPerson['payroll_mode_label'] ?? $selectedPayrollPerson['payroll_modality'] ?? '') : ($item->person?->modality ?? ''))))
 @php($payrollIsHourlyMode = str_contains($payrollModeReference, 'hora'))
+@php($payrollIsProjectMode = str_contains($payrollModeReference, 'proyecto'))
 @php($payrollCalculationReview = ($item->calculation_status ?? null) && $item->calculation_status !== 'OK')
+@php($payrollCalculationStatusLabel = match (strtoupper((string) ($item->calculation_status ?? 'OK'))) { 'REQUIERE_REVISION' => 'Requiere revisión', default => ($item->calculation_status ?? 'OK') })
 @php($payrollOutputsAllZero = collect([(float) ($item->base_salary ?? 0), (float) ($item->taxable_gross ?? 0), (float) ($item->employee_retention ?? 0), (float) ($item->net_pay ?? 0), (float) ($item->employer_cost ?? 0)])->every(fn (float $value): bool => abs($value) < 0.00001))
 @php($payrollNotCalculable = $isPayroll && $editing && $payrollCalculationReview && $payrollOutputsAllZero)
 @php($payrollMoneyOrUnavailable = fn ($value) => $payrollNotCalculable ? 'No calculable' : \App\Support\UiFormatter::formatMoney($value))
@@ -615,8 +617,8 @@
     'other_deductions' => 'Otros descuentos automáticos',
 ])
 @if ($isPayroll)
-    @if (($item->calculation_status ?? null) && $item->calculation_status !== 'OK')
-        @php($payrollWarnings[] = $item->calculation_status)
+    @if (($item->calculation_status ?? null) && $item->calculation_status !== 'OK' && ! filled($item->calculation_notes))
+        @php($payrollWarnings[] = $payrollCalculationStatusLabel)
     @endif
     @if (filled($item->calculation_notes))
         @php($payrollWarnings[] = $item->calculation_notes)
@@ -760,11 +762,18 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="app-panel bg-light border-0 p-3 h-100">
                     <div class="small text-muted">Tarifa pactada</div>
-                    <div class="fw-semibold">{{ $payrollTariffAutoValue ?: 'No configurada' }}</div>
-                    <div class="small text-muted">Origen: {{ $payrollTariffAutoOrigin ?: 'No configurado' }}</div>
-                    <div class="small text-muted mt-1">Valor convertido: {{ $payrollHourlyValueConvertedDisplay }}</div>
-                    <div class="small text-muted">Override manual: {{ $payrollHourlyValueOverrideDisplay }}</div>
-                    <div class="small text-muted">Valor efectivo: {{ $payrollHourlyValueConvertedDisplay }}</div>
+                    @if ($payrollIsHourlyMode)
+                        <div class="fw-semibold">{{ $payrollTariffAutoValue ?: 'No configurada' }}</div>
+                        <div class="small text-muted">Origen: {{ $payrollTariffAutoOrigin ?: 'No configurado' }}</div>
+                        <div class="small text-muted mt-1">Valor convertido: {{ $payrollHourlyValueConvertedDisplay }}</div>
+                        <div class="small text-muted">Override manual: {{ $payrollHourlyValueOverrideDisplay }}</div>
+                        <div class="small text-muted">Valor efectivo: {{ $payrollHourlyValueConvertedDisplay }}</div>
+                    @else
+                        <div class="fw-semibold">No aplica</div>
+                        <div class="small text-muted">
+                            {{ $payrollIsProjectMode ? 'La modalidad por proyecto/hito usa el valor proyecto/hito pactado.' : 'La modalidad actual no utiliza tarifa por hora para calcular esta remuneración.' }}
+                        </div>
+                    @endif
                 </div>
             </div>
             <div class="col-12 col-md-6 col-xl-4">
@@ -831,7 +840,7 @@
             </div>
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="text-muted small">Costo HH ref.</div>
-                <div class="fw-semibold">{{ $payrollHourlyCost['reference_hourly_cost'] !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyCost['reference_hourly_cost']) : '—' }}</div>
+                <div class="fw-semibold">{{ $payrollNotCalculable ? 'No calculable' : ($payrollHourlyCost['reference_hourly_cost'] !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyCost['reference_hourly_cost']) : '—') }}</div>
             </div>
         </div>
         <div class="small text-muted mt-3">
@@ -1057,7 +1066,7 @@
                             @if ($isPayroll && array_key_exists($field, $payrollAutomaticSourceLabels))
                                 @php($automaticSourceLabel = $payrollAutomaticSourceLabels[$field])
                                 @php($automaticSourceValue = data_get($payrollSourceRows->get($automaticSourceLabel), 'value'))
-                                @if (filled($automaticSourceValue))
+                                @if (filled($automaticSourceValue) && ! ($field === 'hourly_value' && ! $payrollIsHourlyMode))
                                     <div class="small text-muted mt-1">Automático: {{ $automaticSourceValue }}</div>
                                 @endif
                             @endif
@@ -1178,7 +1187,7 @@
         <div class="app-panel p-3 mb-3">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <span class="small text-muted">Estado:</span>
-                <x-status-badge :status="$item->calculation_status ?? 'OK'" />
+                <x-status-badge :status="$payrollCalculationStatusLabel" />
             </div>
             <div class="small text-muted">
                 Observación:

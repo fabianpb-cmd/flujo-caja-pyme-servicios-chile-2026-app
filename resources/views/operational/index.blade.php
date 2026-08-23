@@ -245,6 +245,10 @@
                 @foreach ($fields as $field => $definition)
                     @continue($field === $codeField)
                     @php($display = \App\Support\UiFormatter::display($item, $field, $definition))
+                    @if ($resource === 'payroll-records' && $field === 'hours_approved' && (($definition['label'] ?? null) === 'Override horas aprobadas'))
+                        @php($payrollOverrides = app(\App\Services\PayrollService::class)->manualOverrideInputs($item))
+                        @php($display = array_key_exists('hours_approved', $payrollOverrides) && $payrollOverrides['hours_approved'] !== null ? \App\Support\UiFormatter::formatHours($payrollOverrides['hours_approved']) : '—')
+                    @endif
                     <td class="{{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-end amount-cell' : '' }}">
                         @if (str_contains(mb_strtolower($definition['label']), 'estado') || in_array($field, ['status', 'payment_status', 'approval_status', 'project_status', 'billing_status'], true))
                             <x-status-badge :status="$display" />

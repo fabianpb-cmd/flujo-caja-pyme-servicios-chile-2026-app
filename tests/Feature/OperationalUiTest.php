@@ -2590,14 +2590,93 @@ class OperationalUiTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Revisión requerida');
-        $response->assertSee('REQUIERE_REVISION');
+        $response->assertSee('Requiere revisión');
         $response->assertSee('Valor proyecto/hito no configurado para la asignación vigente.');
         $response->assertSeeText('No calculable');
         $response->assertSee('Horas aprobadas del período');
         $response->assertSee('10 h');
         $response->assertSee('Origen: módulo Horas.');
+        $response->assertSee('Tarifa pactada');
+        $response->assertSee('No aplica');
+        $response->assertSee('La modalidad por proyecto/hito usa el valor proyecto/hito pactado.');
+        $response->assertSee('Valor HH base de Persona');
+        $response->assertSee('Referencia. No participa en el cálculo de esta remuneración.');
+        $response->assertSee('Costo HH ref.');
+        $this->assertDoesNotMatchRegularExpression('/Estado:\s*<\/span>\s*<span[^>]*>\s*REQUIERE_REVISION\s*<\/span>/s', $response->getContent());
         $response->assertDontSee('/ HH / HH', false);
+        $this->assertDoesNotMatchRegularExpression('/Costo HH ref\\.\\s*<\\/div>\\s*<div class=\"fw-semibold\">\\$ 0/s', $response->getContent());
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar remuneración/s', $response->getContent());
+    }
+
+    public function test_payroll_index_does_not_show_automatic_hours_as_override_when_no_manual_override_exists(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REM-LIST-AUTO',
+            'first_names' => 'Lucía',
+            'paternal_surname' => 'Rivas',
+            'maternal_surname' => 'Auto',
+            'name' => 'Lucía Rivas',
+            'modality' => 'Honorarios por proyecto',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'POR_PROYECTO'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-LIST-AUTO',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+            'project_value' => 100,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HRS-LIST-AUTO',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-15',
+            'activity' => 'Implementación',
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 1,
+            'calculated_amount' => 10,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        PayrollRecord::query()->create([
+            'company_id' => $company->id,
+            'code' => 'REM-LIST-AUTO-01',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => 10,
+            'project_value' => 100,
+            'base_salary' => 100,
+            'gross_amount' => 100,
+            'taxable_gross' => 0,
+            'employee_retention' => 15.25,
+            'employer_cost' => 100,
+            'net_pay' => 84.75,
+            'calculation_status' => 'OK',
+            'status' => 'Pendiente',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('operational.index', 'payroll-records'));
+
+        $response->assertOk();
+        $response->assertSee('Override horas aprobadas');
+        $this->assertDoesNotMatchRegularExpression('/REM-LIST-AUTO-01(?s).*?<td class=\"text-end amount-cell\">10 h<\\/td>/', $response->getContent());
     }
 
     public function test_clients_and_projects_generate_immutable_codes_when_omitted(): void

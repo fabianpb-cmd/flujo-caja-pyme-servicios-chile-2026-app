@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Currency;
 use App\Models\ExchangeRate;
 use App\Models\LegalParameter;
+use App\Models\PayrollRecord;
 use App\Models\UfValue;
 use App\Models\UtmValue;
 use Carbon\CarbonInterface;
@@ -29,6 +30,13 @@ class UiFormatter
 
         if ($type === 'select') {
             return $definition['options'][$value] ?? ($value !== null && $value !== '' ? (string) $value : '—');
+        }
+
+        if ($item instanceof PayrollRecord && $field === 'calculation_status') {
+            return match (strtoupper((string) $value)) {
+                'REQUIERE_REVISION' => 'Requiere revisión',
+                default => $value !== null && $value !== '' ? (string) $value : '—',
+            };
         }
 
         if ($presentation === 'rut') {
