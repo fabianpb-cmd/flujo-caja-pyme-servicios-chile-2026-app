@@ -2089,7 +2089,7 @@ class OperationalUiTest extends TestCase
         $response->assertSeeText('Horas aprobadas del período');
         $response->assertSeeText('Origen: módulo Horas.');
         $response->assertDontSeeText('Override horas aprobadas');
-        $response->assertSeeText('Costo hora referencial persona');
+        $response->assertSeeText('Valor HH base de Persona');
         $response->assertSee('payroll-base-row-1', false);
         $response->assertSee('payroll-base-row-2', false);
         $this->assertRowClassHasColumns($response->getContent(), 'payroll-base-row-1', ['Código', 'Persona', 'Proyecto']);
@@ -2506,11 +2506,98 @@ class OperationalUiTest extends TestCase
         $response->assertSee('UF 100,00');
         $response->assertSee('Valor convertido: $ 4.084.479');
         $response->assertSee('Valor efectivo: $ 4.084.479');
+        $response->assertSee('Valor HH base de Persona');
+        $response->assertDontSee('/ HH / HH', false);
         $this->assertDoesNotMatchRegularExpression('/name="hours_approved"/', $response->getContent());
         $this->assertMatchesRegularExpression('/name="hourly_value"[^>]*value=""/', $response->getContent());
         $this->assertMatchesRegularExpression('/name="project_value"[^>]*value=""/', $response->getContent());
         $this->assertMatchesRegularExpression('/name="period_date"[^>]*value="2026-08-01"/', $response->getContent());
         $this->assertMatchesRegularExpression('/id="period_date"[^>]*value="Agosto 2026"/', $response->getContent());
+    }
+
+    public function test_payroll_project_mode_missing_project_value_shows_review_status_and_not_calculable_results(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+        UfValue::query()->create([
+            'company_id' => $company->id,
+            'value_date' => '2026-08-01',
+            'value' => 40844.79,
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REM-MISS-PROJ',
+            'first_names' => 'Jaime',
+            'paternal_surname' => 'Soriano',
+            'maternal_surname' => 'Caso',
+            'name' => 'Jaime Soriano',
+            'modality' => 'Honorarios por proyecto',
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'POR_PROYECTO'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-000018',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+            'project_value' => null,
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HRS-REM-MISS-PROJ',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-15',
+            'activity' => 'Implementación',
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 1,
+            'calculated_amount' => 10,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $payroll = PayrollRecord::query()->create([
+            'company_id' => $company->id,
+            'code' => 'REM-MISS-PROJ-01',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => 10,
+            'base_salary' => 0,
+            'gross_amount' => 0,
+            'taxable_gross' => 0,
+            'employee_retention' => 0,
+            'employer_cost' => 0,
+            'net_pay' => 0,
+            'calculation_status' => 'REQUIERE_REVISION',
+            'calculation_notes' => 'Valor proyecto/hito no configurado para la asignación vigente.',
+            'status' => 'Requiere revisión',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('operational.edit', ['payroll-records', $payroll->id]));
+
+        $response->assertOk();
+        $response->assertSee('Revisión requerida');
+        $response->assertSee('REQUIERE_REVISION');
+        $response->assertSee('Valor proyecto/hito no configurado para la asignación vigente.');
+        $response->assertSeeText('No calculable');
+        $response->assertSee('Horas aprobadas del período');
+        $response->assertSee('10 h');
+        $response->assertSee('Origen: módulo Horas.');
+        $response->assertDontSee('/ HH / HH', false);
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar remuneración/s', $response->getContent());
     }
 
     public function test_clients_and_projects_generate_immutable_codes_when_omitted(): void

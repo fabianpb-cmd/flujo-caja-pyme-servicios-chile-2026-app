@@ -84,6 +84,8 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | ProjectCommitmentService temporalidad mensual | Un intervalo desde una fecha hasta la misma fecha del mes siguiente equivale exactamente a un mes de compromiso; la fecha término no genera un período parcial adicional. |
 | Horas | Representa ejecución real. No es compromiso ni presupuesto. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
+| Remuneraciones incompletas | Si falta una fuente obligatoria para la modalidad vigente, la remuneración queda en revisión/incompleta; un valor persistido en cero no equivale a un cálculo válido. |
+| Horas automáticas en Remuneraciones | Un snapshot automático de horas aprobadas proveniente de Horas no equivale por sí mismo a un override manual. |
 | Costo HH real | Se obtiene desde costo empresa real del período / horas productivas aprobadas. No equivale al valor HH base de Persona ni al valor HH de costeo de la Asignación. |
 | Presupuesto | Es planificación manual y no reemplaza compromiso ni costo real. |
 | Cash Flow | Representa timing de caja y no debe mezclarse con compromiso, presupuesto o costo real. |

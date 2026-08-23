@@ -561,7 +561,7 @@
     is_array($selectedPayrollPerson) && !empty($selectedPayrollPerson['payroll_afp_label']) ? 'AFP '.$selectedPayrollPerson['payroll_afp_label'] : null,
     is_array($selectedPayrollPerson) && !empty($selectedPayrollPerson['payroll_health_label']) ? 'Salud '.$selectedPayrollPerson['payroll_health_label'] : null,
     is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_monthly_value'] ?? null) ? 'Base mensual '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_monthly_value']) : null,
-    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? 'Costo hora referencial persona: '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP').' / HH' : null,
+    is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? 'Valor HH base de Persona: '.\App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP').' / HH' : null,
 ])->filter()->implode(' · '))
 @php($payrollPeriodLabel = $item->period_date ? ucfirst(\Illuminate\Support\Carbon::parse($item->period_date)->locale('es')->isoFormat('MMMM YYYY')) : 'Pendiente de selección')
 @php($payrollCalculationSections = collect($payrollCalculationBreakdown['sections'] ?? []))
@@ -591,6 +591,12 @@
 @php($payrollHourlyValueOverrideDisplay = ($payrollHourlyValueState['override'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyValueState['override'], 'CLP').' / HH' : 'No informado')
 @php($payrollProjectValueConvertedDisplay = ($payrollProjectValueState['effective'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollProjectValueState['effective'], 'CLP') : 'No configurado')
 @php($payrollProjectValueOverrideDisplay = ($payrollProjectValueState['override'] ?? null) !== null ? \App\Support\UiFormatter::formatMoney($payrollProjectValueState['override'], 'CLP') : 'No informado')
+@php($payrollModeReference = mb_strtolower((string) (is_array($selectedPayrollPerson) ? ($selectedPayrollPerson['payroll_mode_label'] ?? $selectedPayrollPerson['payroll_modality'] ?? '') : ($item->person?->modality ?? ''))))
+@php($payrollIsHourlyMode = str_contains($payrollModeReference, 'hora'))
+@php($payrollCalculationReview = ($item->calculation_status ?? null) && $item->calculation_status !== 'OK')
+@php($payrollOutputsAllZero = collect([(float) ($item->base_salary ?? 0), (float) ($item->taxable_gross ?? 0), (float) ($item->employee_retention ?? 0), (float) ($item->net_pay ?? 0), (float) ($item->employer_cost ?? 0)])->every(fn (float $value): bool => abs($value) < 0.00001))
+@php($payrollNotCalculable = $isPayroll && $editing && $payrollCalculationReview && $payrollOutputsAllZero)
+@php($payrollMoneyOrUnavailable = fn ($value) => $payrollNotCalculable ? 'No calculable' : \App\Support\UiFormatter::formatMoney($value))
 @php($payrollMonthlyAutoValue = data_get($payrollSourceRows->get('Base mensual automática'), 'value'))
 @php($payrollHealthAutoValue = data_get($payrollSourceRows->get('Salud adicional automática'), 'value'))
 @php($payrollBonusesAutoValue = data_get($payrollSourceRows->get('Bonos automáticos'), 'value'))
@@ -754,7 +760,7 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="app-panel bg-light border-0 p-3 h-100">
                     <div class="small text-muted">Tarifa pactada</div>
-                    <div class="fw-semibold">{{ $payrollTariffAutoValue ?: 'No configurada' }}{{ $payrollTariffAutoValue ? ' / HH' : '' }}</div>
+                    <div class="fw-semibold">{{ $payrollTariffAutoValue ?: 'No configurada' }}</div>
                     <div class="small text-muted">Origen: {{ $payrollTariffAutoOrigin ?: 'No configurado' }}</div>
                     <div class="small text-muted mt-1">Valor convertido: {{ $payrollHourlyValueConvertedDisplay }}</div>
                     <div class="small text-muted">Override manual: {{ $payrollHourlyValueOverrideDisplay }}</div>
@@ -784,9 +790,9 @@
             </div>
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="app-panel bg-light border-0 p-3 h-100">
-                    <div class="small text-muted">Costo hora referencial persona</div>
+                    <div class="small text-muted">Valor HH base de Persona</div>
                     <div class="fw-semibold">{{ is_array($selectedPayrollPerson) && filled($selectedPayrollPerson['payroll_hourly_value'] ?? null) ? \App\Support\UiFormatter::formatMoney($selectedPayrollPerson['payroll_hourly_value'], $selectedPayrollPerson['payroll_hourly_currency'] ?? 'CLP').' / HH' : 'No configurado' }}</div>
-                    <div class="small text-muted">Referencia de la ficha de Personal.</div>
+                    <div class="small text-muted">{{ $payrollIsHourlyMode ? 'Referencia de la ficha de Personal para remuneración por hora.' : 'Referencia. No participa en el cálculo de esta remuneración.' }}</div>
                 </div>
             </div>
         </div>
@@ -813,7 +819,7 @@
         <div class="row g-3">
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="text-muted small">Costo empresa</div>
-                <div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($payrollHourlyCost['company_cost']) }}</div>
+                <div class="fw-semibold">{{ $payrollNotCalculable ? 'No calculable' : \App\Support\UiFormatter::formatMoney($payrollHourlyCost['company_cost']) }}</div>
             </div>
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="text-muted small">Horas período</div>
@@ -821,7 +827,7 @@
             </div>
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="text-muted small">Costo HH real</div>
-                <div class="fw-semibold">{{ $payrollHourlyCost['real_hourly_cost'] !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyCost['real_hourly_cost']) : '—' }}</div>
+                <div class="fw-semibold">{{ $payrollNotCalculable ? 'No calculable' : ($payrollHourlyCost['real_hourly_cost'] !== null ? \App\Support\UiFormatter::formatMoney($payrollHourlyCost['real_hourly_cost']) : '—') }}</div>
             </div>
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="text-muted small">Costo HH ref.</div>
@@ -1067,7 +1073,7 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <x-kpi-card
                     title="Base calculada"
-                    :value="\App\Support\UiFormatter::formatMoney($item->base_salary)"
+                    :value="$payrollMoneyOrUnavailable($item->base_salary)"
                     icon="bi bi-calculator"
                     tone="primary"
                 />
@@ -1075,7 +1081,7 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <x-kpi-card
                     title="Total imponible"
-                    :value="\App\Support\UiFormatter::formatMoney($item->taxable_gross)"
+                    :value="$payrollMoneyOrUnavailable($item->taxable_gross)"
                     icon="bi bi-cash"
                     tone="info"
                 />
@@ -1083,7 +1089,7 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <x-kpi-card
                     title="Retención honorarios"
-                    :value="\App\Support\UiFormatter::formatMoney($item->employee_retention)"
+                    :value="$payrollMoneyOrUnavailable($item->employee_retention)"
                     icon="bi bi-receipt"
                     tone="warning"
                 />
@@ -1107,7 +1113,7 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <x-kpi-card
                     title="Líquido"
-                    :value="\App\Support\UiFormatter::formatMoney($item->net_pay)"
+                    :value="$payrollMoneyOrUnavailable($item->net_pay)"
                     icon="bi bi-wallet2"
                     tone="success"
                 />
@@ -1115,7 +1121,7 @@
             <div class="col-12 col-md-6 col-xl-4">
                 <x-kpi-card
                     title="Costo empresa"
-                    :value="\App\Support\UiFormatter::formatMoney($item->employer_cost)"
+                    :value="$payrollMoneyOrUnavailable($item->employer_cost)"
                     icon="bi bi-building"
                     tone="dark"
                 />

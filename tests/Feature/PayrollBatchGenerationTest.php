@@ -194,6 +194,30 @@ class PayrollBatchGenerationTest extends TestCase
         $this->assertSame('Requiere revisión', PayrollRecord::query()->where('person_id', $dependent->id)->firstOrFail()->status);
     }
 
+    public function test_project_mode_missing_assignment_project_value_marks_record_for_review_and_counts_warning(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por proyecto',
+            'monthly_value' => 0,
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-BATCH-PROJ-MISS');
+        $this->assignment($person, $project, '2026-08-01', '2026-08-31', [
+            'project_value' => null,
+        ]);
+
+        $summary = app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01', true);
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+
+        $this->assertSame(1, $summary['evaluated']);
+        $this->assertSame(1, $summary['generated']);
+        $this->assertSame(1, $summary['warnings']);
+        $this->assertSame('REQUIERE_REVISION', $record->calculation_status);
+        $this->assertSame('Requiere revisión', $record->status);
+        $this->assertStringContainsString('Valor proyecto/hito no configurado para la asignación vigente.', (string) $record->calculation_notes);
+    }
+
     public function test_project_is_preselected_only_when_single_assignment_is_valid_for_period(): void
     {
         $person = $this->person();

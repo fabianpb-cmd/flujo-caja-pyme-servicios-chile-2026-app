@@ -88,8 +88,10 @@ class PayrollBatchService
 
             try {
                 $calculation = $this->payroll->calculate($person, $period, $data);
-                $calculationStatus = empty($notes) ? 'OK' : 'REQUIERE_REVISION';
-                $status = empty($notes) ? 'Borrador' : 'Requiere revisión';
+                $calculationStatus = ($calculation['calculation_status'] ?? 'OK') === 'REQUIERE_REVISION' || ! empty($notes)
+                    ? 'REQUIERE_REVISION'
+                    : 'OK';
+                $status = $calculationStatus === 'REQUIERE_REVISION' ? 'Requiere revisión' : 'Borrador';
                 $payload = array_merge($data, $calculation, [
                     'company_id' => $companyId,
                     'person_id' => $person->id,

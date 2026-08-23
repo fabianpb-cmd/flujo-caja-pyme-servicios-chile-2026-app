@@ -639,7 +639,7 @@ class PayrollService
             $label = match ($source['type'] ?? null) {
                 'assignment' => trim((string) (($source['code'] ?? 'ASI').' · '.($source['project_name'] ?? 'No informado'))),
                 'project' => 'Proyecto · '.trim((string) ($source['project_name'] ?? 'No informado')),
-                'person' => 'Ficha de Personal · Costo hora referencial',
+                'person' => 'Ficha de Personal · Valor HH base',
                 default => 'No configurado',
             };
 
@@ -1096,6 +1096,10 @@ class PayrollService
 
     public function deriveStatus(PayrollRecord $record, CarbonInterface|string|null $asOf = null): string
     {
+        if (($record->calculation_status ?? null) && strtoupper((string) $record->calculation_status) !== 'OK') {
+            return 'Requiere revisión';
+        }
+
         $paid = $this->paidAmount($record, $asOf);
         $balance = $this->balance($record, $asOf);
 
