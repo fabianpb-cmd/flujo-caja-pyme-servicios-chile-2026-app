@@ -177,9 +177,13 @@ class ProjectCommitmentService
         $usesProjectedExchangeRate = false;
         $exchangeRateInfo = null;
         $exchangeRateNotes = [];
-        foreach ($this->periodsBetween($range['start'], $range['end']) as $periodStart) {
-            $overlap = $this->monthOverlap($range['start'], $range['end'], $periodStart);
-            $hours = round($monthlyHours * ($overlap['days'] / $periodStart->daysInMonth), 4);
+        $exactMonthlyPeriods = $this->exactMonthlyPeriods($range['start'], $range['end']);
+        $periods = $exactMonthlyPeriods ?? $this->periodsBetween($range['start'], $range['end']);
+
+        foreach ($periods as $periodStart) {
+            $hours = $exactMonthlyPeriods
+                ? $monthlyHours
+                : round($monthlyHours * ($this->monthOverlap($range['start'], $range['end'], $periodStart)['days'] / $periodStart->daysInMonth), 4);
 
             try {
                 $hourlyWarnings = [];
@@ -330,6 +334,25 @@ class ProjectCommitmentService
         }
 
         return $periods;
+    }
+
+    private function exactMonthlyPeriods(Carbon $start, Carbon $end): ?Collection
+    {
+        $periods = collect();
+        $cursor = $start->copy()->startOfDay();
+
+        while ($cursor->lt($end)) {
+            $next = $cursor->copy()->addMonthNoOverflow()->startOfDay();
+
+            if ($next->gt($end)) {
+                return null;
+            }
+
+            $periods->push($cursor->copy());
+            $cursor = $next;
+        }
+
+        return $cursor->equalTo($end) ? $periods : null;
     }
 
     private function monthOverlap(Carbon $rangeStart, Carbon $rangeEnd, Carbon $periodStart): array

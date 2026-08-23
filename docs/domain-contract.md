@@ -81,6 +81,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | `assignment.project_value` | Pertenece a la Asignación y se usa para remuneración por proyecto/hito. `sale_net` no es su fallback. |
 | `assignment.monthly_hours` | Pertenece a la Asignación. No existe límite de horas confirmado a nivel Proyecto. |
 | ProjectCommitmentService | Calcula costo comprometido de personal desde HH comprometidas y valor HH de costeo; no depende de la modalidad de payroll y no usa `project_value` como base del compromiso. |
+| ProjectCommitmentService temporalidad mensual | Un intervalo desde una fecha hasta la misma fecha del mes siguiente equivale exactamente a un mes de compromiso; la fecha término no genera un período parcial adicional. |
 | Horas | Representa ejecución real. No es compromiso ni presupuesto. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
 | Costo HH real | Se obtiene desde costo empresa real del período / horas productivas aprobadas. No equivale al valor HH base de Persona ni al valor HH de costeo de la Asignación. |

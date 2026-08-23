@@ -249,6 +249,119 @@ class ProjectCommitmentServiceTest extends TestCase
         $this->assertSame(408450.0, $summary['personnel_committed_cost']);
     }
 
+    public function test_commitment_counts_an_exact_month_anniversary_as_one_full_month(): void
+    {
+        $this->ufValue('2026-08-01', 40874.0);
+
+        $project = $this->project([
+            'sale_net' => 1000000,
+            'sales_currency_id' => $this->clp->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Mes Exacto',
+            'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+        ]);
+
+        $assignment = $this->assignment($person, $project, [
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertSame(408740.0, $summary['personnel_committed_cost']);
+        $this->assertSame(40874.0, app(HourlyRateService::class)->resolveAssignmentRate($assignment, '2026-08-01'));
+
+        $assignment->update([
+            'hourly_value' => 0.5,
+        ]);
+
+        $summaryWithOverride = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertTrue($summaryWithOverride['calculation_complete']);
+        $this->assertSame(204370.0, $summaryWithOverride['personnel_committed_cost']);
+    }
+
+    public function test_commitment_counts_two_month_anniversary_as_two_full_months(): void
+    {
+        $this->ufValue('2026-08-01', 40874.0);
+        $this->ufValue('2026-09-01', 40874.0);
+
+        $project = $this->project([
+            'sale_net' => 1000000,
+            'sales_currency_id' => $this->clp->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-10-01',
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Dos Meses',
+            'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-10-01',
+        ]);
+
+        $this->assignment($person, $project, [
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-10-01',
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertSame(817480.0, $summary['personnel_committed_cost']);
+    }
+
+    public function test_commitment_counts_mid_month_anniversary_as_one_full_month(): void
+    {
+        $this->ufValue('2026-08-15', 40874.0);
+
+        $project = $this->project([
+            'sale_net' => 1000000,
+            'sales_currency_id' => $this->clp->id,
+            'start_date' => '2026-08-15',
+            'end_date' => '2026-09-15',
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona Mitad de Mes',
+            'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'start_date' => '2026-08-15',
+            'end_date' => '2026-09-15',
+        ]);
+
+        $this->assignment($person, $project, [
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+            'start_date' => '2026-08-15',
+            'end_date' => '2026-09-15',
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertTrue($summary['calculation_complete']);
+        $this->assertSame(408740.0, $summary['personnel_committed_cost']);
+    }
+
     public function test_commitment_stays_strict_for_past_dates_without_an_exact_uf(): void
     {
         $project = $this->project([
@@ -447,6 +560,26 @@ class ProjectCommitmentServiceTest extends TestCase
             'project_value' => null,
             'monthly_hours' => null,
         ], $overrides));
+    }
+
+    private function ufValue(string $date, float $value): void
+    {
+        $existing = UfValue::query()
+            ->where('company_id', $this->company->id)
+            ->whereDate('value_date', $date)
+            ->first();
+
+        if ($existing) {
+            $existing->update(['value' => $value]);
+
+            return;
+        }
+
+        UfValue::query()->create([
+            'company_id' => $this->company->id,
+            'value_date' => $date,
+            'value' => $value,
+        ]);
     }
 
     private function statusId(string $domain, string $code): int
