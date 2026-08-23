@@ -122,6 +122,10 @@ class ProfitabilityService
                     'hour_margin' => $hourMargin,
                     'alerts' => $alerts,
                     'projected_personnel_sale' => $commitment['sale_net_clp'],
+                    'projected_personnel_sale_contractual' => $commitment['sale_net_contractual'],
+                    'projected_personnel_sale_currency_code' => $commitment['sale_net_currency_code'],
+                    'projected_personnel_sale_currency_symbol' => $commitment['sale_net_currency_symbol'],
+                    'projected_personnel_sale_currency_minor_units' => $commitment['sale_net_currency_minor_units'],
                     'personnel_committed_cost' => $commitment['personnel_committed_cost'],
                     'projected_personnel_margin' => $commitment['projected_personnel_margin'],
                     'committed_percentage' => $commitment['committed_percentage'],
@@ -151,13 +155,16 @@ class ProfitabilityService
                             ],
                             [
                                 'title' => 'Compromiso de personal proyectado',
-                                'rows' => [
-                                    ['label' => 'Venta contractual', 'value' => $commitment['sale_net_clp'] !== null ? UiFormatter::formatMoney($commitment['sale_net_clp']) : 'No disponible'],
+                                'rows' => array_values(array_filter([
+                                    ['label' => 'Venta contractual', 'value' => $commitment['sale_net_contractual'] !== null ? UiFormatter::formatMoney($commitment['sale_net_contractual'], $commitment['sale_net_currency_code']) : 'No disponible'],
+                                    $commitment['sale_net_currency_code'] !== 'CLP' && $commitment['sale_net_clp'] !== null
+                                        ? ['label' => 'Equivalente para proyección', 'value' => UiFormatter::formatMoney($commitment['sale_net_clp']), 'strong' => true]
+                                        : null,
                                     ['label' => 'Personal comprometido', 'value' => $commitment['personnel_committed_cost'] !== null ? UiFormatter::formatMoney($commitment['personnel_committed_cost']) : 'No disponible'],
                                     ['label' => 'Margen proyectado personal', 'value' => $commitment['projected_personnel_margin'] !== null ? UiFormatter::formatMoney($commitment['projected_personnel_margin']) : 'No disponible', 'strong' => true],
                                     ['label' => '% comprometido', 'value' => $commitment['committed_percentage'] !== null ? UiFormatter::formatPercent($commitment['committed_percentage'] / 100, 1) : 'No disponible'],
                                     ['label' => 'Cálculo completo', 'value' => $commitment['calculation_complete'] ? 'Sí' : 'No'],
-                                ],
+                                ])),
                             ],
                             [
                                 'title' => 'Horas',

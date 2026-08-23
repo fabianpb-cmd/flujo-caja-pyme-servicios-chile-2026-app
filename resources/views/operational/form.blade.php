@@ -338,10 +338,16 @@
 @php($assignmentStartDate = old('start_date', optional($item->start_date)->format('d/m/Y')))
 @php($assignmentEndDate = old('end_date', optional($item->end_date)->format('d/m/Y')))
 @php($assignmentCommitmentPreview = $assignmentCommitmentPreview ?? null)
-@php($assignmentCommitmentSaleDisplay = match (true) {
-    !is_array($assignmentCommitmentPreview) => 'Venta neta: Seleccione una persona y un proyecto.',
-    ($assignmentCommitmentPreview['sale_net_clp'] ?? null) !== null => 'Venta neta: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['sale_net_clp']),
-    default => 'Venta neta: No disponible',
+@php($assignmentCommitmentSaleCurrencyCode = is_array($assignmentCommitmentPreview) ? ($assignmentCommitmentPreview['sale_net_currency_code'] ?? 'CLP') : 'CLP')
+@php($assignmentCommitmentSaleContractualDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => 'Venta contractual: Seleccione una persona y un proyecto.',
+    ($assignmentCommitmentPreview['sale_net_contractual'] ?? null) !== null => 'Venta contractual: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['sale_net_contractual'], $assignmentCommitmentSaleCurrencyCode),
+    default => 'Venta contractual: No disponible',
+})
+@php($assignmentCommitmentSaleEquivalentDisplay = match (true) {
+    !is_array($assignmentCommitmentPreview) => null,
+    $assignmentCommitmentSaleCurrencyCode !== 'CLP' && ($assignmentCommitmentPreview['sale_net_clp'] ?? null) !== null => 'Equivalente para proyección: '.\App\Support\UiFormatter::formatMoney($assignmentCommitmentPreview['sale_net_clp']),
+    default => null,
 })
 @php($assignmentCommitmentCurrentDisplay = match (true) {
     !is_array($assignmentCommitmentPreview) => 'Personal comprometido actualmente: —',
@@ -1362,7 +1368,8 @@
                                 </div>
                                 <div class="app-panel bg-light border-0 p-2 mt-2" data-assignments-commitment-reference>
                                     <div class="small fw-semibold text-muted mb-1">Compromiso del proyecto</div>
-                                    <div class="small text-muted" data-assignments-commitment-sale-net>{{ $assignmentCommitmentSaleDisplay }}</div>
+                                    <div class="small text-muted" data-assignments-commitment-sale-contractual>{{ $assignmentCommitmentSaleContractualDisplay }}</div>
+                                    <div class="small text-muted mt-1 {{ filled($assignmentCommitmentSaleEquivalentDisplay) ? '' : 'd-none' }}" data-assignments-commitment-sale-equivalent>{{ $assignmentCommitmentSaleEquivalentDisplay }}</div>
                                     <div class="small text-muted" data-assignments-commitment-current>{{ $assignmentCommitmentCurrentDisplay }}</div>
                                     <div class="small text-muted" data-assignments-commitment-estimate>{{ $assignmentCommitmentEstimateDisplay }}</div>
                                     <div class="small text-muted" data-assignments-commitment-after>{{ $assignmentCommitmentAfterDisplay }}</div>
@@ -2183,7 +2190,8 @@
         const assignmentProjectValueEffective = form.querySelector('[data-assignments-project-value-effective]');
         const assignmentCommitmentBox = form.querySelector('[data-assignments-commitment-reference]');
         const assignmentCommitmentWarningBox = form.querySelector('[data-assignments-commitment-warning-box]');
-        const assignmentCommitmentSale = form.querySelector('[data-assignments-commitment-sale-net]');
+        const assignmentCommitmentSaleContractual = form.querySelector('[data-assignments-commitment-sale-contractual]');
+        const assignmentCommitmentSaleEquivalent = form.querySelector('[data-assignments-commitment-sale-equivalent]');
         const assignmentCommitmentCurrent = form.querySelector('[data-assignments-commitment-current]');
         const assignmentCommitmentEstimate = form.querySelector('[data-assignments-commitment-estimate]');
         const assignmentCommitmentAfter = form.querySelector('[data-assignments-commitment-after]');
@@ -2354,6 +2362,8 @@
             }
 
             const sale = preview?.sale_net_clp;
+            const saleContractual = preview?.sale_net_contractual;
+            const saleCurrencyCode = String(preview?.sale_net_currency_code || 'CLP').toUpperCase();
             const current = preview?.current_personnel_committed_cost;
             const estimate = preview?.assignment_estimated_cost;
             const after = preview?.after_save_personnel_committed_cost;
@@ -2365,8 +2375,18 @@
                 ? preview.warnings.filter((warning) => warning && warning !== 'El costo de personal comprometido supera la venta neta del proyecto.')
                 : [];
 
-            if (assignmentCommitmentSale) {
-                assignmentCommitmentSale.textContent = assignmentCommitmentText('Venta neta', sale !== null && sale !== undefined ? formatAssignmentMoney(sale, 'CLP', 0) : 'No disponible');
+            if (assignmentCommitmentSaleContractual) {
+                assignmentCommitmentSaleContractual.textContent = assignmentCommitmentText('Venta contractual', saleContractual !== null && saleContractual !== undefined
+                    ? formatAssignmentMoney(saleContractual, saleCurrencyCode, saleCurrencyCode === 'CLP' ? 0 : 2)
+                    : 'No disponible');
+            }
+
+            if (assignmentCommitmentSaleEquivalent) {
+                const equivalentText = saleCurrencyCode !== 'CLP' && sale !== null && sale !== undefined
+                    ? `Equivalente para proyección: ${formatAssignmentMoney(sale, 'CLP', 0)}`
+                    : '';
+                assignmentCommitmentSaleEquivalent.textContent = equivalentText;
+                assignmentCommitmentSaleEquivalent.classList.toggle('d-none', equivalentText === '');
             }
 
             if (assignmentCommitmentCurrent) {
@@ -2428,6 +2448,8 @@
             if (!personId || !projectId) {
                 renderAssignmentCommitmentPreview({
                     sale_net_clp: null,
+                    sale_net_contractual: null,
+                    sale_net_currency_code: null,
                     current_personnel_committed_cost: null,
                     assignment_estimated_cost: null,
                     after_save_personnel_committed_cost: null,
@@ -2478,6 +2500,8 @@
 
                     renderAssignmentCommitmentPreview({
                         sale_net_clp: null,
+                        sale_net_contractual: null,
+                        sale_net_currency_code: null,
                         current_personnel_committed_cost: null,
                         assignment_estimated_cost: null,
                         after_save_personnel_committed_cost: null,

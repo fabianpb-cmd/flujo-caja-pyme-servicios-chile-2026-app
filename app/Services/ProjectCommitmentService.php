@@ -41,6 +41,10 @@ class ProjectCommitmentService
         $projectExchangeInfo = null;
         $commitmentReferenceDate = $this->commitmentReferenceDate($project, $assignments);
         $saleNetClp = $this->projectSaleNetToClp($project, $warnings, $commitmentReferenceDate, $projectExchangeInfo);
+        $saleNetOriginal = $project->sale_net !== null && $project->sale_net !== ''
+            ? round((float) $project->sale_net, 2)
+            : null;
+        $saleNetCurrency = $project->salesCurrency;
         $assignmentCount = $assignments->count();
         $assignmentBreakdown = [];
         $totalCommittedCost = 0.0;
@@ -81,6 +85,10 @@ class ProjectCommitmentService
 
         return [
             'project_id' => $project->id,
+            'sale_net_contractual' => $saleNetOriginal,
+            'sale_net_currency_code' => $saleNetCurrency?->code ?: 'CLP',
+            'sale_net_currency_symbol' => $saleNetCurrency?->symbol ?: '$',
+            'sale_net_currency_minor_units' => (int) ($saleNetCurrency?->minor_units ?? 0),
             'sale_net_clp' => $saleNetClp !== null ? round((float) $saleNetClp, 2) : null,
             'personnel_committed_cost' => $personnelCommittedCost,
             'projected_personnel_margin' => $projectedPersonnelMargin,
@@ -105,6 +113,10 @@ class ProjectCommitmentService
         if (! $project || ! $assignment->person_id) {
             return [
                 'sale_net_clp' => null,
+                'sale_net_contractual' => null,
+                'sale_net_currency_code' => null,
+                'sale_net_currency_symbol' => null,
+                'sale_net_currency_minor_units' => null,
                 'current_personnel_committed_cost' => null,
                 'assignment_estimated_cost' => null,
                 'after_save_personnel_committed_cost' => null,
@@ -131,6 +143,10 @@ class ProjectCommitmentService
 
         return [
             'sale_net_clp' => $after['sale_net_clp'],
+            'sale_net_contractual' => $after['sale_net_contractual'],
+            'sale_net_currency_code' => $after['sale_net_currency_code'],
+            'sale_net_currency_symbol' => $after['sale_net_currency_symbol'],
+            'sale_net_currency_minor_units' => $after['sale_net_currency_minor_units'],
             'current_personnel_committed_cost' => $current['personnel_committed_cost'],
             'assignment_estimated_cost' => $assignmentEstimate['committed_cost'],
             'after_save_personnel_committed_cost' => $after['personnel_committed_cost'],
@@ -252,10 +268,11 @@ class ProjectCommitmentService
         }
 
         $saleNet = (float) $project->sale_net;
+        $currencyCode = strtoupper((string) ($project->salesCurrency?->code ?? 'CLP'));
         return $this->convertToClp(
             companyId: $project->company_id,
             amount: $saleNet,
-            unitType: 'CURRENCY',
+            unitType: $currencyCode === 'UF' ? 'UF' : 'CURRENCY',
             currency: $project->salesCurrency ?: null,
             date: $referenceDate,
             warnings: $warnings,

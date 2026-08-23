@@ -204,6 +204,10 @@ class OperationalCrudController extends Controller
                 ? $this->commitments->previewAssignment($assignment, $excludeAssignmentId)
                 : [
                     'sale_net_clp' => null,
+                    'sale_net_contractual' => null,
+                    'sale_net_currency_code' => null,
+                    'sale_net_currency_symbol' => null,
+                    'sale_net_currency_minor_units' => null,
                     'current_personnel_committed_cost' => null,
                     'assignment_estimated_cost' => null,
                     'after_save_personnel_committed_cost' => null,

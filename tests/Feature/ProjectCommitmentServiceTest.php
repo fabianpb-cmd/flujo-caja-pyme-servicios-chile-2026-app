@@ -93,7 +93,7 @@ class ProjectCommitmentServiceTest extends TestCase
         $payrollWithoutProject = app(PayrollService::class)->calculate($person, '2026-08-01');
         $payrollWithProject = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id]);
 
-        $this->assertTrue($summary['calculation_complete']);
+        $this->assertTrue($summary['calculation_complete'], json_encode($summary, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         $this->assertSame($expectedCommitment, $summary['personnel_committed_cost']);
         $this->assertSame(round(1000000 - $expectedCommitment, 2), $summary['projected_personnel_margin']);
         $this->assertSame($payrollWithoutProject['gross_amount'], $payrollWithProject['gross_amount']);
@@ -247,6 +247,45 @@ class ProjectCommitmentServiceTest extends TestCase
         $this->assertNotNull($summary['exchange_rate_note']);
         $this->assertStringContainsString('última UF oficial disponible', $summary['exchange_rate_note']);
         $this->assertSame(408450.0, $summary['personnel_committed_cost']);
+    }
+
+    public function test_commitment_normalizes_uf_sale_net_for_currency_comparison(): void
+    {
+        $this->ufValue('2026-08-01', 40845.0);
+        $this->ufValue('2026-09-01', 40845.0);
+
+        $project = $this->project([
+            'sale_net' => 110,
+            'sales_currency_id' => $this->uf->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+        ]);
+        $person = $this->person('PAGO_POR_HORA', [
+            'name' => 'Persona UF Venta',
+            'hourly_value' => 0,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+        ]);
+
+        $this->assignment($person, $project, [
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $this->uf->id,
+            'monthly_hours' => 10,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+        ]);
+
+        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+
+        $this->assertSame(110.0, $summary['sale_net_contractual']);
+        $this->assertSame('UF', $summary['sale_net_currency_code']);
+        $this->assertSame(4492950.0, $summary['sale_net_clp']);
+        $this->assertSame(408450.0, $summary['personnel_committed_cost']);
+        $this->assertSame(4084500.0, $summary['projected_personnel_margin']);
+        $this->assertSame(9.1, $summary['committed_percentage']);
     }
 
     public function test_commitment_counts_an_exact_month_anniversary_as_one_full_month(): void

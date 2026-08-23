@@ -2616,7 +2616,7 @@ class OperationalUiTest extends TestCase
         $edit->assertOk();
         $edit->assertSee('Compromiso del proyecto');
         $edit->assertSee('data-assignment-commitment-preview-url="'.route('operational.assignment-commitment-preview', 'assignments').'"', false);
-        $edit->assertSee('Venta neta: $ 50.000', false);
+        $edit->assertSee('Venta contractual: $ 50.000', false);
         $edit->assertSee('Costo estimado de esta asignación: $ 40.000', false);
         $edit->assertSee('Compromiso después de guardar: $ 40.000', false);
         $edit->assertSee('Margen proyectado después de guardar: $ 10.000', false);
@@ -2709,6 +2709,75 @@ class OperationalUiTest extends TestCase
         $edit->assertOk();
         $edit->assertSee('Compromiso del proyecto', false);
         $edit->assertSee('data-assignment-commitment-preview-url', false);
+    }
+
+    public function test_assignments_and_project_show_display_contractual_sale_currency_and_clp_equivalent(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        $uf = $this->currency($company->id, 'UF', 'Unidad de Fomento');
+
+        $this->ufValue($company->id, '2026-08-01', 40845.0);
+        $this->ufValue($company->id, '2026-09-01', 40845.0);
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-NORM-UF',
+            'legal_name' => 'Cliente Normalización UF',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $uf->id,
+            'code' => 'PRY-NORM-UF',
+            'name' => 'Proyecto Normalización UF',
+            'sale_net' => 110,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+            'project_status_id' => $this->statusId($company->id, 'project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-NORM-UF',
+            'first_names' => 'Normalización',
+            'paternal_surname' => 'UF',
+            'name' => 'Normalización UF',
+            'modality' => 'Pago por hora',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $uf->id,
+            'hourly_value' => 0,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-NORM-UF',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $uf->id,
+            'hourly_value' => 1,
+            'monthly_hours' => 10,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-01',
+        ]);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['assignments', $assignment->id]));
+        $edit->assertOk();
+        $edit->assertSee('Venta contractual: UF 110,00', false);
+        $edit->assertSee('Equivalente para proyección: $ 4.492.950', false);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['projects', $project->id]));
+        $show->assertOk();
+        $show->assertSee('Venta contractual', false);
+        $show->assertSee('UF 110,00', false);
+        $show->assertSee('Equivalente para proyección: $ 4.492.950', false);
     }
 
     public function test_project_show_displays_personnel_commitment_summary(): void
@@ -2834,6 +2903,26 @@ class OperationalUiTest extends TestCase
                 'sort_order' => 999,
             ]
         );
+    }
+
+    private function ufValue(int $companyId, string $date, float $value): void
+    {
+        $existing = UfValue::query()
+            ->where('company_id', $companyId)
+            ->whereDate('value_date', $date)
+            ->first();
+
+        if ($existing) {
+            $existing->update(['value' => $value]);
+
+            return;
+        }
+
+        UfValue::query()->create([
+            'company_id' => $companyId,
+            'value_date' => $date,
+            'value' => $value,
+        ]);
     }
 
     private function clientProjectFixtures(int $companyId): array

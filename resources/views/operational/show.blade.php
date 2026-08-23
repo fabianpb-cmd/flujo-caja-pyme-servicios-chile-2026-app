@@ -8,6 +8,7 @@
     $assignmentEffectiveHourlyOrigin = null;
     $assignmentProjectValueDisplay = null;
     $projectCommitmentExchangeRateNote = null;
+    $projectCommitmentSaleCurrencyCode = null;
 
     if ($resource === 'assignments' && $item instanceof \App\Models\ProjectAssignment) {
         $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency', 'person.hourlyRateCurrency']);
@@ -116,12 +117,16 @@
 
     @if ($resource === 'projects' && ! empty($projectCommitment))
         @php($projectCommitmentExchangeRateNote = data_get($projectCommitment, 'exchange_rate_note'))
+        @php($projectCommitmentSaleCurrencyCode = data_get($projectCommitment, 'sale_net_currency_code', 'CLP'))
         <div class="app-panel p-3 mb-4">
             <div class="section-title mb-2">Compromiso de personal</div>
             <div class="row g-3">
                 <div class="col-12 col-md-6 col-xl-3">
-                    <div class="text-muted small">Venta neta</div>
-                    <div class="fw-semibold">{{ $projectCommitment['sale_net_clp'] !== null ? \App\Support\UiFormatter::formatMoney($projectCommitment['sale_net_clp']) : 'No disponible' }}</div>
+                    <div class="text-muted small">Venta contractual</div>
+                    <div class="fw-semibold">{{ $projectCommitment['sale_net_contractual'] !== null ? \App\Support\UiFormatter::formatMoney($projectCommitment['sale_net_contractual'], $projectCommitmentSaleCurrencyCode) : 'No disponible' }}</div>
+                    @if ($projectCommitmentSaleCurrencyCode !== 'CLP' && $projectCommitment['sale_net_clp'] !== null)
+                        <div class="small text-muted">Equivalente para proyección: {{ \App\Support\UiFormatter::formatMoney($projectCommitment['sale_net_clp']) }}</div>
+                    @endif
                 </div>
                 <div class="col-12 col-md-6 col-xl-3">
                     <div class="text-muted small">Personal comprometido</div>

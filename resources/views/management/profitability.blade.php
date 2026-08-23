@@ -110,7 +110,12 @@
                 <td class="text-end amount-cell">{{ $row['effective_rate'] !== null ? \App\Support\UiFormatter::formatMoney($row['effective_rate']) : '—' }}</td>
                 <td class="text-end amount-cell">{{ $row['hour_cost'] !== null ? \App\Support\UiFormatter::formatMoney($row['hour_cost']) : '—' }}</td>
                 <td class="text-end amount-cell {{ ($row['hour_margin'] ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">{{ $row['hour_margin'] !== null ? \App\Support\UiFormatter::formatMoney($row['hour_margin']) : '—' }}</td>
-                <td class="text-end amount-cell">{{ $row['projected_personnel_sale'] !== null ? \App\Support\UiFormatter::formatMoney($row['projected_personnel_sale']) : '—' }}</td>
+                <td class="text-end amount-cell">
+                    <div>{{ $row['projected_personnel_sale_contractual'] !== null ? \App\Support\UiFormatter::formatMoney($row['projected_personnel_sale_contractual'], $row['projected_personnel_sale_currency_code'] ?? 'CLP') : '—' }}</div>
+                    @if (($row['projected_personnel_sale_currency_code'] ?? 'CLP') !== 'CLP' && $row['projected_personnel_sale'] !== null)
+                        <div class="small text-muted">{{ \App\Support\UiFormatter::formatMoney($row['projected_personnel_sale']) }} equiv.</div>
+                    @endif
+                </td>
                 <td class="text-end amount-cell">{{ $row['personnel_committed_cost'] !== null ? \App\Support\UiFormatter::formatMoney($row['personnel_committed_cost']) : 'No disponible' }}</td>
                 <td class="text-end amount-cell {{ ($row['projected_personnel_margin'] ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">{{ $row['projected_personnel_margin'] !== null ? \App\Support\UiFormatter::formatMoney($row['projected_personnel_margin']) : 'No disponible' }}</td>
                 <td class="text-end amount-cell">{{ $row['committed_percentage'] !== null ? \App\Support\UiFormatter::formatPercent($row['committed_percentage'] / 100, 1) : 'No disponible' }}</td>

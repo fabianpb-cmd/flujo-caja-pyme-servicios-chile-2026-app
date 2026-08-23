@@ -88,6 +88,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | Presupuesto | Es planificación manual y no reemplaza compromiso ni costo real. |
 | Cash Flow | Representa timing de caja y no debe mezclarse con compromiso, presupuesto o costo real. |
 | `sale_net` | Es referencia contractual/comercial de venta del Proyecto. |
+| Normalización monetaria del compromiso | Las comparaciones de compromiso y margen siempre normalizan venta contractual y costos a una misma moneda. `projects.sale_net` conserva su moneda definida por `projects.sales_currency_id` y nunca debe interpretarse como CLP por el solo hecho de ser numérico. |
 | Compromiso, costo real, presupuesto y caja | Son conceptos separados y no deben sumarse indiscriminadamente. |
 
 ## Reglas deliberadamente no incorporadas
