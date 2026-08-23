@@ -2806,7 +2806,7 @@ class OperationalUiTest extends TestCase
             'net_pay' => 170000,
             'calculation_status' => 'OK',
             'legal_snapshot' => ['period' => '2026-07-01'],
-            'status' => 'Pendiente de fecha de pago',
+            'status' => \App\Services\PayrollService::STATUS_PENDING_PAYMENT_DATE,
         ]);
 
         $response = $this->actingAs($admin)->get(route('operational.edit', ['payroll-records', $payroll->id]));
@@ -2937,6 +2937,16 @@ class OperationalUiTest extends TestCase
     {
         [$company, $admin] = $this->companyWithAdmin();
         [$client, , $project] = $this->clientProjectFixtures($company->id);
+        LegalParameter::query()->create([
+            'company_id' => $company->id,
+            'parameter_code' => 'RETENCION_HONORARIOS',
+            'parameter_name' => 'Retención honorarios',
+            'valid_from' => '2026-01-01',
+            'valid_to' => '2026-12-31',
+            'value' => 0.1525,
+            'unit' => '%',
+            'active' => true,
+        ]);
         UfValue::query()->create([
             'company_id' => $company->id,
             'value_date' => '2026-08-01',
@@ -3110,6 +3120,135 @@ class OperationalUiTest extends TestCase
         ]);
 
         $update->assertRedirect(route('operational.index', 'payroll-records').'/'.$payroll->id);
+    }
+
+    public function test_payroll_project_mode_with_configured_project_value_saves_calculated_record_without_server_error(): void
+    {
+        $this->withoutExceptionHandling();
+
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+        LegalParameter::query()->create([
+            'company_id' => $company->id,
+            'parameter_code' => 'RETENCION_HONORARIOS',
+            'parameter_name' => 'Retención honorarios',
+            'valid_from' => '2026-01-01',
+            'valid_to' => '2026-12-31',
+            'value' => 0.1525,
+            'unit' => '%',
+            'active' => true,
+        ]);
+        UfValue::query()->create([
+            'company_id' => $company->id,
+            'value_date' => '2026-08-01',
+            'value' => 40844.79,
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-REM-SAVE-OK',
+            'first_names' => 'Jaime',
+            'paternal_surname' => 'Soriano',
+            'maternal_surname' => 'Caso',
+            'name' => 'Jaime Soriano',
+            'modality' => 'Honorarios por proyecto',
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'POR_PROYECTO'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-REM-SAVE-OK',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+            'project_value' => 100.00,
+            'hourly_rate_unit_type' => 'UF',
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HRS-REM-SAVE-OK',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-15',
+            'activity' => 'Implementación',
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 1,
+            'calculated_amount' => 10,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $payroll = PayrollRecord::query()->create([
+            'company_id' => $company->id,
+            'code' => 'REM-SAVE-OK-01',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'hours_approved' => 10,
+            'base_salary' => 4084479,
+            'gross_amount' => 4084479,
+            'taxable_gross' => 0,
+            'employee_retention' => 622883,
+            'employer_cost' => 4084479,
+            'net_pay' => 3461596,
+            'calculation_status' => 'OK',
+            'status' => 'Pendiente',
+            'project_value' => null,
+            'bonuses' => 0,
+            'non_taxable_allowances' => 0,
+            'advances' => 0,
+            'other_deductions' => 0,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->from(route('operational.edit', ['payroll-records', $payroll->id]))
+            ->put(route('operational.update', ['payroll-records', $payroll->id]), [
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'period_date' => '2026-08-01',
+                'payment_date' => '',
+                'amount_basis' => 'GROSS',
+                'monthly_value' => '',
+                'hourly_value' => '',
+                'project_value' => '',
+                'bonuses' => '0',
+                'non_taxable_allowances' => '0',
+                'advances' => '0',
+                'other_deductions' => '0',
+                'status' => 'Pendiente',
+            ]);
+
+        $response->assertRedirect(route('operational.show', ['payroll-records', $payroll->id]));
+        $response->assertSessionHas('status', 'Registro actualizado.');
+
+        $payroll->refresh();
+        $this->assertSame(\App\Services\PayrollService::STATUS_PENDING_PAYMENT_DATE, $payroll->status);
+        $this->assertSame('OK', $payroll->calculation_status);
+        $this->assertEqualsWithDelta(4084479.0, (float) $payroll->base_salary, 0.01);
+        $this->assertEqualsWithDelta(622883.05, (float) $payroll->employee_retention, 0.01);
+        $this->assertEqualsWithDelta(3461595.95, (float) $payroll->net_pay, 0.01);
+        $this->assertEqualsWithDelta(4084479.0, (float) $payroll->employer_cost, 0.01);
+
+        $overrides = app(\App\Services\PayrollService::class)->manualOverrideInputs($payroll);
+        $this->assertNull($overrides['hours_approved'] ?? null);
+        $this->assertNull($overrides['monthly_value'] ?? null);
+        $this->assertNull($overrides['hourly_value'] ?? null);
+        $this->assertNull($overrides['project_value'] ?? null);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['payroll-records', $payroll->id]));
+        $show->assertOk();
+        $show->assertSee('Pendiente de fecha de pago');
+        $show->assertDontSee(\App\Services\PayrollService::STATUS_PENDING_PAYMENT_DATE);
     }
 
     public function test_payroll_index_does_not_show_automatic_hours_as_override_when_no_manual_override_exists(): void

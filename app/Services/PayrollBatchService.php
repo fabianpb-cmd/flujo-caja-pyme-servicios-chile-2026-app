@@ -217,7 +217,7 @@ class PayrollBatchService
             'requiere revisión',
             'requiere revision',
             'pendiente',
-            'pendiente de fecha de pago',
+            strtolower(\App\Services\PayrollService::STATUS_PENDING_PAYMENT_DATE),
             'falta fecha',
         ], true);
     }

@@ -572,6 +572,10 @@
     $type = $definition['type'] ?? 'text';
     $presentation = $definition['presentation'] ?? null;
 
+    if ($item instanceof \App\Models\PayrollRecord && in_array($field, ['status', 'calculation_status'], true)) {
+        return \App\Support\UiFormatter::display($item, $field, $definition);
+    }
+
     return match (true) {
         $type === 'money' => $normalizeEditableNumericValue($value) ?? '',
         $presentation === 'rut' => \App\Support\ChileanRut::format((string) $value) ?? '',

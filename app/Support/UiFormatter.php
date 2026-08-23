@@ -32,6 +32,13 @@ class UiFormatter
             return $definition['options'][$value] ?? ($value !== null && $value !== '' ? (string) $value : '—');
         }
 
+        if ($item instanceof PayrollRecord && $field === 'status') {
+            return match (strtoupper((string) $value)) {
+                \App\Services\PayrollService::STATUS_PENDING_PAYMENT_DATE => 'Pendiente de fecha de pago',
+                default => $value !== null && $value !== '' ? (string) $value : '—',
+            };
+        }
+
         if ($item instanceof PayrollRecord && $field === 'calculation_status') {
             return match (strtoupper((string) $value)) {
                 'REQUIERE_REVISION' => 'Requiere revisión',

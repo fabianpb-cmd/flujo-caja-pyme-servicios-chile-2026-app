@@ -151,7 +151,7 @@ class PayrollBatchGenerationTest extends TestCase
             'gross_amount' => 1000,
             'net_pay' => 1000,
             'employer_cost' => 1000,
-            'status' => 'Pendiente de fecha de pago',
+            'status' => PayrollService::STATUS_PENDING_PAYMENT_DATE,
         ]);
 
         $summary = app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');

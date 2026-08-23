@@ -437,7 +437,7 @@ class FinancialCoreTest extends TestCase
 
         app(PayrollService::class)->refreshStatus($record);
 
-        $this->assertSame('Pendiente de fecha de pago', $record->refresh()->status);
+        $this->assertSame(PayrollService::STATUS_PENDING_PAYMENT_DATE, $record->refresh()->status);
     }
 
     public function test_dependent_payroll_calculates_afp_health_afc_and_company_cost(): void

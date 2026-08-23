@@ -15,6 +15,8 @@ use Illuminate\Support\Carbon;
 
 class PayrollService
 {
+    public const STATUS_PENDING_PAYMENT_DATE = 'PEND_FECHA_PAGO';
+
     public function __construct(
         private readonly LegalParameterService $legalParameters,
         private readonly IncomeTaxService $incomeTax,
@@ -1112,7 +1114,7 @@ class PayrollService
         }
 
         if (! $record->payment_date) {
-            return 'Pendiente de fecha de pago';
+            return self::STATUS_PENDING_PAYMENT_DATE;
         }
 
         $date = $asOf ? Carbon::parse($asOf) : now();
