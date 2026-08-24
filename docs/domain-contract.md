@@ -90,6 +90,8 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | Horas automáticas en Remuneraciones | Un snapshot automático de horas aprobadas proveniente de Horas no equivale por sí mismo a un override manual. |
 | Costo HH real | Se obtiene desde costo empresa real del período / horas productivas aprobadas. No equivale al valor HH base de Persona ni al valor HH de costeo de la Asignación. |
 | Presupuesto | Es planificación manual y no reemplaza compromiso ni costo real. |
+| Presupuesto por período | Un mismo proyecto/escenario no debe tener dos presupuestos para el mismo período. |
+| Variación de Presupuesto | Compara presupuesto contra real reconocido del período (facturación neta, costo personal reconocido, egresos reconocidos y obligaciones legales reconocidas cuando exista fuente). No usa caja como sustituto del real. |
 | Cash Flow | Representa timing de caja y no debe mezclarse con compromiso, presupuesto o costo real. |
 | `sale_net` | Es referencia contractual/comercial de venta del Proyecto. |
 | Normalización monetaria del compromiso | Las comparaciones de compromiso y margen siempre normalizan venta contractual y costos a una misma moneda. `projects.sale_net` conserva su moneda definida por `projects.sales_currency_id` y nunca debe interpretarse como CLP por el solo hecho de ser numérico. |

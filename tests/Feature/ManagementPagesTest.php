@@ -10,6 +10,7 @@ use App\Models\LegalParameter;
 use App\Models\PayrollRecord;
 use App\Models\Person;
 use App\Models\Project;
+use App\Models\Budget;
 use App\Models\Scenario;
 use App\Models\SalesDocument;
 use App\Models\User;
@@ -150,12 +151,27 @@ class ManagementPagesTest extends TestCase
             'is_voided' => false,
         ]);
 
+        Budget::query()->create([
+            'company_id' => $company->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'revenue_budget' => 1200000,
+            'personnel_budget' => 800000,
+            'other_direct_budget' => 150000,
+            'legal_budget' => 50000,
+            'other_indirect_budget' => 25000,
+        ]);
+
         $this->actingAs($user);
 
         $this->get(route('dashboard'))->assertOk()->assertSee('Dashboard ejecutivo');
         $this->get(route('management.flows'))->assertOk()->assertSee('Flujo mensual y semanal');
         $this->get(route('management.obligations'))->assertOk()->assertSee('Obligaciones');
         $this->get(route('management.profitability'))->assertOk()->assertSee('Rentabilidad por proyecto');
-        $this->get(route('management.budgets'))->assertOk()->assertSee('Presupuesto');
+        $this->get(route('management.budgets'))
+            ->assertOk()
+            ->assertSee('Presupuesto')
+            ->assertSee('real reconocido')
+            ->assertSee('Indirectos Ppto');
     }
 }

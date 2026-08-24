@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Rules\ValidChileanRut;
 use App\Models\ApprovalStatus;
+use App\Models\Budget;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
@@ -272,6 +273,10 @@ class CrudResourceRequest extends FormRequest
                 } elseif (filled($this->input('project_id')) && filled($this->input('person_id')) && filled($this->input('entry_date'))) {
                     $this->validateTimeEntryIntegrity($validator);
                 }
+            }
+
+            if ($resource === 'budgets') {
+                $this->validateBudgetIntegrity($validator);
             }
 
             $this->validateTechnicalFieldLimits($validator, $resource, $config);
@@ -549,8 +554,37 @@ class CrudResourceRequest extends FormRequest
                 'hours_approved' => ['type' => 'decimal', 'precision' => 10, 'scale' => 2, 'label' => $labels('hours_approved', 'Las horas aprobadas')],
                 'hourly_value' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('hourly_value', 'La tarifa aplicable')],
             ],
+            'budgets' => [
+                'revenue_budget' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('revenue_budget', 'El ingreso presupuestado')],
+                'personnel_budget' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('personnel_budget', 'El presupuesto de personal')],
+                'other_direct_budget' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('other_direct_budget', 'El presupuesto de otros costos directos')],
+                'legal_budget' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('legal_budget', 'El presupuesto legal')],
+                'other_indirect_budget' => ['type' => 'decimal', 'precision' => 18, 'scale' => 2, 'label' => $labels('other_indirect_budget', 'El presupuesto de costos indirectos')],
+            ],
             default => [],
         };
+    }
+
+    private function validateBudgetIntegrity(Validator $validator): void
+    {
+        $period = UiFormatter::parseDateInput($this->input('period_date'));
+        if (! $period) {
+            return;
+        }
+
+        $query = Budget::query()
+            ->where('company_id', $this->user()->company_id)
+            ->whereDate('period_date', $period->copy()->startOfMonth()->toDateString())
+            ->when(filled($this->input('project_id')), fn ($builder) => $builder->where('project_id', $this->input('project_id')), fn ($builder) => $builder->whereNull('project_id'))
+            ->when(filled($this->input('scenario_id')), fn ($builder) => $builder->where('scenario_id', $this->input('scenario_id')), fn ($builder) => $builder->whereNull('scenario_id'));
+
+        if ($this->route('record')) {
+            $query->whereKeyNot($this->route('record'));
+        }
+
+        if ($query->exists()) {
+            $validator->errors()->add('period_date', 'Ya existe un presupuesto para el mismo proyecto, escenario y período.');
+        }
     }
 
     private function validateTimeEntryIntegrity(Validator $validator): void

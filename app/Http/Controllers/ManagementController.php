@@ -167,8 +167,8 @@ class ManagementController extends Controller
             ->whereBetween('period_date', [$period->copy()->startOfMonth(), $period->copy()->addMonths(11)->endOfMonth()])
             ->orderBy('period_date')
             ->paginate(24)
-            ->through(function (Budget $budget) use ($companyId) {
-                return array_merge($budget->toArray(), $this->budgets->variance($companyId, $budget->period_date, $budget->project_id));
+            ->through(function (Budget $budget) {
+                return array_merge($budget->toArray(), $this->budgets->varianceForBudget($budget));
             })
             ->withQueryString();
 
