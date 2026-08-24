@@ -91,6 +91,7 @@ class ReceivablesService
         return SalesDocument::query()
             ->forCompany($companyId)
             ->where('is_voided', false)
+            ->whereNotIn('status', ['Borrador', 'Anulado'])
             ->whereDate('issue_date', '<=', $date)
             ->get()
             ->sum(fn (SalesDocument $document): float => $this->balance($document, $date));

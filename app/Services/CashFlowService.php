@@ -17,6 +17,7 @@ class CashFlowService
         private readonly ReceivablesService $receivables,
         private readonly PayablesService $payables,
         private readonly ScenarioService $scenarios,
+        private readonly PayrollService $payroll,
     ) {
     }
 
@@ -173,6 +174,7 @@ class CashFlowService
         $incomeProjected = SalesDocument::query()
             ->forCompany($companyId)
             ->where('is_voided', false)
+            ->whereNotIn('status', ['Borrador', 'Anulado'])
             ->get()
             ->sum(function (SalesDocument $document) use ($start, $end, $scenario): float {
                 $date = Carbon::parse($document->projected_collection_date ?? $document->due_date ?? $document->issue_date)
@@ -187,14 +189,23 @@ class CashFlowService
 
         $otherProjected = (float) ExpenseDocument::query()
             ->forCompany($companyId)
+            ->whereNotIn('payment_status', ['Pagado', 'Anulado'])
             ->whereBetween('due_date', [$start, $end])
             ->get()
             ->sum(fn (ExpenseDocument $document): float => round($this->payables->balance($document) * (float) $scenario->cost_factor, 2));
 
         $personnelProjected = (float) PayrollRecord::query()
             ->forCompany($companyId)
-            ->whereBetween('period_date', [$start, $end])
-            ->sum('net_pay');
+            ->get()
+            ->sum(function (PayrollRecord $record) use ($start, $end): float {
+                $paymentDate = Carbon::parse($record->payment_date ?? $record->period_date);
+
+                if (! $paymentDate->betweenIncluded($start, $end)) {
+                    return 0.0;
+                }
+
+                return $this->payroll->balance($record, $end);
+            });
 
         $legalProjected = (float) LegalObligation::query()
             ->forCompany($companyId)

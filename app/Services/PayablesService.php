@@ -80,6 +80,7 @@ class PayablesService
 
         return ExpenseDocument::query()
             ->forCompany($companyId)
+            ->whereNotIn('payment_status', ['Anulado'])
             ->whereDate('issue_date', '<=', $date)
             ->get()
             ->sum(fn (ExpenseDocument $document): float => $this->balance($document, $date));

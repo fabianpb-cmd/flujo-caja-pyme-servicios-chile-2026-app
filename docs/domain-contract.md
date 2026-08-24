@@ -93,6 +93,10 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | Presupuesto por período | Un mismo proyecto/escenario no debe tener dos presupuestos para el mismo período. |
 | Variación de Presupuesto | Compara presupuesto contra real reconocido del período (facturación neta, costo personal reconocido, egresos reconocidos y obligaciones legales reconocidas cuando exista fuente). No usa caja como sustituto del real. |
 | Cash Flow | Representa timing de caja y no debe mezclarse con compromiso, presupuesto o costo real. |
+| Cash Flow real | Se alimenta exclusivamente con `CashMovement` contabilizados (`posted`); documentos reconocidos o facturados sin movimiento no equivalen a caja real. |
+| Cash Flow proyectado CxC / CxP | Proyecta únicamente el saldo pendiente de cobrar/pagar de documentos vigentes; no reproyecta la porción ya cobrada o pagada y excluye borradores/anulados. |
+| Cash Flow proyectado de remuneraciones | Proyecta el saldo pendiente de `PayrollRecord.net_pay` en la fecha de pago (`payment_date`, o `period_date` solo como fallback temporal), sin sustituirlo por `employer_cost`. |
+| Cash Flow y escenarios | Los escenarios solo alteran la proyección; no modifican movimientos reales ni documentos históricos. |
 | `sale_net` | Es referencia contractual/comercial de venta del Proyecto. |
 | Normalización monetaria del compromiso | Las comparaciones de compromiso y margen siempre normalizan venta contractual y costos a una misma moneda. `projects.sale_net` conserva su moneda definida por `projects.sales_currency_id` y nunca debe interpretarse como CLP por el solo hecho de ser numérico. |
 | Compromiso, costo real, presupuesto y caja | Son conceptos separados y no deben sumarse indiscriminadamente. |
