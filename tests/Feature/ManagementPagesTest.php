@@ -14,6 +14,7 @@ use App\Models\Budget;
 use App\Models\Scenario;
 use App\Models\SalesDocument;
 use App\Models\User;
+use App\Models\LegalObligation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -173,5 +174,58 @@ class ManagementPagesTest extends TestCase
             ->assertSee('Presupuesto')
             ->assertSee('real reconocido')
             ->assertSee('Indirectos Ppto');
+    }
+
+    public function test_management_get_pages_do_not_create_legal_obligations_as_side_effects(): void
+    {
+        $company = Company::query()->create([
+            'code' => 'CMP-MGT-SFX',
+            'name' => 'Empresa Gestión Side Effects',
+            'status' => 'active',
+        ]);
+
+        $user = User::query()->create([
+            'company_id' => $company->id,
+            'name' => 'Admin Gestión Side Effects',
+            'email' => 'gestion-side@test.local',
+            'password' => 'password',
+            'role' => 'admin',
+            'active' => true,
+        ]);
+
+        CompanySetting::query()->create([
+            'company_id' => $company->id,
+            'setting_key' => 'active_scenario',
+            'setting_value' => 'BASE',
+        ]);
+
+        Scenario::query()->create([
+            'company_id' => $company->id,
+            'code' => 'BASE',
+            'name' => 'Base',
+            'sales_factor' => 1,
+            'cost_factor' => 1,
+            'collection_delay_days' => 0,
+            'is_active' => true,
+        ]);
+
+        CashAccount::query()->create([
+            'company_id' => $company->id,
+            'code' => 'BANK-MGT-SFX',
+            'name' => 'Banco Gestión Side Effects',
+            'currency' => 'CLP',
+            'opening_balance' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user);
+
+        $this->assertSame(0, LegalObligation::query()->forCompany($company->id)->count());
+
+        $this->get(route('dashboard'))->assertOk();
+        $this->get(route('management.flows'))->assertOk();
+        $this->get(route('management.obligations'))->assertOk();
+
+        $this->assertSame(0, LegalObligation::query()->forCompany($company->id)->count());
     }
 }

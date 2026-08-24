@@ -97,6 +97,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | Cash Flow proyectado CxC / CxP | Proyecta únicamente el saldo pendiente de cobrar/pagar de documentos vigentes; no reproyecta la porción ya cobrada o pagada y excluye borradores/anulados. |
 | Cash Flow proyectado de remuneraciones | Proyecta el saldo pendiente de `PayrollRecord.net_pay` en la fecha de pago (`payment_date`, o `period_date` solo como fallback temporal), sin sustituirlo por `employer_cost`. |
 | Cash Flow y escenarios | Los escenarios solo alteran la proyección; no modifican movimientos reales ni documentos históricos. |
+| Dashboard / Gestión | Consume servicios cerrados como capa de agregación/presentación y no debe sincronizar ni crear registros por simple navegación GET. |
 | `sale_net` | Es referencia contractual/comercial de venta del Proyecto. |
 | Normalización monetaria del compromiso | Las comparaciones de compromiso y margen siempre normalizan venta contractual y costos a una misma moneda. `projects.sale_net` conserva su moneda definida por `projects.sales_currency_id` y nunca debe interpretarse como CLP por el solo hecho de ser numérico. |
 | Compromiso, costo real, presupuesto y caja | Son conceptos separados y no deben sumarse indiscriminadamente. |

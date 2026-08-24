@@ -38,8 +38,6 @@ class ManagementController extends Controller
         $companyId = (int) $request->user()->company_id;
         $scenario = $request->string('scenario')->toString() ?: null;
 
-        $this->obligations->syncMonthlyObligations($companyId, now()->startOfMonth(), 12);
-
         $data = $this->dashboard->data($companyId, $scenario);
         $flows = collect($data['flows']);
         $profitability = collect($data['profitability']);
@@ -142,8 +140,6 @@ class ManagementController extends Controller
         $companyId = (int) $request->user()->company_id;
         $period = Carbon::parse($request->input('period', now()->toDateString()))->startOfMonth();
 
-        $this->obligations->syncMonthlyObligations($companyId, $period, 12);
-
         $rows = LegalObligation::query()
             ->forCompany($companyId)
             ->whereBetween('period_date', [$period->copy()->startOfMonth(), $period->copy()->addMonths(11)->endOfMonth()])
@@ -182,8 +178,6 @@ class ManagementController extends Controller
         $companyId = (int) $request->user()->company_id;
         $period = Carbon::parse($request->input('period', now()->toDateString()))->startOfMonth();
         $scenario = $request->string('scenario')->toString() ?: null;
-
-        $this->obligations->syncMonthlyObligations($companyId, $period, 12);
 
         return view('management.flows', [
             'monthly' => $this->cashFlow->monthly($companyId, $period, 12, $scenario),
