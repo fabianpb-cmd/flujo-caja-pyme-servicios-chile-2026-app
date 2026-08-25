@@ -1584,6 +1584,7 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('Valor HH de costeo del proyecto:');
         $edit->assertSee('UF');
         $edit->assertSee('/ HH');
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar registro de horas/s', $edit->getContent());
     }
 
     public function test_time_entries_create_view_exposes_period_load_mode_without_replacing_daily_mode(): void
@@ -1626,9 +1627,19 @@ class OperationalUiTest extends TestCase
         $create->assertSee('Horas iguales por día');
         $create->assertSee('Total del período');
         $create->assertSee('Manual');
+        $create->assertSee('AUTORIZACIÓN');
+        $create->assertSee('Las condiciones seleccionadas se aplicarán a todos los días incluidos en esta carga.');
+        $create->assertSee('El pago común del lote se propagará a cada registro diario creado.');
         $create->assertSee('data-time-entry-period-table', false);
         $create->assertSee('data-time-entry-period-rows-payload', false);
         $create->assertSee('La carga por período genera múltiples registros diarios', false);
+        $create->assertSee('<th style="width: 56px;">Incluir</th>', false);
+        $create->assertSee('<th>Fecha</th>', false);
+        $create->assertSee('<th>Asignación</th>', false);
+        $create->assertSee('<th style="width: 140px;">Horas</th>', false);
+        $create->assertDontSee('<th style="width: 140px;">Aprobadas</th>', false);
+        $create->assertDontSee('<th style="width: 200px;">Estado</th>', false);
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
     }
 
     public function test_time_entries_period_load_creates_daily_entries_with_equal_total_and_manual_distribution(): void

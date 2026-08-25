@@ -438,6 +438,7 @@
 @php($timeEntryPeriodHoursPerDay = $resource === 'time-entries' ? old('period_hours_per_day') : null)
 @php($timeEntryPeriodTotalHours = $resource === 'time-entries' ? old('period_total_hours') : null)
 @php($timeEntryPeriodRowsPayload = $resource === 'time-entries' ? old('period_rows_payload', '') : '')
+@php($timeEntryPeriodAuthorizationFields = ['approval_status_id', 'payment_status'])
 @php($timeEntryMatchingRanges = $timeEntrySelectedProjectRanges->filter(function (array $range) use ($timeEntrySelectedPersonId, $timeEntryEntryDateParsed) {
     if ((string) ($range['person_id'] ?? '') !== (string) $timeEntrySelectedPersonId) {
         return false;
@@ -978,6 +979,38 @@
 
             <input type="hidden" name="period_rows_payload" value="{{ $timeEntryPeriodRowsPayload }}" data-time-entry-period-rows-payload>
 
+            <div class="app-panel p-3 mb-3" data-time-entry-period-authorization>
+                <div class="section-title mb-3">AUTORIZACIÓN</div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label for="approval_status_id" class="form-label">Aprobación</label>
+                        <select id="approval_status_id" name="approval_status_id" class="form-select @error('approval_status_id') is-invalid @enderror" data-time-entry-approval-status-select>
+                            <option value="">Seleccione</option>
+                            @foreach (($options['approval_status_id'] ?? []) as $key => $option)
+                                @php($label = is_array($option) ? $option['label'] : $option)
+                                <option value="{{ $key }}" @selected((string) old('approval_status_id', $item->approval_status_id ?? '') === (string) $key)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        <div class="small text-muted mt-1">Las condiciones seleccionadas se aplicarán a todos los días incluidos en esta carga.</div>
+                        @error('approval_status_id')
+                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="payment_status" class="form-label">Pago</label>
+                        <select id="payment_status" name="payment_status" class="form-select @error('payment_status') is-invalid @enderror" data-time-entry-payment-status-select>
+                            @foreach (['pending' => 'Pendiente', 'paid' => 'Pagado'] as $key => $label)
+                                <option value="{{ $key }}" @selected((string) old('payment_status', $item->payment_status ?? 'pending') === (string) $key)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        <div class="small text-muted mt-1">El pago común del lote se propagará a cada registro diario creado.</div>
+                        @error('payment_status')
+                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                        @enderror
+                    </div>
+                </div>
+            </div>
+
             <div class="app-panel bg-light border-0 p-3 mb-3">
                 <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
                     <div>
@@ -1005,13 +1038,11 @@
                             <th>Fecha</th>
                             <th>Asignación</th>
                             <th style="width: 140px;">Horas</th>
-                            <th style="width: 140px;">Aprobadas</th>
-                            <th style="width: 200px;">Estado</th>
                         </tr>
                     </thead>
                     <tbody data-time-entry-period-rows>
                         <tr data-time-entry-period-empty-row>
-                            <td colspan="6" class="text-muted small py-3">Prepare el período para ver la distribución diaria antes de guardar.</td>
+                            <td colspan="4" class="text-muted small py-3">Prepare el período para ver la distribución diaria antes de guardar.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1358,8 +1389,9 @@
                     @php($value = '+56')
                 @endif
                 @php($colClass = $definition['col'] ?? ($resourceColumns[$field] ?? 'col-12 col-md-6'))
+                @php($timeEntryDailyOnly = $resource === 'time-entries' && ! $editing && in_array($field, ['client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
+                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' && in_array($field, $timeEntryPeriodAuthorizationFields, true))
                 @if ($field === 'code' && $autoCode)
-                    @php($timeEntryDailyOnly = $resource === 'time-entries' && ! $editing && in_array($field, ['client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value'], true))
                     <div class="{{ $colClass }}{{ $timeEntryDailyOnly ? ' time-entry-daily-only' : '' }}" @if($timeEntryDailyOnly) data-time-entry-daily-only="true" @endif>
                         <label for="{{ $field }}" class="form-label">Código</label>
                         @if ($editing)
@@ -2464,7 +2496,7 @@
             if (rows.length === 0) {
                 timeEntryPeriodRows.innerHTML = `
                     <tr data-time-entry-period-empty-row>
-                        <td colspan="6" class="text-muted small py-3">Prepare el período para ver la distribución diaria antes de guardar.</td>
+                        <td colspan="4" class="text-muted small py-3">Prepare el período para ver la distribución diaria antes de guardar.</td>
                     </tr>
                 `;
                 return;
@@ -2489,11 +2521,6 @@
                             <div class="text-muted small">${escapeHtml(row.hourly_value_display || '')}${row.hourly_value_source ? ` · ${escapeHtml(row.hourly_value_source)}` : ''}</div>
                         </td>
                         <td>${hoursControl}</td>
-                        <td><span>${escapeHtml(row.approved_display || '—')}</span></td>
-                        <td>
-                            <div class="small fw-semibold">${escapeHtml(row.status_label || '')}</div>
-                            ${rowMessages.length > 0 ? `<div class="text-muted small">${rowMessages.map((message) => escapeHtml(message)).join('<br>')}</div>` : ''}
-                        </td>
                     </tr>
                 `;
             }).join('');
