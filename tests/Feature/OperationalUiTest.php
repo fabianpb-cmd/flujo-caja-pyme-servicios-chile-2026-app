@@ -1619,8 +1619,11 @@ class OperationalUiTest extends TestCase
         $create = $this->actingAs($admin)->get(route('operational.create', 'time-entries'));
 
         $create->assertOk();
-        $create->assertSee('Carga diaria');
-        $create->assertSee('Carga por período');
+        $create->assertSeeInOrder(['Carga por período', 'Carga diaria']);
+        $create->assertSee('data-time-entry-period-load-container', false);
+        $create->assertSee('data-time-entry-daily-load-container', false);
+        $this->assertMatchesRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-period-load-container/s', $create->getContent());
+        $this->assertDoesNotMatchRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-daily-load-container/s', $create->getContent());
         $create->assertSee('data-time-entry-period-preview-url', false);
         $create->assertSee('period_start_date', false);
         $create->assertSee('period_end_date', false);
@@ -1686,6 +1689,10 @@ class OperationalUiTest extends TestCase
         $create->assertSee('RESUMEN');
         $create->assertSee('Registrar período');
         $create->assertSee('data-time-entry-period-panel', false);
+        $create->assertSee('data-time-entry-period-load-container', false);
+        $create->assertSee('data-time-entry-daily-load-container', false);
+        $this->assertMatchesRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-daily-load-container/s', $create->getContent());
+        $this->assertDoesNotMatchRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-period-load-container/s', $create->getContent());
         $create->assertDontSee('data-time-entry-daily-context', false);
         $create->assertDontSee('data-time-entry-assignment-context', false);
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());

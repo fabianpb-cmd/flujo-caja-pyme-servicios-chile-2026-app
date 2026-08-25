@@ -921,11 +921,11 @@
         <div class="row g-3 mb-4">
             <div class="col-12">
                 <div class="btn-group" role="group" aria-label="Modo de carga de horas">
-                    <input type="radio" class="btn-check" name="entry_mode" id="entry_mode_daily" value="daily" autocomplete="off" data-time-entry-mode-toggle="true" @checked($timeEntryEntryMode !== 'period')>
-                    <label class="btn btn-outline-primary" for="entry_mode_daily">Carga diaria</label>
-
                     <input type="radio" class="btn-check" name="entry_mode" id="entry_mode_period" value="period" autocomplete="off" data-time-entry-mode-toggle="true" @checked($timeEntryEntryMode === 'period')>
                     <label class="btn btn-outline-primary" for="entry_mode_period">Carga por período</label>
+
+                    <input type="radio" class="btn-check" name="entry_mode" id="entry_mode_daily" value="daily" autocomplete="off" data-time-entry-mode-toggle="true" @checked($timeEntryEntryMode !== 'period')>
+                    <label class="btn btn-outline-primary" for="entry_mode_daily">Carga diaria</label>
                 </div>
                 <div class="small text-muted mt-2">
                     Seleccione primero la persona y la fecha o período. La carga por período genera múltiples registros diarios y mantiene la misma granularidad del módulo Horas.
@@ -933,7 +933,7 @@
             </div>
         </div>
 
-        <div class="{{ $timeEntryEntryMode === 'period' ? '' : 'd-none' }}" data-time-entry-period-panel>
+        <div class="{{ $timeEntryEntryMode === 'period' ? '' : 'd-none' }}" data-time-entry-period-panel data-time-entry-period-load-container>
             <div class="section-title">Carga por período</div>
             <div class="row g-3 mb-3">
                 <div class="col-12 col-md-6 col-xl-3">
@@ -1387,6 +1387,7 @@
             </div>
         </div>
     @else
+        <div class="{{ $resource === 'time-entries' && ! $editing ? ($timeEntryEntryMode === 'period' ? 'd-none' : '') : '' }}" @if($resource === 'time-entries' && ! $editing) data-time-entry-daily-load-container @endif>
         <div class="row g-3">
             @php($currentSection = null)
             @foreach ($fields as $field => $definition)
@@ -1701,6 +1702,7 @@
                     </div>
                 @endif
             @endforeach
+        </div>
         </div>
     @endif
 
@@ -2022,7 +2024,8 @@
         const timeEntryCostCenterSelect = form.querySelector('#cost_center_id');
         const timeEntryModeToggles = Array.from(form.querySelectorAll('[data-time-entry-mode-toggle="true"]'));
         const timeEntryPeriodPanel = form.querySelector('[data-time-entry-period-panel]');
-        const timeEntryDailyOnlyFields = Array.from(form.querySelectorAll('[data-time-entry-daily-only="true"]'));
+        const timeEntryPeriodLoadContainer = form.querySelector('[data-time-entry-period-load-container]');
+        const timeEntryDailyLoadContainer = form.querySelector('[data-time-entry-daily-load-container]');
         const timeEntryPeriodPreviewUrl = form.dataset.timeEntryPeriodPreviewUrl || '';
         const timeEntryPeriodStartInput = form.querySelector('[data-time-entry-period-start]');
         const timeEntryPeriodEndInput = form.querySelector('[data-time-entry-period-end]');
@@ -2450,6 +2453,32 @@
             }
         };
 
+        const setTimeEntryContainerState = (container, active) => {
+            if (!container) {
+                return;
+            }
+
+            container.classList.toggle('d-none', !active);
+
+            const controls = container.querySelectorAll('input, select, textarea, button');
+            controls.forEach((control) => {
+                if (control.hasAttribute('data-time-entry-mode-toggle')) {
+                    return;
+                }
+
+                if (control.tagName === 'BUTTON' && control.closest('[data-time-entry-submit-actions]')) {
+                    return;
+                }
+
+                if (control.type === 'hidden') {
+                    control.disabled = !active;
+                    return;
+                }
+
+                control.disabled = !active;
+            });
+        };
+
         const syncTimeEntryPeriodRowsPayload = () => {
             if (!timeEntryPeriodRowsPayload) {
                 return;
@@ -2686,13 +2715,8 @@
         const syncTimeEntryMode = () => {
             const periodMode = isTimeEntryPeriodMode();
 
-            if (timeEntryPeriodPanel) {
-                timeEntryPeriodPanel.classList.toggle('d-none', !periodMode);
-            }
-
-            timeEntryDailyOnlyFields.forEach((element) => {
-                element.classList.toggle('d-none', periodMode);
-            });
+            setTimeEntryContainerState(timeEntryPeriodLoadContainer || timeEntryPeriodPanel, periodMode);
+            setTimeEntryContainerState(timeEntryDailyLoadContainer, !periodMode);
 
             if (timeEntrySubmitLabel) {
                 timeEntrySubmitLabel.textContent = periodMode ? 'Registrar período' : 'Guardar';
