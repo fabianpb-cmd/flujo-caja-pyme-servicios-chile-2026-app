@@ -1406,6 +1406,7 @@
                     @php($value = '+56')
                 @endif
                 @php($colClass = $definition['col'] ?? ($resourceColumns[$field] ?? 'col-12 col-md-6'))
+                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period')
                 @php($timeEntryDailyOnly = $resource === 'time-entries' && ! $editing && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
                 @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
                 @if ($field === 'code' && $autoCode)

@@ -1647,6 +1647,50 @@ class OperationalUiTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
     }
 
+    public function test_time_entries_period_mode_hides_daily_form_block_completely(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-PERIOD-HIDE',
+            'first_names' => 'Nora',
+            'paternal_surname' => 'Oculta',
+            'name' => 'Nora Oculta',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.55,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-PERIOD-HIDE',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-08-24',
+            'end_date' => '2026-09-30',
+        ]);
+
+        $create = $this->actingAs($admin)
+            ->withSession(['_old_input' => ['entry_mode' => 'period']])
+            ->get(route('operational.create', 'time-entries'));
+
+        $create->assertOk();
+        $create->assertSee('Carga por período');
+        $create->assertSee('AUTORIZACIÓN');
+        $create->assertSee('RESUMEN');
+        $create->assertSee('Registrar período');
+        $create->assertSee('data-time-entry-period-panel', false);
+        $create->assertDontSee('data-time-entry-daily-context', false);
+        $create->assertDontSee('data-time-entry-assignment-context', false);
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
+    }
+
     public function test_time_entries_period_preview_keeps_common_validation_compact_before_daily_resolution(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
