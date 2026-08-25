@@ -1028,11 +1028,11 @@
                     </div>
                     <div class="col-12 col-lg-3">
                         <div class="small text-muted">Días considerados</div>
-                        <div class="fw-semibold" data-time-entry-period-summary-days>0 días hábiles</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-days>—</div>
                     </div>
                     <div class="col-12 col-lg-3">
                         <div class="small text-muted">Total a registrar</div>
-                        <div class="fw-semibold" data-time-entry-period-total-hours-display>0,00 h</div>
+                        <div class="fw-semibold" data-time-entry-period-total-hours-display>—</div>
                     </div>
                     <div class="col-12">
                         <div class="small text-muted">Distribución</div>
@@ -2464,6 +2464,7 @@
                 : [];
             const summary = preview?.summary || {};
             const distributionMode = String(timeEntryPeriodDistributionSelect?.value || 'equal');
+            const hasValidPreview = fieldErrors.length === 0 && rows.length > 0;
 
             timeEntryPeriodRowsState = rows.map((row) => ({
                 entry_date: row.entry_date,
@@ -2473,24 +2474,34 @@
             syncTimeEntryPeriodRowsPayload();
 
             if (timeEntryPeriodSummaryAssignment) {
-                timeEntryPeriodSummaryAssignment.textContent = summary.shared_assignment_label
+                timeEntryPeriodSummaryAssignment.textContent = hasValidPreview && summary.shared_assignment_label
                     ? `Asignación: ${summary.shared_assignment_label}`
-                    : (summary.multiple_assignments ? 'Asignación: El período utiliza más de una asignación vigente.' : 'Asignación: Seleccione persona, proyecto y rango para preparar la carga.');
+                    : (summary.multiple_assignments
+                        ? 'Asignación: El período utiliza más de una asignación vigente.'
+                        : 'Asignación: Pendiente de selección.');
             }
 
             if (timeEntryPeriodSummaryRate) {
-                timeEntryPeriodSummaryRate.textContent = summary.shared_rate_display
+                timeEntryPeriodSummaryRate.textContent = hasValidPreview && summary.shared_rate_display
                     ? `Valor HH de costeo del proyecto: ${summary.shared_rate_display}${summary.shared_rate_source ? ` · ${summary.shared_rate_source}` : ''}`
-                    : (summary.multiple_rates ? 'Valor HH de costeo del proyecto: El período utiliza más de un valor HH.' : '');
+                    : (summary.multiple_rates
+                        ? 'Valor HH de costeo del proyecto: El período utiliza más de un valor HH.'
+                        : 'Valor HH de costeo del proyecto: Pendiente de cálculo.');
             }
 
             if (timeEntryPeriodSummaryClient) {
-                timeEntryPeriodSummaryClient.textContent = summary.client_label ? `Cliente: ${summary.client_label}` : '';
+                timeEntryPeriodSummaryClient.textContent = hasValidPreview && summary.client_label
+                    ? `Cliente: ${summary.client_label}`
+                    : 'Cliente: Pendiente de selección.';
             }
 
             if (timeEntryPeriodSummaryDays) {
-                const consideredDays = rows.filter((row) => row.included && row.status !== 'error').length;
-                timeEntryPeriodSummaryDays.textContent = `${consideredDays} ${consideredDays === 1 ? 'día hábil' : 'días hábiles'}`;
+                const consideredDays = hasValidPreview
+                    ? rows.filter((row) => row.included && row.status !== 'error').length
+                    : null;
+                timeEntryPeriodSummaryDays.textContent = consideredDays === null
+                    ? '—'
+                    : `${consideredDays} ${consideredDays === 1 ? 'día hábil' : 'días hábiles'}`;
             }
 
             if (timeEntryPeriodSummaryDistribution) {
@@ -2504,10 +2515,10 @@
 
             if (timeEntryPeriodMultipleSummary) {
                 const notes = [];
-                if (summary.multiple_assignments) {
+                if (hasValidPreview && summary.multiple_assignments) {
                     notes.push('El período cruza más de una asignación válida.');
                 }
-                if (summary.multiple_rates) {
+                if (hasValidPreview && summary.multiple_rates) {
                     notes.push('El Valor HH de costeo cambia durante el período.');
                 }
                 timeEntryPeriodMultipleSummary.textContent = notes.join(' ');
@@ -2515,12 +2526,39 @@
             }
 
             if (timeEntryPeriodTotalHoursDisplay) {
-                timeEntryPeriodTotalHoursDisplay.textContent = formatTimeEntryHours(preview?.total_hours ?? 0);
+                timeEntryPeriodTotalHoursDisplay.textContent = hasValidPreview
+                    ? formatTimeEntryHours(preview?.total_hours ?? 0)
+                    : '—';
             }
 
             if (timeEntryPeriodErrorsBox && timeEntryPeriodErrorsList) {
-                timeEntryPeriodErrorsList.innerHTML = fieldErrors.map((message) => `<li>${escapeHtml(message)}</li>`).join('');
-                timeEntryPeriodErrorsBox.classList.toggle('d-none', fieldErrors.length === 0);
+                const datedErrors = fieldErrors.filter((message) => /^[^:]+:\s/.test(message));
+                const nonDatedErrors = fieldErrors.filter((message) => !/^[^:]+:\s/.test(message));
+
+                if (fieldErrors.length === 0) {
+                    timeEntryPeriodErrorsList.innerHTML = '';
+                    timeEntryPeriodErrorsBox.classList.add('d-none');
+                } else if (datedErrors.length > 0 && nonDatedErrors.length === 0) {
+                    const dates = [...new Set(datedErrors.map((message) => message.split(':')[0].trim()).filter(Boolean))];
+                    const summaryMessage = dates.length === 1
+                        ? '1 fecha no puede registrarse por validaciones del período.'
+                        : `${dates.length} fechas no pueden registrarse por validaciones del período.`;
+                    const details = datedErrors.map((message) => `<li>${escapeHtml(message)}</li>`).join('');
+
+                    timeEntryPeriodErrorsList.innerHTML = `
+                        <li>
+                            ${escapeHtml(summaryMessage)}
+                            <details class="mt-2">
+                                <summary class="small text-muted">Ver detalle</summary>
+                                <ul class="mb-0 ps-3 mt-2">${details}</ul>
+                            </details>
+                        </li>
+                    `;
+                    timeEntryPeriodErrorsBox.classList.remove('d-none');
+                } else {
+                    timeEntryPeriodErrorsList.innerHTML = fieldErrors.map((message) => `<li>${escapeHtml(message)}</li>`).join('');
+                    timeEntryPeriodErrorsBox.classList.remove('d-none');
+                }
             }
 
             if (timeEntryPeriodTableWrapper) {

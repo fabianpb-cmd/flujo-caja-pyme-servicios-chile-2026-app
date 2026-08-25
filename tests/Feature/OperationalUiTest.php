@@ -1632,6 +1632,8 @@ class OperationalUiTest extends TestCase
         $create->assertSee('Las condiciones seleccionadas se aplicarán a todos los días incluidos en esta carga.');
         $create->assertSee('El pago común del lote se propagará a cada registro diario creado.');
         $create->assertSee('data-time-entry-period-summary-panel', false);
+        $create->assertSee('<div class="fw-semibold" data-time-entry-period-summary-days>—</div>', false);
+        $create->assertSee('<div class="fw-semibold" data-time-entry-period-total-hours-display>—</div>', false);
         $create->assertSee('data-time-entry-period-table-wrapper', false);
         $create->assertSee('data-time-entry-period-table', false);
         $create->assertSee('data-time-entry-period-rows-payload', false);
@@ -1643,6 +1645,80 @@ class OperationalUiTest extends TestCase
         $create->assertDontSee('<th style="width: 140px;">Aprobadas</th>', false);
         $create->assertDontSee('<th style="width: 200px;">Estado</th>', false);
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
+    }
+
+    public function test_time_entries_period_preview_keeps_common_validation_compact_before_daily_resolution(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $response = $this->actingAs($admin)->postJson(route('operational.time-entry-period-preview', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => null,
+            'project_id' => null,
+            'period_start_date' => '01/08/2020',
+            'period_end_date' => '20/08/2026',
+            'period_distribution_mode' => 'equal',
+            'period_hours_per_day' => 10,
+            'payment_status' => 'pending',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('rows', []);
+        $response->assertJsonPath('total_hours', 0);
+        $response->assertJsonPath('can_save', false);
+        $response->assertJsonPath('summary.pending', true);
+        $response->assertJsonPath('field_errors.period_rows.0', 'Seleccione Persona y Proyecto para preparar la carga.');
+        $response->assertJsonMissingPath('field_errors.period_rows.1');
+        $response->assertJsonPath('field_errors.period_end_date.0', 'El período no puede superar 31 días. Divida la carga en períodos más pequeños.');
+    }
+
+    public function test_time_entries_period_preview_rejects_ranges_over_thirty_one_days_without_daily_iteration(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-PERIOD-RANGE',
+            'first_names' => 'Rango',
+            'paternal_surname' => 'Largo',
+            'name' => 'Rango Largo',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.55,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-PERIOD-RANGE',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2020-08-01',
+            'end_date' => '2026-08-20',
+        ]);
+
+        $response = $this->actingAs($admin)->postJson(route('operational.time-entry-period-preview', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_start_date' => '01/08/2020',
+            'period_end_date' => '20/08/2026',
+            'period_distribution_mode' => 'equal',
+            'period_hours_per_day' => 10,
+            'payment_status' => 'pending',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('rows', []);
+        $response->assertJsonPath('total_hours', 0);
+        $response->assertJsonPath('can_save', false);
+        $response->assertJsonPath('field_errors.period_end_date.0', 'El período no puede superar 31 días. Divida la carga en períodos más pequeños.');
+        $response->assertJsonMissingPath('field_errors.period_rows.0');
     }
 
     public function test_time_entries_period_load_creates_daily_entries_with_equal_total_and_manual_distribution(): void

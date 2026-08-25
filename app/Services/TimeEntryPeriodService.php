@@ -48,11 +48,19 @@ class TimeEntryPeriodService
 
         $startDate = UiFormatter::parseDateInput($payload['period_start_date'] ?? null);
         $endDate = UiFormatter::parseDateInput($payload['period_end_date'] ?? null);
-        if ($startDate && $endDate && $endDate->lt($startDate)) {
-            $fieldErrors['period_end_date'][] = 'La fecha término debe ser igual o posterior a la fecha inicio.';
+        $distributionMode = strtolower((string) ($payload['period_distribution_mode'] ?? 'equal'));
+
+        $commonErrors = $this->validatePeriodPrerequisites($person, $project, $startDate, $endDate, $distributionMode, $payload);
+        if ($commonErrors !== []) {
+            return [
+                'rows' => [],
+                'total_hours' => 0.0,
+                'can_save' => false,
+                'field_errors' => $commonErrors,
+                'summary' => $this->buildPendingSummary($project),
+            ];
         }
 
-        $distributionMode = strtolower((string) ($payload['period_distribution_mode'] ?? 'equal'));
         $rows = $this->buildRows($payload, $distributionMode, $startDate, $endDate);
 
         if ($rows->isEmpty() && $startDate && $endDate) {
@@ -126,6 +134,72 @@ class TimeEntryPeriodService
             'can_save' => empty($fieldErrors),
             'field_errors' => $fieldErrors,
             'summary' => $this->buildSummary($normalizedRows, $project),
+        ];
+    }
+
+    private function validatePeriodPrerequisites(
+        ?Person $person,
+        ?Project $project,
+        ?Carbon $startDate,
+        ?Carbon $endDate,
+        string $distributionMode,
+        array $payload,
+    ): array {
+        $fieldErrors = [];
+
+        if (! $person || ! $project) {
+            $fieldErrors['period_rows'][] = 'Seleccione Persona y Proyecto para preparar la carga.';
+        }
+
+        if (! $startDate) {
+            $fieldErrors['period_start_date'][] = 'Ingrese una fecha inicio válida.';
+        }
+
+        if (! $endDate) {
+            $fieldErrors['period_end_date'][] = 'Ingrese una fecha término válida.';
+        }
+
+        if ($startDate && $endDate) {
+            if ($endDate->lt($startDate)) {
+                $fieldErrors['period_end_date'][] = 'La fecha término debe ser igual o posterior a la fecha inicio.';
+            }
+
+            if ($startDate->diffInDays($endDate) + 1 > 31) {
+                $fieldErrors['period_end_date'][] = 'El período no puede superar 31 días. Divida la carga en períodos más pequeños.';
+            }
+        }
+
+        if (! in_array($distributionMode, ['equal', 'total', 'manual'], true)) {
+            $fieldErrors['period_distribution_mode'][] = 'Seleccione una distribución válida.';
+        }
+
+        if ($distributionMode === 'equal') {
+            $hoursPerDay = $this->numericOrNull($payload['period_hours_per_day'] ?? null);
+            if ($hoursPerDay === null || $hoursPerDay <= 0 || $hoursPerDay > 24) {
+                $fieldErrors['period_hours_per_day'][] = 'Ingrese horas por día válidas entre 0,01 y 24.';
+            }
+        }
+
+        if ($distributionMode === 'total') {
+            $totalHours = $this->numericOrNull($payload['period_total_hours'] ?? null);
+            if ($totalHours === null || $totalHours <= 0) {
+                $fieldErrors['period_total_hours'][] = 'Ingrese un total de horas válido mayor que 0.';
+            }
+        }
+
+        return $fieldErrors;
+    }
+
+    private function buildPendingSummary(?Project $project): array
+    {
+        return [
+            'client_label' => $project?->client?->legal_name,
+            'shared_rate_display' => null,
+            'shared_rate_source' => null,
+            'shared_assignment_label' => null,
+            'multiple_assignments' => false,
+            'multiple_rates' => false,
+            'pending' => true,
         ];
     }
 

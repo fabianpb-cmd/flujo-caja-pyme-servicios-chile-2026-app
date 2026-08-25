@@ -85,6 +85,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | Horas | Representa ejecución real. No es compromiso ni presupuesto. |
 | Carga por período de Horas | Mantiene granularidad diaria: una carga por período genera múltiples `TimeEntry` diarios (`1 persona + 1 proyecto + 1 fecha` por fila). |
 | Carga por período transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
+| Carga por período límite operativo | Una carga por período admite como máximo 31 días calendario por operación. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
 | Remuneraciones incompletas | Si falta una fuente obligatoria para la modalidad vigente, la remuneración queda en revisión/incompleta; un valor persistido en cero no equivale a un cálculo válido. |
 | Horas automáticas en Remuneraciones | Un snapshot automático de horas aprobadas proveniente de Horas no equivale por sí mismo a un override manual. |
