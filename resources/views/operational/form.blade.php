@@ -1011,26 +1011,43 @@
                 </div>
             </div>
 
-            <div class="app-panel bg-light border-0 p-3 mb-3">
-                <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
-                    <div>
-                        <div class="small fw-semibold text-muted mb-1">Vista previa</div>
-                        <div class="small text-muted" data-time-entry-period-summary-assignment>Seleccione persona, proyecto y rango para preparar la carga.</div>
-                        <div class="small text-muted" data-time-entry-period-summary-rate></div>
-                        <div class="small text-muted" data-time-entry-period-summary-client></div>
+            <div class="app-panel bg-light border-0 p-3 mb-3" data-time-entry-period-summary-panel>
+                <div class="small fw-semibold text-muted mb-3">RESUMEN</div>
+                <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                        <div class="small text-muted">Cliente</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-client>—</div>
                     </div>
-                    <div class="text-end">
-                        <div class="small text-muted">Total horas período</div>
+                    <div class="col-12 col-lg-6">
+                        <div class="small text-muted">Asignación</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-assignment>—</div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <div class="small text-muted">Valor HH de costeo</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-rate>—</div>
+                    </div>
+                    <div class="col-12 col-lg-3">
+                        <div class="small text-muted">Días considerados</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-days>0 días hábiles</div>
+                    </div>
+                    <div class="col-12 col-lg-3">
+                        <div class="small text-muted">Total a registrar</div>
                         <div class="fw-semibold" data-time-entry-period-total-hours-display>0,00 h</div>
                     </div>
+                    <div class="col-12">
+                        <div class="small text-muted">Distribución</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-distribution>—</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="small text-muted" data-time-entry-period-multiple-summary></div>
+                    </div>
                 </div>
-                <div class="small text-muted mt-2 d-none" data-time-entry-period-multiple-summary></div>
                 <div class="alert alert-warning py-2 px-3 mt-3 mb-0 d-none" data-time-entry-period-errors-box>
                     <ul class="small mb-0 ps-3" data-time-entry-period-errors-list></ul>
                 </div>
             </div>
 
-            <div class="table-responsive border rounded mb-4">
+            <div class="table-responsive border rounded mb-4 d-none" data-time-entry-period-table-wrapper>
                 <table class="table table-sm align-middle mb-0" data-time-entry-period-table>
                     <thead class="table-light">
                         <tr>
@@ -1389,8 +1406,8 @@
                     @php($value = '+56')
                 @endif
                 @php($colClass = $definition['col'] ?? ($resourceColumns[$field] ?? 'col-12 col-md-6'))
-                @php($timeEntryDailyOnly = $resource === 'time-entries' && ! $editing && in_array($field, ['client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
-                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' && in_array($field, $timeEntryPeriodAuthorizationFields, true))
+                @php($timeEntryDailyOnly = $resource === 'time-entries' && ! $editing && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
+                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
                 @if ($field === 'code' && $autoCode)
                     <div class="{{ $colClass }}{{ $timeEntryDailyOnly ? ' time-entry-daily-only' : '' }}" @if($timeEntryDailyOnly) data-time-entry-daily-only="true" @endif>
                         <label for="{{ $field }}" class="form-label">Código</label>
@@ -2017,9 +2034,12 @@
         const timeEntryPeriodSummaryAssignment = form.querySelector('[data-time-entry-period-summary-assignment]');
         const timeEntryPeriodSummaryRate = form.querySelector('[data-time-entry-period-summary-rate]');
         const timeEntryPeriodSummaryClient = form.querySelector('[data-time-entry-period-summary-client]');
+        const timeEntryPeriodSummaryDays = form.querySelector('[data-time-entry-period-summary-days]');
+        const timeEntryPeriodSummaryDistribution = form.querySelector('[data-time-entry-period-summary-distribution]');
         const timeEntryPeriodMultipleSummary = form.querySelector('[data-time-entry-period-multiple-summary]');
         const timeEntryPeriodErrorsBox = form.querySelector('[data-time-entry-period-errors-box]');
         const timeEntryPeriodErrorsList = form.querySelector('[data-time-entry-period-errors-list]');
+        const timeEntryPeriodTableWrapper = form.querySelector('[data-time-entry-period-table-wrapper]');
         const timeEntryPeriodRows = form.querySelector('[data-time-entry-period-rows]');
         const timeEntryPeriodTotalHoursDisplay = form.querySelector('[data-time-entry-period-total-hours-display]');
         const timeEntrySubmitLabel = form.querySelector('[data-time-entry-submit-label]');
@@ -2468,6 +2488,20 @@
                 timeEntryPeriodSummaryClient.textContent = summary.client_label ? `Cliente: ${summary.client_label}` : '';
             }
 
+            if (timeEntryPeriodSummaryDays) {
+                const consideredDays = rows.filter((row) => row.included && row.status !== 'error').length;
+                timeEntryPeriodSummaryDays.textContent = `${consideredDays} ${consideredDays === 1 ? 'día hábil' : 'días hábiles'}`;
+            }
+
+            if (timeEntryPeriodSummaryDistribution) {
+                const distributionLabels = {
+                    equal: 'Horas iguales por día',
+                    total: 'Total del período',
+                    manual: 'Manual',
+                };
+                timeEntryPeriodSummaryDistribution.textContent = distributionLabels[distributionMode] || '—';
+            }
+
             if (timeEntryPeriodMultipleSummary) {
                 const notes = [];
                 if (summary.multiple_assignments) {
@@ -2487,6 +2521,10 @@
             if (timeEntryPeriodErrorsBox && timeEntryPeriodErrorsList) {
                 timeEntryPeriodErrorsList.innerHTML = fieldErrors.map((message) => `<li>${escapeHtml(message)}</li>`).join('');
                 timeEntryPeriodErrorsBox.classList.toggle('d-none', fieldErrors.length === 0);
+            }
+
+            if (timeEntryPeriodTableWrapper) {
+                timeEntryPeriodTableWrapper.classList.add('d-none');
             }
 
             if (!timeEntryPeriodRows) {

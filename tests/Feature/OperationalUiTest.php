@@ -1628,8 +1628,11 @@ class OperationalUiTest extends TestCase
         $create->assertSee('Total del período');
         $create->assertSee('Manual');
         $create->assertSee('AUTORIZACIÓN');
+        $create->assertSee('RESUMEN');
         $create->assertSee('Las condiciones seleccionadas se aplicarán a todos los días incluidos en esta carga.');
         $create->assertSee('El pago común del lote se propagará a cada registro diario creado.');
+        $create->assertSee('data-time-entry-period-summary-panel', false);
+        $create->assertSee('data-time-entry-period-table-wrapper', false);
         $create->assertSee('data-time-entry-period-table', false);
         $create->assertSee('data-time-entry-period-rows-payload', false);
         $create->assertSee('La carga por período genera múltiples registros diarios', false);
