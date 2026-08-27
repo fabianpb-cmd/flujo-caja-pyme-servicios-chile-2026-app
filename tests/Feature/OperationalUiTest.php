@@ -1638,7 +1638,7 @@ class OperationalUiTest extends TestCase
             'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
             'hourly_rate_unit_type' => 'UF',
-            'hourly_rate_currency_id' => $uf->id,
+            'hourly_rate_currency_id' => null,
             'hourly_value' => 1,
         ]);
 
@@ -1664,6 +1664,7 @@ class OperationalUiTest extends TestCase
             'code' => 'ASI-TIME-RATE-UF',
             'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
             'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
             'hourly_value' => null,
             'start_date' => '2026-08-01',
             'end_date' => '2026-09-30',

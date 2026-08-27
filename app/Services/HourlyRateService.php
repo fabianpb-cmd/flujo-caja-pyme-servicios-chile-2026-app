@@ -244,11 +244,12 @@ class HourlyRateService
 
     private function detailsFromAssignment(ProjectAssignment $assignment, CarbonInterface|string $date): array
     {
-        $currency = $assignment->hourlyRateCurrency ?: 'CLP';
+        $unitType = strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY'));
+        $currency = $this->displayCurrencyForRate($unitType, $assignment->hourlyRateCurrency);
 
         return [
             'amount' => $assignment->hourly_value,
-            'unit_type' => strtoupper((string) ($assignment->hourly_rate_unit_type ?: 'CURRENCY')),
+            'unit_type' => $unitType,
             'currency' => $currency,
             'currency_code' => $currency instanceof Currency ? strtoupper((string) $currency->code) : UiFormatter::currencyCode($currency),
             'currency_symbol' => $currency instanceof Currency ? ($currency->symbol ?: strtoupper((string) $currency->code)) : null,
@@ -261,11 +262,12 @@ class HourlyRateService
 
     private function detailsFromPerson(Person $person, CarbonInterface|string $date, ?ProjectAssignment $assignment = null): array
     {
-        $currency = $person->hourlyRateCurrency ?: 'CLP';
+        $unitType = strtoupper((string) ($person->hourly_rate_unit_type ?: 'CURRENCY'));
+        $currency = $this->displayCurrencyForRate($unitType, $person->hourlyRateCurrency);
 
         return [
             'amount' => $person->hourly_value,
-            'unit_type' => strtoupper((string) ($person->hourly_rate_unit_type ?: 'CURRENCY')),
+            'unit_type' => $unitType,
             'currency' => $currency,
             'currency_code' => $currency instanceof Currency ? strtoupper((string) $currency->code) : UiFormatter::currencyCode($currency),
             'currency_symbol' => $currency instanceof Currency ? ($currency->symbol ?: strtoupper((string) $currency->code)) : null,
@@ -290,6 +292,15 @@ class HourlyRateService
             'assignment_id' => $assignment?->id,
             'effective_date' => $this->dateString($date),
         ];
+    }
+
+    private function displayCurrencyForRate(string $unitType, Currency|string|null $currency): Currency|string
+    {
+        if ($unitType === 'UF') {
+            return 'UF';
+        }
+
+        return $currency ?: 'CLP';
     }
 
     private function dateString(CarbonInterface|string $date): ?string

@@ -647,6 +647,83 @@ class FinancialCoreTest extends TestCase
         $this->assertSame(42077.0, $resolved);
     }
 
+    public function test_time_entry_costing_resolution_preserves_uf_without_currency_reference(): void
+    {
+        $clp = Currency::query()->firstOrCreate(
+            ['company_id' => $this->company->id, 'code' => 'CLP'],
+            ['name' => 'Peso Chileno', 'symbol' => '$', 'minor_units' => 0, 'active' => true, 'is_base_currency' => true]
+        );
+
+        $client = Client::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'CLI-UF-SNAP',
+            'legal_name' => 'Cliente UF Snapshot',
+            'client_status_id' => $this->statusId('client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $this->company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-UF-SNAP',
+            'name' => 'Proyecto UF Snapshot',
+            'sales_currency_id' => $clp->id,
+            'project_status_id' => $this->statusId('project', 'EN_EJECUCION'),
+            'billing_status_id' => $this->statusId('billing', 'pending'),
+        ]);
+
+        $person = $this->person([
+            'modality' => 'Dependiente por hora',
+            'hourly_value' => 1,
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
+        ]);
+
+        $activity = Activity::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'ACT-UF-SNAP',
+            'name' => 'Actividad UF Snapshot',
+            'active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $this->company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-UF-SNAP',
+            'assignment_status_id' => $this->statusId('assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
+            'hourly_value' => null,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $entry = TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HOR-UF-SNAP',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-15',
+            'activity_id' => $activity->id,
+            'activity' => 'Actividad UF Snapshot',
+            'hours_worked' => 1,
+            'hours_approved' => 1,
+            'hourly_value' => 1,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $resolution = app(HourlyRateService::class)->resolveCostingForEntry($entry);
+
+        $this->assertSame('UF', $resolution['currency_code']);
+        $this->assertSame('UF', $entry->hourlyRateDisplayCurrency);
+        $this->assertSame('UF 1,00 / HH', \App\Support\UiFormatter::formatMoney($entry->hourly_value, $entry->hourlyRateDisplayCurrency).' / HH');
+    }
+
     public function test_monthly_fixed_salary_always_uses_thirty_day_divisor(): void
     {
         $february = app(PayrollService::class)->calculate($this->person([
