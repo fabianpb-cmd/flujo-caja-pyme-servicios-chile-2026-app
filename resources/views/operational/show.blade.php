@@ -39,11 +39,7 @@
     </div>
     <div class="page-toolbar">
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Volver</a>
-        @if (! $isTimeEntryBatch)
-            <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
-        @else
-            <span class="small text-muted align-self-center">Las cargas por período se modifican como bloque.</span>
-        @endif
+        <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
     </div>
 </div>
 

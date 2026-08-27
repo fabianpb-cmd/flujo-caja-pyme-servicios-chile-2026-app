@@ -227,7 +227,7 @@
                 <td class="table-sticky-column table-actions-column">
                     <x-table-actions
                         :show-url="route('operational.show', [$resource, $item->id])"
-                        :edit-url="$resource === 'time-entries' && filled($item->period_batch_id ?? null) ? null : route('operational.edit', [$resource, $item->id])"
+                        :edit-url="route('operational.edit', [$resource, $item->id])"
                         :toggle-url="$isCatalog ? route('operational.toggle-active', [$resource, $item->id]) : null"
                         :active="(bool) ($item->active ?? $item->is_active ?? true)"
                     />

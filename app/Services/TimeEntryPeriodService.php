@@ -96,7 +96,12 @@ class TimeEntryPeriodService
                 ->values();
         }
 
-        $existingHours = $this->existingHoursByDate($companyId, $person?->id, $rows);
+        $existingHours = $this->existingHoursByDate(
+            $companyId,
+            $person?->id,
+            $rows,
+            filled($payload['period_batch_id'] ?? null) ? (string) $payload['period_batch_id'] : null,
+        );
         $batchHours = $includedRows
             ->mapWithKeys(fn (array $row): array => [
                 $row['entry_date'] => round((float) ($row['hours_worked'] ?? 0), 2),
@@ -251,6 +256,115 @@ class TimeEntryPeriodService
             'days_count' => count($created),
             'total_hours' => $preview['total_hours'],
         ];
+    }
+
+    public function update(int $companyId, Collection $existingEntries, array $payload): array
+    {
+        $orderedExisting = $existingEntries
+            ->sortBy(fn (TimeEntry $entry): string => sprintf(
+                '%s-%09d',
+                optional($entry->entry_date)->format('Y-m-d') ?? '9999-12-31',
+                (int) $entry->id
+            ))
+            ->values();
+
+        $batchId = (string) $orderedExisting->pluck('period_batch_id')->filter()->unique()->sole();
+        $preview = $this->preview($companyId, array_merge($payload, [
+            'entry_mode' => 'period',
+            'period_batch_id' => $batchId,
+        ]));
+
+        if (! empty($preview['field_errors'])) {
+            throw ValidationException::withMessages($preview['field_errors']);
+        }
+
+        $project = Project::query()->forCompany($companyId)->findOrFail($payload['project_id']);
+
+        return DB::transaction(function () use ($companyId, $payload, $preview, $project, $orderedExisting, $batchId): array {
+            $existingByDate = $orderedExisting
+                ->filter(fn (TimeEntry $entry): bool => $entry->entry_date !== null)
+                ->keyBy(fn (TimeEntry $entry): string => $entry->entry_date->toDateString());
+
+            $updated = [];
+            $created = [];
+            $deleted = [];
+            $updatedBefore = [];
+            $deletedBefore = [];
+            $retainedIds = [];
+
+            foreach ($preview['rows'] as $row) {
+                if (! ($row['included'] ?? false)) {
+                    continue;
+                }
+
+                $attributes = [
+                    'company_id' => $companyId,
+                    'person_id' => (int) $payload['person_id'],
+                    'client_id' => (int) $project->client_id,
+                    'project_id' => (int) $project->id,
+                    'assignment_id' => $row['assignment_id'],
+                    'period_batch_id' => $batchId,
+                    'entry_date' => $row['entry_date'],
+                    'activity_id' => (int) $payload['activity_id'],
+                    'hours_worked' => $row['hours_worked'],
+                    'hours_approved' => $row['hours_approved'],
+                    'hourly_value' => $row['hourly_value_amount'],
+                    'calculated_amount' => round((float) $row['hours_approved'] * (float) ($row['hourly_value_amount'] ?? 0), 2),
+                    'cost_center_id' => ($payload['cost_center_id'] ?? null) ?: ($row['cost_center_id'] ?? null),
+                    'approval_status_id' => (int) $payload['approval_status_id'],
+                    'payment_status' => $payload['payment_status'],
+                ];
+
+                $attributes = $this->catalogs->syncLegacyFields('time-entries', $attributes);
+                $existing = $existingByDate->get((string) $row['entry_date']);
+
+                if ($existing instanceof TimeEntry) {
+                    $updatedBefore[$existing->id] = $existing->toArray();
+                    MassAssignment::fillAndSave($existing, $attributes);
+                    $updated[] = $existing->refresh();
+                    $retainedIds[] = $existing->id;
+
+                    continue;
+                }
+
+                $createdEntry = MassAssignment::create(TimeEntry::class, $attributes);
+                $created[] = $createdEntry;
+                $retainedIds[] = $createdEntry->id;
+            }
+
+            $entriesToDelete = $orderedExisting
+                ->reject(fn (TimeEntry $entry): bool => in_array($entry->id, $retainedIds, true))
+                ->values();
+
+            foreach ($entriesToDelete as $entry) {
+                $deletedBefore[$entry->id] = $entry->toArray();
+                $entry->delete();
+                $deleted[] = $entry;
+            }
+
+            $currentEntries = TimeEntry::query()
+                ->where('company_id', $companyId)
+                ->where('period_batch_id', $batchId)
+                ->orderBy('entry_date')
+                ->orderBy('id')
+                ->get();
+
+            return [
+                'batch_id' => $batchId,
+                'created' => $created,
+                'updated' => $currentEntries
+                    ->whereIn('id', collect($updated)->pluck('id')->all())
+                    ->values()
+                    ->all(),
+                'deleted' => $deleted,
+                'updated_before' => $updatedBefore,
+                'deleted_before' => $deletedBefore,
+                'entries' => $currentEntries->all(),
+                'primary_entry' => $currentEntries->first(),
+                'days_count' => $currentEntries->count(),
+                'total_hours' => $preview['total_hours'],
+            ];
+        });
     }
 
     private function buildRows(array $payload, string $distributionMode, ?Carbon $startDate, ?Carbon $endDate): Collection
@@ -461,7 +575,7 @@ class TimeEntryPeriodService
         ];
     }
 
-    private function existingHoursByDate(int $companyId, ?int $personId, Collection $rows): array
+    private function existingHoursByDate(int $companyId, ?int $personId, Collection $rows, ?string $excludeBatchId = null): array
     {
         if (! $personId || $rows->isEmpty()) {
             return [];
@@ -477,11 +591,19 @@ class TimeEntryPeriodService
             return [];
         }
 
-        return TimeEntry::query()
+        $query = TimeEntry::query()
             ->where('company_id', $companyId)
             ->where('person_id', $personId)
             ->whereIn(DB::raw('date(entry_date)'), $dates->all())
-            ->selectRaw('date(entry_date) as entry_date, SUM(hours_worked) as total_hours')
+            ->selectRaw('date(entry_date) as entry_date, SUM(hours_worked) as total_hours');
+
+        if ($excludeBatchId !== null && $excludeBatchId !== '') {
+            $query->where(function ($builder) use ($excludeBatchId): void {
+                $builder->whereNull('period_batch_id')->orWhere('period_batch_id', '!=', $excludeBatchId);
+            });
+        }
+
+        return $query
             ->groupBy(DB::raw('date(entry_date)'))
             ->pluck('total_hours', 'entry_date')
             ->map(fn ($value) => round((float) $value, 2))

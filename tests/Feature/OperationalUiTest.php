@@ -19,6 +19,7 @@ use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
 use App\Models\SalesDocument;
+use App\Models\SalesDocumentTimeEntry;
 use App\Models\TimeEntry;
 use App\Models\UfValue;
 use App\Models\User;
@@ -2296,7 +2297,7 @@ class OperationalUiTest extends TestCase
         $index->assertOk();
         $content = $index->getContent();
         $this->assertSame(3, preg_match_all('/>Ver<\/a>/', $content));
-        $this->assertSame(1, preg_match_all('/>Editar<\/a>/', $content));
+        $this->assertSame(3, preg_match_all('/>Editar<\/a>/', $content));
         $index->assertSee('02/08/2026', false);
         $this->assertStringContainsString('03/08/2026', $content);
         $this->assertStringContainsString('10/08/2026', $content);
@@ -2317,7 +2318,7 @@ class OperationalUiTest extends TestCase
         $show->assertSee('10 h', false);
         $show->assertSee('UF 0,80 / HH', false);
         $show->assertSee('Eliminar bloque', false);
-        $show->assertDontSee('Editar', false);
+        $show->assertSee('Editar', false);
         $show->assertDontSee('1,67 h', false);
 
         $delete = $this->actingAs($admin)->delete(route('operational.destroy', ['time-entries', $periodOneEntries->first()->id]));
@@ -2329,9 +2330,580 @@ class OperationalUiTest extends TestCase
         $indexAfterDelete->assertOk();
         $afterContent = $indexAfterDelete->getContent();
         $this->assertSame(2, preg_match_all('/>Ver<\/a>/', $afterContent));
-        $this->assertSame(1, preg_match_all('/>Editar<\/a>/', $afterContent));
+        $this->assertSame(2, preg_match_all('/>Editar<\/a>/', $afterContent));
         $indexAfterDelete->assertDontSee('03/08/2026 - 10/08/2026', false);
         $indexAfterDelete->assertSee('12/08/2026 - 13/08/2026', false);
+    }
+
+    public function test_time_entries_period_blocks_can_be_edited_as_batches(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-EDIT',
+            'legal_name' => 'Cliente Edicion Bloque',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-EDIT',
+            'name' => 'Proyecto Edicion Bloque',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activityA = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-EDIT-A'],
+            ['name' => 'Actividad Inicial', 'active' => true, 'sort_order' => 1]
+        );
+        $activityB = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-EDIT-B'],
+            ['name' => 'Actividad Editada', 'active' => true, 'sort_order' => 2]
+        );
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-EDIT',
+            'first_names' => 'Paula',
+            'paternal_surname' => 'Edita',
+            'name' => 'Paula Edita',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-EDIT',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $create = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activityA->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 10,
+            'period_rows_payload' => '',
+        ]);
+
+        $create->assertRedirect(route('operational.index', 'time-entries'));
+
+        $originalEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $person->id)
+            ->whereNotNull('period_batch_id')
+            ->orderBy('entry_date')
+            ->get();
+        $batchId = (string) $originalEntries->first()->period_batch_id;
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $originalEntries->first()->id]));
+        $edit->assertOk();
+        $edit->assertSee('Editar carga por período', false);
+        $edit->assertSee('Guardar bloque', false);
+        $edit->assertSee('data-time-entry-period-preview-url', false);
+        $edit->assertSee('03/08/2026', false);
+        $edit->assertSee('10/08/2026', false);
+
+        $update = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $originalEntries->first()->id]), [
+            'entry_mode' => 'period',
+            'period_batch_id' => $batchId,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activityB->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '04/08/2026',
+            'period_end_date' => '12/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 12,
+            'period_rows_payload' => '',
+        ]);
+
+        $updatedEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('period_batch_id', $batchId)
+            ->orderBy('entry_date')
+            ->get();
+
+        $update->assertRedirect(route('operational.show', ['time-entries', $updatedEntries->first()->id]));
+        $this->assertCount(7, $updatedEntries);
+        $this->assertCount(1, $updatedEntries->pluck('period_batch_id')->unique());
+        $this->assertSame(12.0, round((float) $updatedEntries->sum('hours_worked'), 2));
+        $this->assertSame([$activityB->id], $updatedEntries->pluck('activity_id')->unique()->all());
+        $this->assertSame('2026-08-04', $updatedEntries->first()->entry_date?->toDateString());
+        $this->assertSame('2026-08-12', $updatedEntries->last()->entry_date?->toDateString());
+        $this->assertSame(0, TimeEntry::query()->where('period_batch_id', $batchId)->whereDate('entry_date', '2026-08-03')->count());
+
+        $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
+        $index->assertOk();
+        $content = $index->getContent();
+        $this->assertSame(1, preg_match_all('/>Ver<\/a>/', $content));
+        $this->assertSame(1, preg_match_all('/>Editar<\/a>/', $content));
+        $index->assertSee('04/08/2026', false);
+        $index->assertSee('12/08/2026', false);
+        $index->assertSee('12 h', false);
+        $index->assertSee('UF 0,80 / HH', false);
+        $index->assertDontSee('03/08/2026 - 10/08/2026', false);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $updatedEntries->first()->id]));
+        $show->assertOk();
+        $show->assertSee('Carga por período', false);
+        $show->assertSee('Actividad Editada', false);
+        $show->assertSee('04/08/2026', false);
+        $show->assertSee('12/08/2026', false);
+        $show->assertSee('12 h', false);
+        $show->assertSee('UF 0,80 / HH', false);
+        $show->assertSee('Editar', false);
+        $show->assertDontSee('1,67 h', false);
+    }
+
+    public function test_time_entries_period_batch_edit_recalculates_person_project_assignment_and_preserves_uf(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $clientA = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-EDIT-A',
+            'legal_name' => 'Cliente Inicial',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+        $clientB = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-EDIT-B',
+            'legal_name' => 'Cliente Destino',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $projectA = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $clientA->id,
+            'code' => 'PRY-TIME-EDIT-A',
+            'name' => 'Proyecto Inicial',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+        $projectB = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $clientB->id,
+            'code' => 'PRY-TIME-EDIT-B',
+            'name' => 'Proyecto Destino',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-EDIT-UF'],
+            ['name' => 'Actividad UF', 'active' => true, 'sort_order' => 1]
+        );
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $personA = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-EDIT-A',
+            'first_names' => 'Ana',
+            'paternal_surname' => 'Inicial',
+            'name' => 'Ana Inicial',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personA->id,
+            'client_id' => $clientA->id,
+            'project_id' => $projectA->id,
+            'code' => 'ASI-TIME-EDIT-A',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $personB = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-EDIT-B',
+            'first_names' => 'Bruno',
+            'paternal_surname' => 'Destino',
+            'name' => 'Bruno Destino',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 1,
+        ]);
+
+        $assignmentB = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personB->id,
+            'client_id' => $clientB->id,
+            'project_id' => $projectB->id,
+            'code' => 'ASI-TIME-EDIT-B',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
+            'hourly_value' => null,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $create = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $personA->id,
+            'project_id' => $projectA->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 10,
+            'period_rows_payload' => '',
+        ]);
+
+        $create->assertRedirect(route('operational.index', 'time-entries'));
+
+        $originalEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $personA->id)
+            ->whereNotNull('period_batch_id')
+            ->orderBy('entry_date')
+            ->get();
+        $batchId = (string) $originalEntries->first()->period_batch_id;
+
+        $update = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $originalEntries->first()->id]), [
+            'entry_mode' => 'period',
+            'period_batch_id' => $batchId,
+            'person_id' => $personB->id,
+            'project_id' => $projectB->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 10,
+            'period_rows_payload' => '',
+        ]);
+
+        $updatedEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('period_batch_id', $batchId)
+            ->orderBy('entry_date')
+            ->get();
+
+        $update->assertRedirect(route('operational.show', ['time-entries', $updatedEntries->first()->id]));
+        $this->assertCount(6, $updatedEntries);
+        $this->assertSame([$personB->id], $updatedEntries->pluck('person_id')->unique()->all());
+        $this->assertSame([$projectB->id], $updatedEntries->pluck('project_id')->unique()->all());
+        $this->assertSame([$clientB->id], $updatedEntries->pluck('client_id')->unique()->all());
+        $this->assertSame([$assignmentB->id], $updatedEntries->pluck('assignment_id')->unique()->all());
+        $this->assertSame([1.0], $updatedEntries->pluck('hourly_value')->map(fn ($value) => round((float) $value, 2))->unique()->all());
+
+        $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
+        $index->assertOk();
+        $index->assertSee('Bruno Destino', false);
+        $index->assertSee('Proyecto Destino', false);
+        $index->assertSee('UF 1,00 / HH', false);
+        $index->assertDontSee('$ 1 / HH', false);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $updatedEntries->first()->id]));
+        $show->assertOk();
+        $show->assertSee('Bruno Destino', false);
+        $show->assertSee('Proyecto Destino', false);
+        $show->assertSee('Cliente Destino', false);
+        $show->assertSee('UF 1,00 / HH', false);
+    }
+
+    public function test_time_entries_period_batch_edit_is_blocked_when_any_row_has_dependencies(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-LOCK',
+            'legal_name' => 'Cliente Bloqueado',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-LOCK',
+            'name' => 'Proyecto Bloqueado',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-LOCK'],
+            ['name' => 'Actividad Bloqueada', 'active' => true, 'sort_order' => 1]
+        );
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-LOCK',
+            'first_names' => 'Laura',
+            'paternal_surname' => 'Protegida',
+            'name' => 'Laura Protegida',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.7,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-LOCK',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.7,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $create = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '04/08/2026',
+            'period_distribution_mode' => 'equal',
+            'period_hours_per_day' => 2,
+            'period_rows_payload' => '',
+        ]);
+
+        $create->assertRedirect(route('operational.index', 'time-entries'));
+
+        $entries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->whereNotNull('period_batch_id')
+            ->orderBy('entry_date')
+            ->get();
+
+        $document = SalesDocument::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ING-TIME-LOCK',
+            'document_type_id' => $this->documentTypeId($company->id, 'sales', 'FACTURA'),
+            'document_type' => 'Factura',
+            'issue_date' => '2026-08-05',
+            'net_amount' => 1000,
+            'vat_amount' => 190,
+            'gross_amount' => 1190,
+            'status' => 'Pendiente',
+        ]);
+
+        SalesDocumentTimeEntry::query()->create([
+            'company_id' => $company->id,
+            'sales_document_id' => $document->id,
+            'time_entry_id' => $entries->first()->id,
+            'project_assignment_id' => $assignment->id,
+            'hours_approved' => 2,
+            'hourly_rate_amount' => 0.7,
+            'rate_unit_type' => 'UF',
+            'currency_id' => null,
+            'subtotal_original' => 1.4,
+            'conversion_rate' => 39000,
+            'conversion_date' => '2026-08-05',
+            'subtotal_clp' => 54600,
+        ]);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $entries->first()->id]));
+        $edit->assertRedirect(route('operational.show', ['time-entries', $entries->first()->id]));
+        $edit->assertSessionHasErrors('dependencies');
+
+        $update = $this->actingAs($admin)
+            ->from(route('operational.show', ['time-entries', $entries->first()->id]))
+            ->put(route('operational.update', ['time-entries', $entries->first()->id]), [
+                'entry_mode' => 'period',
+                'period_batch_id' => $entries->first()->period_batch_id,
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'approval_status_id' => $approvedStatus->id,
+                'payment_status' => 'pending',
+                'period_start_date' => '03/08/2026',
+                'period_end_date' => '05/08/2026',
+                'period_distribution_mode' => 'total',
+                'period_total_hours' => 6,
+                'period_rows_payload' => '',
+            ]);
+
+        $update->assertRedirect(route('operational.show', ['time-entries', $entries->first()->id]));
+        $update->assertSessionHasErrors('dependencies');
+        $this->assertCount(2, TimeEntry::query()->where('period_batch_id', $entries->first()->period_batch_id)->get());
+        $this->assertSame(4.0, round((float) TimeEntry::query()->where('period_batch_id', $entries->first()->period_batch_id)->sum('hours_worked'), 2));
+    }
+
+    public function test_time_entries_period_batch_edit_rejects_daily_overflow_transactionally(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-OVERFLOW',
+            'legal_name' => 'Cliente Overflow',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-OVERFLOW',
+            'name' => 'Proyecto Overflow',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-OVERFLOW'],
+            ['name' => 'Actividad Overflow', 'active' => true, 'sort_order' => 1]
+        );
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-OVERFLOW',
+            'first_names' => 'Mario',
+            'paternal_surname' => 'Tope',
+            'name' => 'Mario Tope',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-OVERFLOW',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HOR-TIME-OVERFLOW-BASE',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-03',
+            'activity_id' => $activity->id,
+            'activity' => 'Actividad Overflow',
+            'hours_worked' => 20,
+            'hours_approved' => 20,
+            'approval_status_id' => $approvedStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+            'hourly_value' => 0.8,
+            'calculated_amount' => 16,
+        ]);
+
+        $create = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '04/08/2026',
+            'period_end_date' => '05/08/2026',
+            'period_distribution_mode' => 'equal',
+            'period_hours_per_day' => 2,
+            'period_rows_payload' => '',
+        ]);
+
+        $create->assertRedirect(route('operational.index', 'time-entries'));
+
+        $entries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->whereNotNull('period_batch_id')
+            ->orderBy('entry_date')
+            ->get();
+        $batchId = (string) $entries->first()->period_batch_id;
+
+        $update = $this->actingAs($admin)
+            ->from(route('operational.edit', ['time-entries', $entries->first()->id]))
+            ->put(route('operational.update', ['time-entries', $entries->first()->id]), [
+                'entry_mode' => 'period',
+                'period_batch_id' => $batchId,
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'approval_status_id' => $approvedStatus->id,
+                'payment_status' => 'pending',
+                'period_start_date' => '03/08/2026',
+                'period_end_date' => '04/08/2026',
+                'period_distribution_mode' => 'total',
+                'period_total_hours' => 10,
+                'period_rows_payload' => '',
+            ]);
+
+        $update->assertRedirect(route('operational.edit', ['time-entries', $entries->first()->id]));
+        $update->assertSessionHasErrors('period_rows');
+
+        $unchangedEntries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('period_batch_id', $batchId)
+            ->orderBy('entry_date')
+            ->get();
+
+        $this->assertCount(2, $unchangedEntries);
+        $this->assertSame(4.0, round((float) $unchangedEntries->sum('hours_worked'), 2));
+        $this->assertSame('2026-08-04', $unchangedEntries->first()->entry_date?->toDateString());
+        $this->assertSame('2026-08-05', $unchangedEntries->last()->entry_date?->toDateString());
     }
 
     public function test_time_entries_period_load_blocks_invalid_rows_transactionally(): void

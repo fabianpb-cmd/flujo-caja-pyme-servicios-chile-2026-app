@@ -219,9 +219,28 @@ class OperationalCrudController extends Controller
         $this->authorizeResource($request, $config, 'update', $item);
 
         if ($resource === 'time-entries' && $item instanceof TimeEntry && filled($item->period_batch_id)) {
-            return redirect()
-                ->route('operational.show', [$resource, $item->id])
-                ->withErrors(['batch' => 'Las cargas por período se modifican como bloque.']);
+            $batchEntries = $this->timeEntryBatchEntries($request->user()->company_id, (string) $item->period_batch_id, $this->relationNames($config));
+
+            if ($message = $this->batchDependencyMessage($batchEntries, 'modificar')) {
+                return redirect()
+                    ->route('operational.show', [$resource, $item->id])
+                    ->withErrors(['dependencies' => $message]);
+            }
+
+            return view('operational.form', [
+                'resource' => $resource,
+                'config' => $config,
+                'item' => $item,
+                'options' => $this->options($config, $request, $item),
+                'codeMeta' => $this->codeMeta($config['model']),
+                'payrollViewMeta' => $this->payrollViewMeta($resource),
+                'payrollFormState' => [],
+                'payrollHourlyCost' => null,
+                'payrollCalculationBreakdown' => null,
+                'salesCalculationBreakdown' => null,
+                'assignmentCommitmentPreview' => null,
+                'timeEntryBatchEditState' => $this->timeEntryBatchEditState($batchEntries),
+            ]);
         }
 
         return view('operational.form', [
@@ -276,7 +295,16 @@ class OperationalCrudController extends Controller
         abort_unless($request->route('resource') === 'time-entries', 404);
 
         $config = $this->config('time-entries');
-        $this->authorizeResource($request, $config, 'create');
+        if (filled($request->input('period_batch_id'))) {
+            $item = TimeEntry::query()
+                ->forCompany($request->user()->company_id)
+                ->where('period_batch_id', $request->input('period_batch_id'))
+                ->firstOrFail();
+
+            $this->authorizeResource($request, $config, 'update', $item);
+        } else {
+            $this->authorizeResource($request, $config, 'create');
+        }
 
         return response()->json(
             $this->timeEntryPeriods->preview($request->user()->company_id, $request->all())
@@ -290,9 +318,37 @@ class OperationalCrudController extends Controller
         $this->authorizeResource($request, $config, 'update', $item);
 
         if ($resource === 'time-entries' && $item instanceof TimeEntry && filled($item->period_batch_id)) {
+            $batchEntries = $this->timeEntryBatchEntries($request->user()->company_id, (string) $item->period_batch_id);
+
+            if ($message = $this->batchDependencyMessage($batchEntries, 'modificar')) {
+                return redirect()
+                    ->route('operational.show', [$resource, $item->id])
+                    ->withErrors(['dependencies' => $message]);
+            }
+
+            $result = $this->timeEntryPeriods->update($request->user()->company_id, $batchEntries, $request->validated());
+
+            foreach ($result['created'] as $entry) {
+                $this->refreshDerivedState($entry);
+                $this->audit->record('operational.created', $entry->refresh(), $request->user());
+            }
+
+            foreach ($result['updated'] as $entry) {
+                $this->refreshDerivedState($entry);
+                $this->audit->record('operational.updated', $entry->refresh(), $request->user(), $result['updated_before'][$entry->id] ?? null);
+            }
+
+            foreach ($result['deleted'] as $entry) {
+                $this->audit->record('operational.deleted', $entry, $request->user(), $result['deleted_before'][$entry->id] ?? null, null);
+            }
+
             return redirect()
-                ->route('operational.show', [$resource, $item->id])
-                ->withErrors(['batch' => 'Las cargas por período se modifican como bloque.']);
+                ->route('operational.show', [$resource, $result['primary_entry']->id])
+                ->with('status', sprintf(
+                    'Se actualizó la carga por período: %d días y %s.',
+                    $result['days_count'],
+                    UiFormatter::formatHours($result['total_hours'])
+                ));
         }
 
         try {
@@ -334,7 +390,7 @@ class OperationalCrudController extends Controller
                 ->orderBy('id')
                 ->get();
 
-            if ($message = $this->batchDeletionMessage($batchEntries)) {
+            if ($message = $this->batchDependencyMessage($batchEntries, 'eliminar')) {
                 return redirect()->route('operational.show', [$resource, $item->id])->withErrors(['dependencies' => $message]);
             }
 
@@ -733,7 +789,7 @@ class OperationalCrudController extends Controller
         return $labels->count() === 1 ? $labels->first() : 'Mixto';
     }
 
-    private function batchDeletionMessage(Collection $entries): ?string
+    private function batchDependencyMessage(Collection $entries, string $action): ?string
     {
         $blockers = $entries->flatMap(fn (TimeEntry $entry) => $this->dependencies->blockers($entry))
             ->groupBy('label')
@@ -751,7 +807,49 @@ class OperationalCrudController extends Controller
             ->map(fn (array $dependency): string => $dependency['count'].' '.$dependency['label'])
             ->implode(', ');
 
-        return 'No se puede eliminar el bloque porque está siendo utilizado por: '.$references.'. Desactívelo o reasigne las dependencias antes de eliminarlo.';
+        return sprintf(
+            'No se puede %s la carga por período porque está siendo utilizada por: %s. Desactívela o reasigne las dependencias antes de continuar.',
+            $action,
+            $references
+        );
+    }
+
+    private function timeEntryBatchEntries(int $companyId, string $batchId, array $relations = []): Collection
+    {
+        return TimeEntry::query()
+            ->with($relations)
+            ->forCompany($companyId)
+            ->where('period_batch_id', $batchId)
+            ->orderBy('entry_date')
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function timeEntryBatchEditState(Collection $entries): array
+    {
+        $ordered = $entries
+            ->sortBy(fn (TimeEntry $entry): string => sprintf(
+                '%s-%09d',
+                optional($entry->entry_date)->format('Y-m-d') ?? '9999-12-31',
+                (int) $entry->id
+            ))
+            ->values();
+
+        $rows = $ordered->map(fn (TimeEntry $entry): array => [
+            'entry_date' => optional($entry->entry_date)->toDateString(),
+            'included' => true,
+            'hours_worked' => $entry->hours_worked !== null ? round((float) $entry->hours_worked, 2) : null,
+        ])->values();
+
+        return [
+            'period_batch_id' => (string) $ordered->first()?->period_batch_id,
+            'period_start_date' => optional($ordered->first()?->entry_date)->toDateString(),
+            'period_end_date' => optional($ordered->last()?->entry_date)->toDateString(),
+            'period_distribution_mode' => 'manual',
+            'period_hours_per_day' => null,
+            'period_total_hours' => round((float) $ordered->sum('hours_worked'), 2),
+            'period_rows_payload' => $rows->toJson(JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ];
     }
 
     private function options(array $config, Request $request, ?Model $item = null): array

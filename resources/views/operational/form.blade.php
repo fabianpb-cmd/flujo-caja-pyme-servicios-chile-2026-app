@@ -415,8 +415,11 @@
     default => null,
 })
 <?php
+    $timeEntryBatchEditState = $timeEntryBatchEditState ?? null;
+    $isTimeEntryBatchEdit = $resource === 'time-entries' && $editing && is_array($timeEntryBatchEditState);
     $formTitle = match ($resource) {
         'assignments' => $editing ? 'Editar asignación' : 'Nueva asignación',
+        'time-entries' => $isTimeEntryBatchEdit ? 'Editar carga por período' : ($editing ? ($config['edit_title'] ?? ('Editar '.$config['title'])) : ($config['create_title'] ?? ('Nuevo '.$config['title']))),
         default => $editing ? ($config['edit_title'] ?? ('Editar '.$config['title'])) : ($config['create_title'] ?? ('Nuevo '.$config['title'])),
     };
 
@@ -429,15 +432,15 @@
 @php($timeEntrySelectedProjectId = $resource === 'time-entries' ? old('project_id', $item->project_id ?? null) : null)
 @php($timeEntrySelectedProject = $resource === 'time-entries' && $timeEntrySelectedProjectId !== null ? ($options['project_id'][$timeEntrySelectedProjectId] ?? null) : null)
 @php($timeEntrySelectedProjectRanges = collect(data_get($timeEntrySelectedProject, 'assignment_ranges', [])))
-@php($timeEntryEntryMode = $resource === 'time-entries' && ! $editing ? old('entry_mode', 'daily') : 'daily')
+@php($timeEntryEntryMode = $resource === 'time-entries' ? old('entry_mode', $isTimeEntryBatchEdit ? 'period' : 'daily') : 'daily')
 @php($timeEntryEntryDate = $resource === 'time-entries' ? old('entry_date', optional($item->entry_date)->format('d/m/Y')) : null)
 @php($timeEntryEntryDateParsed = $resource === 'time-entries' ? \App\Support\UiFormatter::parseDateInput($timeEntryEntryDate) : null)
-@php($timeEntryPeriodStartDate = $resource === 'time-entries' ? old('period_start_date') : null)
-@php($timeEntryPeriodEndDate = $resource === 'time-entries' ? old('period_end_date') : null)
-@php($timeEntryPeriodDistributionMode = $resource === 'time-entries' ? old('period_distribution_mode', 'equal') : 'equal')
-@php($timeEntryPeriodHoursPerDay = $resource === 'time-entries' ? old('period_hours_per_day') : null)
-@php($timeEntryPeriodTotalHours = $resource === 'time-entries' ? old('period_total_hours') : null)
-@php($timeEntryPeriodRowsPayload = $resource === 'time-entries' ? old('period_rows_payload', '') : '')
+@php($timeEntryPeriodStartDate = $resource === 'time-entries' ? old('period_start_date', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_start_date'] ?? null) : null) : null)
+@php($timeEntryPeriodEndDate = $resource === 'time-entries' ? old('period_end_date', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_end_date'] ?? null) : null) : null)
+@php($timeEntryPeriodDistributionMode = $resource === 'time-entries' ? old('period_distribution_mode', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_distribution_mode'] ?? 'manual') : 'equal') : 'equal')
+@php($timeEntryPeriodHoursPerDay = $resource === 'time-entries' ? old('period_hours_per_day', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_hours_per_day'] ?? null) : null) : null)
+@php($timeEntryPeriodTotalHours = $resource === 'time-entries' ? old('period_total_hours', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_total_hours'] ?? null) : null) : null)
+@php($timeEntryPeriodRowsPayload = $resource === 'time-entries' ? old('period_rows_payload', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_rows_payload'] ?? '') : '') : '')
 @php($timeEntryPeriodAuthorizationFields = ['approval_status_id', 'payment_status'])
 @php($timeEntryMatchingRanges = $timeEntrySelectedProjectRanges->filter(function (array $range) use ($timeEntrySelectedPersonId, $timeEntryEntryDateParsed) {
     if ((string) ($range['person_id'] ?? '') !== (string) $timeEntrySelectedPersonId) {
@@ -910,25 +913,38 @@
     </div>
 @endif
 
-<form method="POST" action="{{ $editing ? route('operational.update', [$resource, $item->id]) : route('operational.store', $resource) }}" class="app-panel p-4" data-operational-form="true" @if($resource === 'assignments') data-assignment-commitment-preview-url="{{ route('operational.assignment-commitment-preview', 'assignments') }}" data-assignment-current-id="{{ $editing && $item->exists ? $item->id : '' }}" @endif @if($resource === 'time-entries' && ! $editing) data-time-entry-period-preview-url="{{ route('operational.time-entry-period-preview', 'time-entries') }}" @endif>
+<form method="POST" action="{{ $editing ? route('operational.update', [$resource, $item->id]) : route('operational.store', $resource) }}" class="app-panel p-4" data-operational-form="true" @if($resource === 'assignments') data-assignment-commitment-preview-url="{{ route('operational.assignment-commitment-preview', 'assignments') }}" data-assignment-current-id="{{ $editing && $item->exists ? $item->id : '' }}" @endif @if($resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit)) data-time-entry-period-preview-url="{{ route('operational.time-entry-period-preview', 'time-entries') }}" @endif>
     @csrf
     @if ($editing)
         @method('PUT')
     @endif
 
-    @if ($resource === 'time-entries' && ! $editing)
+    @if ($resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit))
+        @if ($isTimeEntryBatchEdit)
+            <input type="hidden" name="entry_mode" value="period">
+            <input type="hidden" name="period_batch_id" value="{{ $timeEntryBatchEditState['period_batch_id'] ?? $item->period_batch_id }}">
+        @endif
         <div class="section-title">MODO DE CARGA</div>
         <div class="row g-3 mb-4">
             <div class="col-12">
-                <div class="btn-group" role="group" aria-label="Modo de carga de horas">
-                    <input type="radio" class="btn-check" name="entry_mode" id="entry_mode_period" value="period" autocomplete="off" data-time-entry-mode-toggle="true" @checked($timeEntryEntryMode === 'period')>
-                    <label class="btn btn-outline-primary" for="entry_mode_period">Carga por período</label>
+                @if ($isTimeEntryBatchEdit)
+                    <div class="btn-group" role="group" aria-label="Modo de carga de horas">
+                        <input type="radio" class="btn-check" id="entry_mode_period" value="period" autocomplete="off" data-time-entry-mode-toggle="true" checked disabled>
+                        <label class="btn btn-outline-primary active" for="entry_mode_period">Carga por período</label>
+                    </div>
+                @else
+                    <div class="btn-group" role="group" aria-label="Modo de carga de horas">
+                        <input type="radio" class="btn-check" name="entry_mode" id="entry_mode_period" value="period" autocomplete="off" data-time-entry-mode-toggle="true" @checked($timeEntryEntryMode === 'period')>
+                        <label class="btn btn-outline-primary" for="entry_mode_period">Carga por período</label>
 
-                    <input type="radio" class="btn-check" name="entry_mode" id="entry_mode_daily" value="daily" autocomplete="off" data-time-entry-mode-toggle="true" @checked($timeEntryEntryMode !== 'period')>
-                    <label class="btn btn-outline-primary" for="entry_mode_daily">Carga diaria</label>
-                </div>
+                        <input type="radio" class="btn-check" name="entry_mode" id="entry_mode_daily" value="daily" autocomplete="off" data-time-entry-mode-toggle="true" @checked($timeEntryEntryMode !== 'period')>
+                        <label class="btn btn-outline-primary" for="entry_mode_daily">Carga diaria</label>
+                    </div>
+                @endif
                 <div class="small text-muted mt-2">
-                    Seleccione primero la persona y la fecha o período. La carga por período genera múltiples registros diarios y mantiene la misma granularidad del módulo Horas.
+                    {{ $isTimeEntryBatchEdit
+                        ? 'Está editando la carga por período como una única operación lógica. Los registros diarios internos se recalcularán y conservarán el mismo bloque.'
+                        : 'Seleccione primero la persona y la fecha o período. La carga por período genera múltiples registros diarios y mantiene la misma granularidad del módulo Horas.' }}
                 </div>
             </div>
         </div>
@@ -1492,7 +1508,7 @@
             </div>
         </div>
     @else
-        <div class="{{ $resource === 'time-entries' && ! $editing ? ($timeEntryEntryMode === 'period' ? 'd-none' : '') : '' }}" @if($resource === 'time-entries' && ! $editing) data-time-entry-daily-load-container @endif>
+        <div class="{{ $resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit) ? ($timeEntryEntryMode === 'period' ? 'd-none' : '') : '' }}" @if($resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit)) data-time-entry-daily-load-container @endif>
         <div class="row g-3">
             @php($currentSection = null)
             @foreach ($fields as $field => $definition)
@@ -1512,9 +1528,9 @@
                     @php($value = '+56')
                 @endif
                 @php($colClass = $definition['col'] ?? ($resourceColumns[$field] ?? 'col-12 col-md-6'))
-                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period')
-                @php($timeEntryDailyOnly = $resource === 'time-entries' && ! $editing && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
-                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' && in_array($field, ['code', 'person_id', 'client_id', 'project_id', 'activity_id', 'cost_center_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
+                @continue($resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit) && $timeEntryEntryMode === 'period')
+                @php($timeEntryDailyOnly = $resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit) && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
+                @continue($resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit) && $timeEntryEntryMode === 'period' && in_array($field, ['code', 'person_id', 'client_id', 'project_id', 'activity_id', 'cost_center_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
                 @if ($field === 'code' && $autoCode)
                     <div class="{{ $colClass }}{{ $timeEntryDailyOnly ? ' time-entry-daily-only' : '' }}" @if($timeEntryDailyOnly) data-time-entry-daily-only="true" @endif>
                         <label for="{{ $field }}" class="form-label">Código</label>
@@ -1600,7 +1616,7 @@
                                         >{{ $label }}</option>
                                     @endforeach
                                 </select>
-                                <div class="app-panel bg-light border-0 p-2 mt-2 {{ $timeEntryEntryMode === 'period' && ! $editing ? 'd-none' : '' }}" data-time-entry-assignment-context data-time-entry-daily-context="true">
+                                <div class="app-panel bg-light border-0 p-2 mt-2 {{ $timeEntryEntryMode === 'period' && (! $editing || $isTimeEntryBatchEdit) ? 'd-none' : '' }}" data-time-entry-assignment-context data-time-entry-daily-context="true">
                                     <div class="small fw-semibold text-muted mb-1">Referencia de la asignación</div>
                                     <div class="small text-muted" data-time-entry-assignment-label>{{ $timeEntryAssignmentLabel }}</div>
                                     <div class="small text-muted" data-time-entry-assignment-project>{{ $timeEntryAssignmentProjectLabel }}</div>
@@ -1611,7 +1627,7 @@
                                     </div>
                                     <div class="small text-muted {{ $timeEntryContextCostCenter ? '' : 'd-none' }}" data-time-entry-assignment-cost-center>{{ $timeEntryContextCostCenter }}</div>
                                 </div>
-                                <div class="mt-2 {{ $timeEntryContextWarning && !($timeEntryEntryMode === 'period' && ! $editing) ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-time-entry-context-warning-box data-time-entry-daily-context="true">
+                                <div class="mt-2 {{ $timeEntryContextWarning && !($timeEntryEntryMode === 'period' && (! $editing || $isTimeEntryBatchEdit)) ? 'alert alert-warning py-2 mb-0' : 'd-none' }}" data-time-entry-context-warning-box data-time-entry-daily-context="true">
                                     <div class="{{ $timeEntryContextWarning ? '' : 'd-none' }}" data-time-entry-context-warning>{{ $timeEntryContextWarning }}</div>
                                 </div>
                             @elseif ($resource === 'assignments' && $field === 'person_id')
@@ -1813,7 +1829,7 @@
 
     <div class="d-flex justify-content-end gap-2 mt-4">
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Cancelar</a>
-        <button type="submit" class="btn btn-primary" data-time-entry-submit-label>{{ $resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' ? 'Registrar período' : 'Guardar' }}</button>
+        <button type="submit" class="btn btn-primary" data-time-entry-submit-label>{{ $resource === 'time-entries' && $timeEntryEntryMode === 'period' ? ($isTimeEntryBatchEdit ? 'Guardar bloque' : 'Registrar período') : 'Guardar' }}</button>
     </div>
 </form>
 @endsection
@@ -2140,6 +2156,7 @@
         const timeEntryPeriodTotalHoursWrap = form.querySelector('[data-time-entry-period-total-hours-wrap]');
         const timeEntryPeriodTotalHoursInput = form.querySelector('[data-time-entry-period-total-hours]');
         const timeEntryPeriodRowsPayload = form.querySelector('[data-time-entry-period-rows-payload]');
+        const timeEntryPeriodBatchIdInput = form.querySelector('input[name="period_batch_id"]');
         const timeEntryPeriodSummaryAssignment = form.querySelector('[data-time-entry-period-summary-assignment]');
         const timeEntryPeriodSummaryRate = form.querySelector('[data-time-entry-period-summary-rate]');
         const timeEntryPeriodSummaryClient = form.querySelector('[data-time-entry-period-summary-client]');
@@ -2776,6 +2793,7 @@
             payload.set('period_hours_per_day', timeEntryPeriodHoursPerDayInput?.value || '');
             payload.set('period_total_hours', timeEntryPeriodTotalHoursInput?.value || '');
             payload.set('period_rows_payload', timeEntryPeriodRowsPayload?.value || '');
+            payload.set('period_batch_id', timeEntryPeriodBatchIdInput?.value || '');
 
             timeEntryPeriodAbortController?.abort();
             timeEntryPeriodAbortController = new AbortController();
@@ -2824,7 +2842,9 @@
             setTimeEntryContainerState(timeEntryDailyLoadContainer, !periodMode);
 
             if (timeEntrySubmitLabel) {
-                timeEntrySubmitLabel.textContent = periodMode ? 'Registrar período' : 'Guardar';
+                timeEntrySubmitLabel.textContent = periodMode
+                    ? (timeEntryPeriodBatchIdInput?.value ? 'Guardar bloque' : 'Registrar período')
+                    : 'Guardar';
             }
 
             syncTimeEntryPeriodDistributionUi();

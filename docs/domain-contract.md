@@ -84,7 +84,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | ProjectCommitmentService | Calcula costo comprometido de personal desde HH comprometidas y valor HH de costeo; no depende de la modalidad de payroll y no usa `project_value` como base del compromiso. |
 | ProjectCommitmentService temporalidad mensual | Un intervalo desde una fecha hasta la misma fecha del mes siguiente equivale exactamente a un mes de compromiso; la fecha término no genera un período parcial adicional. |
 | Horas | Representa ejecución real. No es compromiso ni presupuesto. |
-| Carga por período de Horas | Mantiene granularidad diaria en persistencia; los `TimeEntry` generados por una misma operación comparten `period_batch_id` y la UI operativa los presenta como un único bloque. |
+| Carga por período de Horas | Se crea, visualiza, edita y elimina como una única operación lógica; mantiene granularidad diaria en persistencia y los `TimeEntry` generados por la misma operación comparten `period_batch_id`. |
 | Carga por período transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
 | Carga por período límite operativo | Una carga por período admite como máximo 31 días calendario por operación. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
