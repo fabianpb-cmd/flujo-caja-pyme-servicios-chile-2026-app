@@ -26,6 +26,10 @@
             ? \App\Support\UiFormatter::formatMoney($item->project_value, $item->hourlyRateDisplayCurrency ?: 'CLP')
             : 'No informado';
     }
+
+    if ($resource === 'time-entries' && $item instanceof \App\Models\TimeEntry) {
+        $item->loadMissing(['person.hourlyRateCurrency', 'project.salesCurrency', 'assignment.hourlyRateCurrency', 'assignment.assignmentStatus']);
+    }
 @endphp
 <div class="page-header">
     <div>
@@ -176,6 +180,7 @@
                 $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay) => $payrollHoursApprovedDisplay,
                 $resource === 'assignments' && $field === 'hourly_value' => $assignmentEffectiveHourlyDisplay ?: 'No configurado',
                 $resource === 'assignments' && $field === 'project_value' => $assignmentProjectValueDisplay,
+                $resource === 'time-entries' && $field === 'hourly_value' => filled($item->hourlyRateDisplayCurrency) && filled($item->hourly_value) ? \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH' : '—',
                 default => \App\Support\UiFormatter::display($item, $field, $definition),
             })
             <dd class="col-sm-8 mb-0 {{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-sm-end amount-cell' : '' }}">

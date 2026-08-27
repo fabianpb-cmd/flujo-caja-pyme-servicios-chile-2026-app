@@ -1587,6 +1587,158 @@ class OperationalUiTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar registro de horas/s', $edit->getContent());
     }
 
+    public function test_time_entries_index_and_show_preserve_effective_rate_currency_and_unit(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $uf = Currency::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'UF'],
+            ['name' => 'Unidad de Fomento', 'symbol' => 'UF', 'minor_units' => 2, 'active' => true, 'sort_order' => 1]
+        );
+
+        $clp = Currency::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'CLP'],
+            ['name' => 'Peso Chileno', 'symbol' => '$', 'minor_units' => 0, 'active' => true, 'sort_order' => 2]
+        );
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-RATE',
+            'legal_name' => 'Cliente Tarifa',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $clp->id,
+            'code' => 'PRY-TIME-RATE',
+            'name' => 'Proyecto Tarifa',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-RATE'],
+            ['name' => 'Actividad Tarifa', 'active' => true, 'sort_order' => 1]
+        );
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $personUf = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-UF',
+            'first_names' => 'Pablo',
+            'paternal_surname' => 'Toro',
+            'name' => 'Pablo Toro',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => $uf->id,
+            'hourly_value' => 1,
+        ]);
+
+        $personClp = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-CLP',
+            'first_names' => 'Carla',
+            'paternal_surname' => 'Peso',
+            'name' => 'Carla Peso',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => 20000,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personUf->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-RATE-UF',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => null,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $personClp->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-RATE-CLP',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'CURRENCY',
+            'hourly_rate_currency_id' => $clp->id,
+            'hourly_value' => 20000,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-09-30',
+        ]);
+
+        $timeEntryUf = TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HOR-TIME-UF',
+            'person_id' => $personUf->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => ProjectAssignment::query()->where('code', 'ASI-TIME-RATE-UF')->valueOrFail('id'),
+            'entry_date' => '2026-08-10',
+            'activity_id' => $activity->id,
+            'activity' => 'Actividad Tarifa',
+            'hours_worked' => 1,
+            'hours_approved' => 1,
+            'hourly_value' => 1,
+            'approval_status_id' => $approvedStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $timeEntryClp = TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HOR-TIME-CLP',
+            'person_id' => $personClp->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => ProjectAssignment::query()->where('code', 'ASI-TIME-RATE-CLP')->valueOrFail('id'),
+            'entry_date' => '2026-08-11',
+            'activity_id' => $activity->id,
+            'activity' => 'Actividad Tarifa',
+            'hours_worked' => 2,
+            'hours_approved' => 2,
+            'hourly_value' => 20000,
+            'approval_status_id' => $approvedStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
+        $index->assertOk();
+        $index->assertSee('UF 1,00 / HH', false);
+        $index->assertSee('CLP 20.000,00 / HH', false);
+        $index->assertDontSee('/ HH / HH', false);
+        $this->assertMatchesRegularExpression('/HOR-TIME-UF.*UF 1,00 \/ HH/s', $index->getContent());
+        $this->assertMatchesRegularExpression('/HOR-TIME-CLP.*CLP 20\.000,00 \/ HH/s', $index->getContent());
+        $this->assertDoesNotMatchRegularExpression('/HOR-TIME-UF.*\\$ 1(?![0-9])\\/ HH/s', $index->getContent());
+
+        $showUf = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $timeEntryUf->id]));
+        $showUf->assertOk();
+        $showUf->assertSee('UF 1,00 / HH', false);
+        $this->assertMatchesRegularExpression('/UF 1,00 \/ HH/s', $showUf->getContent());
+
+        $showClp = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $timeEntryClp->id]));
+        $showClp->assertOk();
+        $showClp->assertSee('CLP 20.000,00 / HH', false);
+        $showClp->assertDontSee('/ HH / HH', false);
+    }
+
     public function test_time_entries_create_view_exposes_period_load_mode_without_replacing_daily_mode(): void
     {
         [$company, $admin] = $this->companyWithAdmin();

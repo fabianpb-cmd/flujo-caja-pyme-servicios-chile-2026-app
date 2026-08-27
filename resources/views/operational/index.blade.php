@@ -245,6 +245,9 @@
                 @foreach ($fields as $field => $definition)
                     @continue($field === $codeField)
                     @php($display = \App\Support\UiFormatter::display($item, $field, $definition))
+                    @if ($resource === 'time-entries' && $field === 'hourly_value')
+                        @php($display = filled($item->hourlyRateDisplayCurrency) && filled($item->hourly_value) ? \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH' : '—')
+                    @endif
                     @if ($resource === 'payroll-records' && $field === 'hours_approved' && (($definition['label'] ?? null) === 'Override horas aprobadas'))
                         @php($payrollOverrides = app(\App\Services\PayrollService::class)->manualOverrideInputs($item))
                         @php($display = array_key_exists('hours_approved', $payrollOverrides) && $payrollOverrides['hours_approved'] !== null ? \App\Support\UiFormatter::formatHours($payrollOverrides['hours_approved']) : '—')
