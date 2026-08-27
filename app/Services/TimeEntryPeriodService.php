@@ -13,6 +13,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 class TimeEntryPeriodService
 {
@@ -211,7 +212,8 @@ class TimeEntryPeriodService
         }
 
         $project = Project::query()->forCompany($companyId)->findOrFail($payload['project_id']);
-        $created = DB::transaction(function () use ($companyId, $payload, $preview, $project) {
+        $batchId = (string) Str::uuid();
+        $created = DB::transaction(function () use ($companyId, $payload, $preview, $project, $batchId) {
             $createdEntries = [];
 
             foreach ($preview['rows'] as $row) {
@@ -225,6 +227,7 @@ class TimeEntryPeriodService
                     'client_id' => (int) $project->client_id,
                     'project_id' => (int) $project->id,
                     'assignment_id' => $row['assignment_id'],
+                    'period_batch_id' => $batchId,
                     'entry_date' => $row['entry_date'],
                     'activity_id' => (int) $payload['activity_id'],
                     'hours_worked' => $row['hours_worked'],

@@ -10,6 +10,7 @@
     $projectCommitmentExchangeRateNote = null;
     $projectCommitmentSaleCurrencyCode = null;
     $payrollDetailRowIndex = 0;
+    $isTimeEntryBatch = $resource === 'time-entries' && filled($item->period_batch_id ?? null);
 
     if ($resource === 'assignments' && $item instanceof \App\Models\ProjectAssignment) {
         $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency', 'person.hourlyRateCurrency']);
@@ -38,7 +39,11 @@
     </div>
     <div class="page-toolbar">
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Volver</a>
-        <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
+        @if (! $isTimeEntryBatch)
+            <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
+        @else
+            <span class="small text-muted align-self-center">Las cargas por período se modifican como bloque.</span>
+        @endif
     </div>
 </div>
 
@@ -165,36 +170,98 @@
         </div>
     @endif
 
-    @php($currentSection = null)
-    @foreach ($fields as $field => $definition)
-        @if (($definition['section'] ?? null) !== $currentSection)
-            @php($currentSection = $definition['section'] ?? null)
-            @if ($currentSection)
-                <div class="section-title">{{ $currentSection }}</div>
-            @endif
-        @endif
-        @php($payrollDetailRowIndex++)
-        <div class="row mb-3 payroll-detail-row {{ $resource === 'payroll-records' && $payrollDetailRowIndex % 2 === 1 ? 'payroll-detail-row-alt' : '' }}">
-            <dt class="col-sm-4">{{ $resource === 'payroll-records' && $field === 'hours_approved' ? 'Horas aprobadas del período' : $definition['label'] }}</dt>
-            @php($display = match (true) {
-                $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay) => $payrollHoursApprovedDisplay,
-                $resource === 'assignments' && $field === 'hourly_value' => $assignmentEffectiveHourlyDisplay ?: 'No configurado',
-                $resource === 'assignments' && $field === 'project_value' => $assignmentProjectValueDisplay,
-                $resource === 'time-entries' && $field === 'hourly_value' => filled($item->hourlyRateDisplayCurrency) && filled($item->hourly_value) ? \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH' : '—',
-                default => \App\Support\UiFormatter::display($item, $field, $definition),
-            })
-            <dd class="col-sm-8 mb-0 {{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-sm-end amount-cell' : '' }}">
-                @if (str_contains(mb_strtolower($definition['label']), 'estado') || in_array($field, ['status', 'payment_status', 'approval_status', 'project_status', 'billing_status'], true))
-                    <x-status-badge :status="$display" />
-                @else
-                    {{ $display }}
-                    @if ($resource === 'assignments' && $field === 'hourly_value' && $assignmentEffectiveHourlyOrigin)
-                        <div class="small text-muted mt-1">Origen: {{ $assignmentEffectiveHourlyOrigin }}</div>
-                    @endif
-                @endif
-            </dd>
+    @if ($isTimeEntryBatch)
+        <div class="section-title">Carga por período</div>
+        <div class="row g-3">
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Tipo</div>
+                <div class="fw-semibold">Carga por período</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Persona</div>
+                <div class="fw-semibold">{{ $item->person?->full_name ?: $item->person?->name ?: '—' }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Proyecto</div>
+                <div class="fw-semibold">{{ $item->project?->name ?: '—' }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Cliente</div>
+                <div class="fw-semibold">{{ $item->client?->legal_name ?: '—' }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Actividad</div>
+                <div class="fw-semibold">{{ $item->activityCatalog?->name ?: $item->activity ?: '—' }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Centro de costo</div>
+                <div class="fw-semibold">{{ $item->costCenter?->name ?: '—' }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Período</div>
+                <div class="fw-semibold">{{ $item->period_batch_date_display ?? (filled($item->entry_date) ? \App\Support\UiFormatter::formatDate($item->entry_date) : '—') }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Días generados</div>
+                <div class="fw-semibold">{{ $item->period_batch_entry_count ?? 1 }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Horas trabajadas</div>
+                <div class="fw-semibold">{{ \App\Support\UiFormatter::formatHours($item->hours_worked) }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Horas aprobadas</div>
+                <div class="fw-semibold">{{ \App\Support\UiFormatter::formatHours($item->hours_approved) }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Código</div>
+                <div class="fw-semibold">{{ $item->period_batch_code_display ?? $item->code }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Valor HH costeo</div>
+                <div class="fw-semibold">{{ $item->period_batch_hourly_value_display ?? (\App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH') }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Aprobación</div>
+                <div class="fw-semibold">{{ $item->period_batch_approval_status_display ?? ($item->approvalStatus?->name ?: '—') }}</div>
+            </div>
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="text-muted small">Pago</div>
+                <div class="fw-semibold">{{ $item->period_batch_payment_status_display ?? (strtolower((string) $item->payment_status) === 'paid' ? 'Pagado' : 'Pendiente') }}</div>
+            </div>
         </div>
-    @endforeach
+    @else
+        @php($currentSection = null)
+        @foreach ($fields as $field => $definition)
+            @if (($definition['section'] ?? null) !== $currentSection)
+                @php($currentSection = $definition['section'] ?? null)
+                @if ($currentSection)
+                    <div class="section-title">{{ $currentSection }}</div>
+                @endif
+            @endif
+            @php($payrollDetailRowIndex++)
+            <div class="row mb-3 payroll-detail-row {{ $resource === 'payroll-records' && $payrollDetailRowIndex % 2 === 1 ? 'payroll-detail-row-alt' : '' }}">
+                <dt class="col-sm-4">{{ $resource === 'payroll-records' && $field === 'hours_approved' ? 'Horas aprobadas del período' : $definition['label'] }}</dt>
+                @php($display = match (true) {
+                    $resource === 'payroll-records' && $field === 'hours_approved' && filled($payrollHoursApprovedDisplay) => $payrollHoursApprovedDisplay,
+                    $resource === 'assignments' && $field === 'hourly_value' => $assignmentEffectiveHourlyDisplay ?: 'No configurado',
+                    $resource === 'assignments' && $field === 'project_value' => $assignmentProjectValueDisplay,
+                    $resource === 'time-entries' && $field === 'hourly_value' => filled($item->hourlyRateDisplayCurrency) && filled($item->hourly_value) ? \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH' : '—',
+                    default => \App\Support\UiFormatter::display($item, $field, $definition),
+                })
+                <dd class="col-sm-8 mb-0 {{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-sm-end amount-cell' : '' }}">
+                    @if (str_contains(mb_strtolower($definition['label']), 'estado') || in_array($field, ['status', 'payment_status', 'approval_status', 'project_status', 'billing_status'], true))
+                        <x-status-badge :status="$display" />
+                    @else
+                        {{ $display }}
+                        @if ($resource === 'assignments' && $field === 'hourly_value' && $assignmentEffectiveHourlyOrigin)
+                            <div class="small text-muted mt-1">Origen: {{ $assignmentEffectiveHourlyOrigin }}</div>
+                        @endif
+                    @endif
+                </dd>
+            </div>
+        @endforeach
+    @endif
 
     @if ($isCatalog)
         <form method="POST" action="{{ route('operational.toggle-active', [$resource, $item->id]) }}" class="mt-4">
@@ -206,7 +273,7 @@
         <form method="POST" action="{{ route('operational.destroy', [$resource, $item->id]) }}" class="mt-4">
             @csrf
             @method('DELETE')
-            <button type="submit" class="btn btn-outline-danger">Eliminar</button>
+            <button type="submit" class="btn btn-outline-danger">{{ $isTimeEntryBatch ? 'Eliminar bloque' : 'Eliminar' }}</button>
         </form>
     @endif
 </div>

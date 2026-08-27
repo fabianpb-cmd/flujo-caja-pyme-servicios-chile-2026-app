@@ -2035,6 +2035,8 @@ class OperationalUiTest extends TestCase
             ->get();
 
         $this->assertCount(5, $splitEntries);
+        $this->assertNotNull($splitEntries->first()->period_batch_id);
+        $this->assertCount(1, $splitEntries->pluck('period_batch_id')->unique());
         $this->assertSame(40.0, round((float) $splitEntries->sum('hours_worked'), 2));
         $this->assertSame(40.0, round((float) $splitEntries->sum('hours_approved'), 2));
         $this->assertSame([$assignmentA->id, $assignmentA->id, $assignmentA->id, $assignmentB->id, $assignmentB->id], $splitEntries->pluck('assignment_id')->all());
@@ -2088,6 +2090,9 @@ class OperationalUiTest extends TestCase
             ->get();
 
         $this->assertCount(5, $totalEntries);
+        $this->assertNotNull($totalEntries->first()->period_batch_id);
+        $this->assertCount(1, $totalEntries->pluck('period_batch_id')->unique());
+        $this->assertNotSame($splitEntries->first()->period_batch_id, $totalEntries->first()->period_batch_id);
         $this->assertSame(40.0, round((float) $totalEntries->sum('hours_worked'), 2));
         $this->assertSame([8.0, 8.0, 8.0, 8.0, 8.0], $totalEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
 
@@ -2145,8 +2150,188 @@ class OperationalUiTest extends TestCase
             ->get();
 
         $this->assertCount(3, $manualEntries);
+        $this->assertNotNull($manualEntries->first()->period_batch_id);
+        $this->assertCount(1, $manualEntries->pluck('period_batch_id')->unique());
+        $this->assertNotSame($splitEntries->first()->period_batch_id, $manualEntries->first()->period_batch_id);
+        $this->assertNotSame($totalEntries->first()->period_batch_id, $manualEntries->first()->period_batch_id);
         $this->assertSame([3.33, 3.33, 3.34], $manualEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
         $this->assertSame(10.0, round((float) $manualEntries->sum('hours_worked'), 2));
+    }
+
+    public function test_time_entries_index_groups_period_loads_into_blocks_and_hides_individual_edit_for_batch_rows(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $clp = Currency::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'CLP'],
+            ['name' => 'Peso Chileno', 'symbol' => '$', 'minor_units' => 0, 'active' => true, 'is_base_currency' => true]
+        );
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-BLOCK',
+            'legal_name' => 'Cliente Bloque',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $clp->id,
+            'code' => 'PRY-TIME-BLOCK',
+            'name' => 'Kardex',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->create([
+            'company_id' => $company->id,
+            'code' => 'ACT-TIME-BLOCK-UI',
+            'name' => 'Implementación Bloque UI',
+            'active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-BLOCK',
+            'first_names' => 'Pablo',
+            'paternal_surname' => 'Toro',
+            'name' => 'Pablo Toro',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
+            'hourly_value' => 0.8,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-BLOCK',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $daily = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'code' => 'HOR-TIME-DAILY',
+            'entry_mode' => 'daily',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'client_id' => $client->id,
+            'entry_date' => '02/08/2026',
+            'activity_id' => $activity->id,
+            'hours_worked' => 2,
+            'hours_approved' => 2,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+        ]);
+
+        $daily->assertRedirect(route('operational.index', 'time-entries'));
+        $dailyEntry = TimeEntry::query()->where('code', 'HOR-TIME-DAILY')->firstOrFail();
+        $this->assertNull($dailyEntry->period_batch_id);
+
+        $periodOne = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 10,
+            'period_rows_payload' => '',
+        ]);
+
+        $periodOne->assertRedirect(route('operational.index', 'time-entries'));
+
+        $periodTwo = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '12/08/2026',
+            'period_end_date' => '13/08/2026',
+            'period_distribution_mode' => 'equal',
+            'period_hours_per_day' => 2,
+            'period_rows_payload' => '',
+        ]);
+
+        $periodTwo->assertRedirect(route('operational.index', 'time-entries'));
+
+        $entries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $person->id)
+            ->orderBy('entry_date')
+            ->get();
+
+        $this->assertCount(9, $entries);
+        $batchIds = $entries->pluck('period_batch_id')->filter()->unique()->values();
+        $this->assertCount(2, $batchIds);
+
+        $periodOneEntries = $entries->where('period_batch_id', $batchIds->first());
+        $periodTwoEntries = $entries->where('period_batch_id', $batchIds->last());
+        $this->assertCount(6, $periodOneEntries);
+        $this->assertCount(2, $periodTwoEntries);
+        $this->assertSame(10.0, round((float) $periodOneEntries->sum('hours_worked'), 2));
+        $this->assertSame(4.0, round((float) $periodTwoEntries->sum('hours_worked'), 2));
+
+        $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
+        $index->assertOk();
+        $content = $index->getContent();
+        $this->assertSame(3, preg_match_all('/>Ver<\/a>/', $content));
+        $this->assertSame(1, preg_match_all('/>Editar<\/a>/', $content));
+        $index->assertSee('02/08/2026', false);
+        $this->assertStringContainsString('03/08/2026', $content);
+        $this->assertStringContainsString('10/08/2026', $content);
+        $this->assertStringContainsString('12/08/2026', $content);
+        $this->assertStringContainsString('13/08/2026', $content);
+        $index->assertSee('10 h', false);
+        $index->assertSee('4 h', false);
+        $index->assertSee('UF 0,80 / HH', false);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $periodOneEntries->first()->id]));
+        $show->assertOk();
+        $show->assertSee('Carga por período', false);
+        $show->assertSee('Pablo Toro', false);
+        $show->assertSee('Kardex', false);
+        $this->assertStringContainsString('03/08/2026', $show->getContent());
+        $this->assertStringContainsString('10/08/2026', $show->getContent());
+        $show->assertSee('6', false);
+        $show->assertSee('10 h', false);
+        $show->assertSee('UF 0,80 / HH', false);
+        $show->assertSee('Eliminar bloque', false);
+        $show->assertDontSee('Editar', false);
+        $show->assertDontSee('1,67 h', false);
+
+        $delete = $this->actingAs($admin)->delete(route('operational.destroy', ['time-entries', $periodOneEntries->first()->id]));
+        $delete->assertRedirect(route('operational.index', 'time-entries'));
+        $this->assertSame(0, TimeEntry::query()->where('period_batch_id', $batchIds->first())->count());
+        $this->assertSame(3, TimeEntry::query()->where('company_id', $company->id)->where('person_id', $person->id)->count());
+
+        $indexAfterDelete = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
+        $indexAfterDelete->assertOk();
+        $afterContent = $indexAfterDelete->getContent();
+        $this->assertSame(2, preg_match_all('/>Ver<\/a>/', $afterContent));
+        $this->assertSame(1, preg_match_all('/>Editar<\/a>/', $afterContent));
+        $indexAfterDelete->assertDontSee('03/08/2026 - 10/08/2026', false);
+        $indexAfterDelete->assertSee('12/08/2026 - 13/08/2026', false);
     }
 
     public function test_time_entries_period_load_blocks_invalid_rows_transactionally(): void

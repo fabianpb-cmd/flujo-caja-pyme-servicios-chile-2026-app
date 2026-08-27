@@ -37,6 +37,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | `hours_worked` | `time_entries.hours_worked` | No aplica | Sí | No | `> 0` y suma diaria `<= 24` | Ejecución real, productividad, controles operativos |
 | `hours_approved` | `time_entries.hours_approved` | No aplica | Sí | No | `0 <= hours_approved <= hours_worked` | Remuneraciones, costo real, productividad |
 | `hourly_value` | Valor HH de costeo resuelto para la entrada | `assignment.hourly_value`, luego `person.hourly_value` | Derivado en el flujo actual | No | Depende de la fuente resuelta | Cálculo del monto de la hora registrada, UI de Horas |
+| `period_batch_id` | `time_entries.period_batch_id` | `null` para carga diaria | Derivado por la operación de carga por período | No | Identifica un lote lógico sin alterar la granularidad diaria | Agrupación funcional en UI operativa, trazabilidad de carga por período |
 | `person_id` / `project_id` / `assignment_id` | Relación operativa de la entrada | No aplica | Sí | No | Deben mantener integridad persona-proyecto-asignación | Ejecución real, remuneraciones, costo real |
 
 ## Remuneraciones
@@ -83,7 +84,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | ProjectCommitmentService | Calcula costo comprometido de personal desde HH comprometidas y valor HH de costeo; no depende de la modalidad de payroll y no usa `project_value` como base del compromiso. |
 | ProjectCommitmentService temporalidad mensual | Un intervalo desde una fecha hasta la misma fecha del mes siguiente equivale exactamente a un mes de compromiso; la fecha término no genera un período parcial adicional. |
 | Horas | Representa ejecución real. No es compromiso ni presupuesto. |
-| Carga por período de Horas | Mantiene granularidad diaria: una carga por período genera múltiples `TimeEntry` diarios (`1 persona + 1 proyecto + 1 fecha` por fila). |
+| Carga por período de Horas | Mantiene granularidad diaria en persistencia; los `TimeEntry` generados por una misma operación comparten `period_batch_id` y la UI operativa los presenta como un único bloque. |
 | Carga por período transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
 | Carga por período límite operativo | Una carga por período admite como máximo 31 días calendario por operación. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |

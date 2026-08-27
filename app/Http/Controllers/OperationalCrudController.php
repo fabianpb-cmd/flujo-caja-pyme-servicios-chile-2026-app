@@ -11,6 +11,7 @@ use App\Models\PayrollRecord;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\SalesDocument;
+use App\Models\TimeEntry;
 use App\Policies\CompanyOwnedPolicy;
 use App\Services\AuditService;
 use App\Services\CashMovementService;
@@ -31,9 +32,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -102,9 +105,13 @@ class OperationalCrudController extends Controller
                         $query->orderBy($column, $direction);
                     }
                 }
-            }, fn ($query) => $query->latest('id'))
-            ->paginate(15)
-            ->withQueryString();
+            }, fn ($query) => $query->latest('id'));
+
+        if ($resource === 'time-entries') {
+            $items = $this->paginateTimeEntryBlocks($this->presentTimeEntryBlocks($items->get()), 15, $request);
+        } else {
+            $items = $items->paginate(15)->withQueryString();
+        }
 
         return view('operational.index', compact('resource', 'config', 'items', 'search', 'sort', 'direction', 'sorts'));
     }
@@ -184,16 +191,38 @@ class OperationalCrudController extends Controller
         $payrollCalculationBreakdown = $resource === 'payroll-records' ? $this->payroll->explain($item) : null;
         $salesCalculationBreakdown = $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null;
         $payrollFormState = $resource === 'payroll-records' ? $this->payroll->formState($item) : [];
+        if ($resource === 'time-entries' && $item instanceof TimeEntry) {
+            if (filled($item->period_batch_id)) {
+                $batchEntries = TimeEntry::query()
+                    ->with($this->relationNames($config))
+                    ->forCompany($request->user()->company_id)
+                    ->where('period_batch_id', $item->period_batch_id)
+                    ->orderBy('entry_date')
+                    ->orderBy('id')
+                    ->get();
+
+                $item = $this->presentTimeEntryBlock($item, $batchEntries);
+            } else {
+                $item = $this->presentTimeEntryBlock($item);
+            }
+        }
+
         $projectCommitment = $resource === 'projects' ? $this->commitments->summarizeProject($item) : null;
 
         return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment'));
     }
 
-    public function edit(Request $request, string $resource, int $record): View
+    public function edit(Request $request, string $resource, int $record): View|RedirectResponse
     {
         $config = $this->config($resource);
         $item = $config['model']::query()->with($this->relationNames($config))->findOrFail($record);
         $this->authorizeResource($request, $config, 'update', $item);
+
+        if ($resource === 'time-entries' && $item instanceof TimeEntry && filled($item->period_batch_id)) {
+            return redirect()
+                ->route('operational.show', [$resource, $item->id])
+                ->withErrors(['batch' => 'Las cargas por período se modifican como bloque.']);
+        }
 
         return view('operational.form', [
             'resource' => $resource,
@@ -260,6 +289,12 @@ class OperationalCrudController extends Controller
         $item = $config['model']::query()->findOrFail($record);
         $this->authorizeResource($request, $config, 'update', $item);
 
+        if ($resource === 'time-entries' && $item instanceof TimeEntry && filled($item->period_batch_id)) {
+            return redirect()
+                ->route('operational.show', [$resource, $item->id])
+                ->withErrors(['batch' => 'Las cargas por período se modifican como bloque.']);
+        }
+
         try {
             $data = $this->prepareData($request, $resource, $request->validated());
         } catch (DomainException $exception) {
@@ -289,6 +324,29 @@ class OperationalCrudController extends Controller
                 : 'Los mantenedores no se eliminan físicamente; use activar o desactivar.';
 
             return redirect()->route('operational.show', [$resource, $item->id])->withErrors(['catalog' => $message]);
+        }
+
+        if ($resource === 'time-entries' && $item instanceof TimeEntry && filled($item->period_batch_id)) {
+            $batchEntries = TimeEntry::query()
+                ->forCompany($request->user()->company_id)
+                ->where('period_batch_id', $item->period_batch_id)
+                ->orderBy('entry_date')
+                ->orderBy('id')
+                ->get();
+
+            if ($message = $this->batchDeletionMessage($batchEntries)) {
+                return redirect()->route('operational.show', [$resource, $item->id])->withErrors(['dependencies' => $message]);
+            }
+
+            DB::transaction(function () use ($batchEntries, $request): void {
+                foreach ($batchEntries as $entry) {
+                    $before = $entry->toArray();
+                    $entry->delete();
+                    $this->audit->record('operational.deleted', $entry, $request->user(), $before, null);
+                }
+            });
+
+            return redirect()->route('operational.index', $resource)->with('status', 'Bloque eliminado.');
         }
 
         if ($message = $this->dependencies->deletionMessage($item)) {
@@ -538,6 +596,162 @@ class OperationalCrudController extends Controller
         if ($model instanceof PayrollRecord) {
             $this->payroll->refreshStatus($model);
         }
+    }
+
+    private function presentTimeEntryBlocks(Collection $entries): Collection
+    {
+        $dailyRows = $entries
+            ->filter(fn (TimeEntry $entry): bool => blank($entry->period_batch_id))
+            ->map(fn (TimeEntry $entry): TimeEntry => $this->presentTimeEntryBlock($entry));
+
+        $batchRows = $entries
+            ->filter(fn (TimeEntry $entry): bool => filled($entry->period_batch_id))
+            ->groupBy(fn (TimeEntry $entry): string => (string) $entry->period_batch_id)
+            ->map(fn (Collection $group): TimeEntry => $this->presentTimeEntryBlock($group->first(), $group));
+
+        return $dailyRows
+            ->concat($batchRows)
+            ->sortByDesc(fn (TimeEntry $entry): int => (int) ($entry->getAttribute('_presentation_sort_key') ?? $entry->id))
+            ->values();
+    }
+
+    private function paginateTimeEntryBlocks(Collection $rows, int $perPage, Request $request): LengthAwarePaginator
+    {
+        $page = max(1, (int) $request->integer('page', 1));
+        $total = $rows->count();
+        $items = $rows->forPage($page, $perPage)->values();
+
+        return new LengthAwarePaginator(
+            $items,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ],
+        );
+    }
+
+    private function presentTimeEntryBlock(TimeEntry $entry, ?Collection $group = null): TimeEntry
+    {
+        $presented = clone $entry;
+        $group = $group ?? collect([$entry]);
+        $ordered = $group
+            ->sortBy(fn (TimeEntry $row): string => sprintf(
+                '%s-%09d',
+                optional($row->entry_date)->format('Y-m-d') ?? '9999-12-31',
+                (int) $row->id
+            ))
+            ->values();
+
+        $isBatch = filled($presented->period_batch_id);
+        $first = $ordered->first();
+        $last = $ordered->last();
+        $entryDates = $ordered->map(fn (TimeEntry $row): string => optional($row->entry_date)->format('d/m/Y') ?? '—');
+        $dateDisplay = $entryDates->unique()->count() > 1
+            ? $entryDates->first().' - '.$entryDates->last()
+            : $entryDates->first();
+
+        $presented->setAttribute('code', $isBatch ? $this->timeEntryBatchCodeDisplay($ordered) : $entry->code);
+        $presented->setAttribute('hours_worked', $isBatch ? round((float) $ordered->sum('hours_worked'), 2) : $entry->hours_worked);
+        $presented->setAttribute('hours_approved', $isBatch ? round((float) $ordered->sum('hours_approved'), 2) : $entry->hours_approved);
+        $presented->setAttribute('period_batch_entry_count', $isBatch ? $ordered->count() : 1);
+        $presented->setAttribute('period_batch_date_display', $isBatch ? $dateDisplay : null);
+        $presented->setAttribute('period_batch_entry_date_display', $isBatch ? $dateDisplay : null);
+        $presented->setAttribute('period_batch_code_display', $isBatch ? $this->timeEntryBatchCodeDisplay($ordered) : null);
+        $presented->setAttribute('period_batch_hourly_value_display', $isBatch ? $this->timeEntryBatchRateDisplay($ordered) : null);
+        $presented->setAttribute('period_batch_approval_status_display', $isBatch ? $this->timeEntryBatchApprovalDisplay($ordered) : null);
+        $presented->setAttribute('period_batch_payment_status_display', $isBatch ? $this->timeEntryBatchPaymentDisplay($ordered) : null);
+        $presented->setAttribute('_presentation_sort_key', (int) $last->id);
+
+        if ($isBatch) {
+            $presented->setAttribute('period_batch_first_id', $first?->id);
+            $presented->setAttribute('period_batch_last_id', $last?->id);
+            $presented->setAttribute('period_batch_min_date', optional($ordered->first()->entry_date)->toDateString());
+            $presented->setAttribute('period_batch_max_date', optional($ordered->last()->entry_date)->toDateString());
+        }
+
+        return $presented;
+    }
+
+    private function timeEntryBatchCodeDisplay(Collection $entries): string
+    {
+        if ($entries->count() <= 1) {
+            return (string) $entries->first()?->code;
+        }
+
+        $sorted = $entries->sortBy(fn (TimeEntry $entry): string => sprintf(
+            '%s-%09d',
+            optional($entry->entry_date)->format('Y-m-d') ?? '9999-12-31',
+            (int) $entry->id
+        ))->values();
+
+        return (string) $sorted->first()?->code.'–'.(string) $sorted->last()?->code;
+    }
+
+    private function timeEntryBatchRateDisplay(Collection $entries): string
+    {
+        $signatures = $entries->map(function (TimeEntry $entry): string {
+            $currency = UiFormatter::currencyCode($entry->hourlyRateDisplayCurrency ?? 'CLP');
+            $amount = number_format((float) ($entry->hourly_value ?? 0), 2, '.', '');
+
+            return $amount.'|'.$currency;
+        })->unique()->values();
+
+        if ($signatures->count() !== 1) {
+            return 'Variable';
+        }
+
+        $entry = $entries->first();
+
+        return $entry?->hourly_value !== null
+            ? trim(UiFormatter::formatMoney($entry->hourly_value, $entry->hourlyRateDisplayCurrency).' / HH')
+            : '—';
+    }
+
+    private function timeEntryBatchApprovalDisplay(Collection $entries): string
+    {
+        $labels = $entries
+            ->map(fn (TimeEntry $entry): string => (string) ($entry->approvalStatus?->name ?: $entry->approval_status ?: '—'))
+            ->unique()
+            ->values();
+
+        return $labels->count() === 1 ? $labels->first() : 'Mixto';
+    }
+
+    private function timeEntryBatchPaymentDisplay(Collection $entries): string
+    {
+        $labels = $entries
+            ->map(fn (TimeEntry $entry): string => match (strtolower((string) $entry->payment_status)) {
+                'paid' => 'Pagado',
+                default => 'Pendiente',
+            })
+            ->unique()
+            ->values();
+
+        return $labels->count() === 1 ? $labels->first() : 'Mixto';
+    }
+
+    private function batchDeletionMessage(Collection $entries): ?string
+    {
+        $blockers = $entries->flatMap(fn (TimeEntry $entry) => $this->dependencies->blockers($entry))
+            ->groupBy('label')
+            ->map(fn (Collection $group, string $label): array => [
+                'label' => $label,
+                'count' => $group->sum('count'),
+            ])
+            ->values();
+
+        if ($blockers->isEmpty()) {
+            return null;
+        }
+
+        $references = $blockers
+            ->map(fn (array $dependency): string => $dependency['count'].' '.$dependency['label'])
+            ->implode(', ');
+
+        return 'No se puede eliminar el bloque porque está siendo utilizado por: '.$references.'. Desactívelo o reasigne las dependencias antes de eliminarlo.';
     }
 
     private function options(array $config, Request $request, ?Model $item = null): array

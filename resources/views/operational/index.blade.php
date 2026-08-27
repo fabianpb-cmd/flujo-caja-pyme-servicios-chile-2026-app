@@ -227,7 +227,7 @@
                 <td class="table-sticky-column table-actions-column">
                     <x-table-actions
                         :show-url="route('operational.show', [$resource, $item->id])"
-                        :edit-url="route('operational.edit', [$resource, $item->id])"
+                        :edit-url="$resource === 'time-entries' && filled($item->period_batch_id ?? null) ? null : route('operational.edit', [$resource, $item->id])"
                         :toggle-url="$isCatalog ? route('operational.toggle-active', [$resource, $item->id]) : null"
                         :active="(bool) ($item->active ?? $item->is_active ?? true)"
                     />
@@ -245,8 +245,17 @@
                 @foreach ($fields as $field => $definition)
                     @continue($field === $codeField)
                     @php($display = \App\Support\UiFormatter::display($item, $field, $definition))
+                    @if ($resource === 'time-entries' && filled($item->period_batch_id ?? null) && $field === 'entry_date')
+                        @php($display = $item->period_batch_date_display ?? $item->period_batch_entry_date_display ?? $display)
+                    @endif
                     @if ($resource === 'time-entries' && $field === 'hourly_value')
-                        @php($display = filled($item->hourlyRateDisplayCurrency) && filled($item->hourly_value) ? \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH' : '—')
+                        @php($display = filled($item->period_batch_hourly_value_display ?? null) ? $item->period_batch_hourly_value_display : (filled($item->hourlyRateDisplayCurrency) && filled($item->hourly_value) ? \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH' : '—'))
+                    @endif
+                    @if ($resource === 'time-entries' && filled($item->period_batch_id ?? null) && $field === 'approval_status_id')
+                        @php($display = $item->period_batch_approval_status_display ?? 'Mixto')
+                    @endif
+                    @if ($resource === 'time-entries' && filled($item->period_batch_id ?? null) && $field === 'payment_status')
+                        @php($display = $item->period_batch_payment_status_display ?? 'Mixto')
                     @endif
                     @if ($resource === 'payroll-records' && $field === 'hours_approved' && (($definition['label'] ?? null) === 'Override horas aprobadas'))
                         @php($payrollOverrides = app(\App\Services\PayrollService::class)->manualOverrideInputs($item))
