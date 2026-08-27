@@ -917,7 +917,7 @@
     @endif
 
     @if ($resource === 'time-entries' && ! $editing)
-        <div class="section-title">Modo de carga</div>
+        <div class="section-title">MODO DE CARGA</div>
         <div class="row g-3 mb-4">
             <div class="col-12">
                 <div class="btn-group" role="group" aria-label="Modo de carga de horas">
@@ -934,7 +934,112 @@
         </div>
 
         <div class="{{ $timeEntryEntryMode === 'period' ? '' : 'd-none' }}" data-time-entry-period-panel data-time-entry-period-load-container>
-            <div class="section-title">Carga por período</div>
+            <div class="section-title">DATOS DE LA CARGA</div>
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="person_id" class="form-label field-label-with-help">
+                        <span>Persona</span>
+                        <x-field-help :text="$resourceFieldHelp['time-entries']['person_id']" />
+                    </label>
+                    <select
+                        id="person_id"
+                        name="person_id"
+                        class="form-select @error('person_id') is-invalid @enderror"
+                        data-time-entry-person-select="true"
+                    >
+                        <option value="">Seleccione</option>
+                        @foreach (($options['person_id'] ?? []) as $key => $option)
+                            @php($label = is_array($option) ? $option['label'] : $option)
+                            <option
+                                value="{{ $key }}"
+                                @selected((string) old('person_id', $item->person_id ?? '') === (string) $key)
+                                @if(is_array($option))
+                                    data-person-rate-amount="{{ $option['person_rate_amount'] ?? '' }}"
+                                    data-person-rate-unit-type="{{ $option['person_rate_unit_type'] ?? '' }}"
+                                    data-person-rate-currency-code="{{ $option['person_rate_currency_code'] ?? '' }}"
+                                    data-person-rate-currency-symbol="{{ $option['person_rate_currency_symbol'] ?? '' }}"
+                                    data-person-rate-minor-units="{{ $option['person_rate_minor_units'] ?? '' }}"
+                                    data-person-rate-label="{{ $option['person_rate_label'] ?? '' }}"
+                                @endif
+                            >{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('person_id')
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="project_id" class="form-label field-label-with-help">
+                        <span>Proyecto</span>
+                        <x-field-help :text="$resourceFieldHelp['time-entries']['project_id']" />
+                    </label>
+                    <select
+                        id="project_id"
+                        name="project_id"
+                        class="form-select @error('project_id') is-invalid @enderror"
+                        data-time-entry-project-select="true"
+                    >
+                        <option value="">Seleccione</option>
+                        @foreach (($options['project_id'] ?? []) as $key => $option)
+                            @php($label = is_array($option) ? $option['label'] : $option)
+                            @php($parentId = is_array($option) ? ($option['parent_id'] ?? null) : null)
+                            <option
+                                value="{{ $key }}"
+                                @selected((string) old('project_id', $item->project_id ?? '') === (string) $key)
+                                @if($parentId) data-parent-id="{{ $parentId }}" @endif
+                                @if(is_array($option))
+                                    data-client-id="{{ $option['client_id'] ?? '' }}"
+                                    data-client-label="{{ $option['client_label'] ?? '' }}"
+                                    data-project-name="{{ $option['project_name'] ?? $label }}"
+                                    data-project-rate-amount="{{ $option['project_rate_amount'] ?? '' }}"
+                                    data-project-rate-unit-type="{{ $option['project_rate_unit_type'] ?? '' }}"
+                                    data-project-rate-currency-code="{{ $option['project_rate_currency_code'] ?? '' }}"
+                                    data-project-rate-currency-symbol="{{ $option['project_rate_currency_symbol'] ?? '' }}"
+                                    data-project-rate-minor-units="{{ $option['project_rate_minor_units'] ?? '' }}"
+                                    data-assignment-ranges='@json($option['assignment_ranges'] ?? [])'
+                                @endif
+                            >{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('project_id')
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="activity_id" class="form-label field-label-with-help">
+                        <span>Actividad</span>
+                        <x-field-help :text="$resourceFieldHelp['time-entries']['activity_id']" />
+                    </label>
+                    <select id="activity_id" name="activity_id" class="form-select @error('activity_id') is-invalid @enderror">
+                        <option value="">Seleccione</option>
+                        @foreach (($options['activity_id'] ?? []) as $key => $option)
+                            @php($label = is_array($option) ? $option['label'] : $option)
+                            <option value="{{ $key }}" @selected((string) old('activity_id', $item->activity_id ?? '') === (string) $key)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('activity_id')
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-12 col-md-6 col-xl-3">
+                    <label for="cost_center_id" class="form-label field-label-with-help">
+                        <span>Centro de costo</span>
+                        <x-field-help :text="$resourceFieldHelp['time-entries']['cost_center_id']" />
+                    </label>
+                    <select id="cost_center_id" name="cost_center_id" class="form-select @error('cost_center_id') is-invalid @enderror" data-time-entry-cost-center-select="true">
+                        <option value="">Seleccione</option>
+                        @foreach (($options['cost_center_id'] ?? []) as $key => $option)
+                            @php($label = is_array($option) ? $option['label'] : $option)
+                            <option value="{{ $key }}" @selected((string) old('cost_center_id', $item->cost_center_id ?? '') === (string) $key)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('cost_center_id')
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                </div>
+            </div>
+
+            <div class="section-title">PERÍODO</div>
             <div class="row g-3 mb-3">
                 <div class="col-12 col-md-6 col-xl-3">
                     <label for="period_start_date" class="form-label">Fecha inicio</label>
@@ -1015,11 +1120,11 @@
                 <div class="small fw-semibold text-muted mb-3">RESUMEN</div>
                 <div class="row g-3">
                     <div class="col-12 col-lg-6">
-                        <div class="small text-muted">Cliente</div>
+                        <div class="small text-muted">Cliente derivado</div>
                         <div class="fw-semibold" data-time-entry-period-summary-client>—</div>
                     </div>
                     <div class="col-12 col-lg-6">
-                        <div class="small text-muted">Asignación</div>
+                        <div class="small text-muted">Asignación/es</div>
                         <div class="fw-semibold" data-time-entry-period-summary-assignment>—</div>
                     </div>
                     <div class="col-12 col-lg-6">
@@ -1409,7 +1514,7 @@
                 @php($colClass = $definition['col'] ?? ($resourceColumns[$field] ?? 'col-12 col-md-6'))
                 @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period')
                 @php($timeEntryDailyOnly = $resource === 'time-entries' && ! $editing && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
-                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' && in_array($field, ['code', 'client_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
+                @continue($resource === 'time-entries' && ! $editing && $timeEntryEntryMode === 'period' && in_array($field, ['code', 'person_id', 'client_id', 'project_id', 'activity_id', 'cost_center_id', 'entry_date', 'hours_worked', 'hours_approved', 'hourly_value', 'approval_status_id', 'payment_status'], true))
                 @if ($field === 'code' && $autoCode)
                     <div class="{{ $colClass }}{{ $timeEntryDailyOnly ? ' time-entry-daily-only' : '' }}" @if($timeEntryDailyOnly) data-time-entry-daily-only="true" @endif>
                         <label for="{{ $field }}" class="form-label">Código</label>

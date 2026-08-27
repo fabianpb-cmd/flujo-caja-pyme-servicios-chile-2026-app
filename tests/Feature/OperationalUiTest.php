@@ -1620,6 +1620,9 @@ class OperationalUiTest extends TestCase
 
         $create->assertOk();
         $create->assertSeeInOrder(['Carga por período', 'Carga diaria']);
+        $create->assertSee('MODO DE CARGA');
+        $create->assertSee('DATOS DE LA CARGA');
+        $create->assertSee('PERÍODO');
         $create->assertSee('data-time-entry-period-load-container', false);
         $create->assertSee('data-time-entry-daily-load-container', false);
         $this->assertMatchesRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-period-load-container/s', $create->getContent());
@@ -1685,6 +1688,8 @@ class OperationalUiTest extends TestCase
 
         $create->assertOk();
         $create->assertSee('Carga por período');
+        $create->assertSee('DATOS DE LA CARGA');
+        $create->assertSee('PERÍODO');
         $create->assertSee('AUTORIZACIÓN');
         $create->assertSee('RESUMEN');
         $create->assertSee('Registrar período');
@@ -1693,6 +1698,18 @@ class OperationalUiTest extends TestCase
         $create->assertSee('data-time-entry-daily-load-container', false);
         $this->assertMatchesRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-daily-load-container/s', $create->getContent());
         $this->assertDoesNotMatchRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-period-load-container/s', $create->getContent());
+        $content = $create->getContent();
+        $this->assertSame(1, preg_match_all('/<select[^>]*id="person_id"[^>]*data-time-entry-person-select="true"/s', $content));
+        $this->assertSame(1, preg_match_all('/<select[^>]*id="project_id"[^>]*data-time-entry-project-select="true"/s', $content));
+        $this->assertSame(1, preg_match_all('/<select[^>]*id="activity_id"/s', $content));
+        $this->assertSame(1, preg_match_all('/<select[^>]*id="cost_center_id"/s', $content));
+        $this->assertSame(1, preg_match_all('/<select[^>]*id="approval_status_id"/s', $content));
+        $this->assertSame(1, preg_match_all('/<select[^>]*id="payment_status"/s', $content));
+        $this->assertSame(0, preg_match_all('/<input[^>]*id="entry_date"/s', $content));
+        $this->assertSame(0, preg_match_all('/<input[^>]*id="hours_worked"/s', $content));
+        $this->assertSame(0, preg_match_all('/<input[^>]*id="hours_approved"/s', $content));
+        $this->assertSame(0, preg_match_all('/<input[^>]*id="client_id_display"/s', $content));
+        $this->assertSame(0, preg_match_all('/<input[^>]*id="hourly_value_display"/s', $content));
         $create->assertDontSee('data-time-entry-daily-context', false);
         $create->assertDontSee('data-time-entry-assignment-context', false);
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
