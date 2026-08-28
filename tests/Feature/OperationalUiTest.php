@@ -2335,6 +2335,125 @@ class OperationalUiTest extends TestCase
         $indexAfterDelete->assertSee('12/08/2026 - 13/08/2026', false);
     }
 
+    public function test_time_entries_batch_code_display_uses_real_sequences_only(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $clp = Currency::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'CLP'],
+            ['name' => 'Peso Chileno', 'symbol' => '$', 'minor_units' => 0, 'active' => true, 'is_base_currency' => true]
+        );
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-BLOCK-CODE',
+            'legal_name' => 'Cliente Códigos',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'sales_currency_id' => $clp->id,
+            'code' => 'PRY-TIME-BLOCK-CODE',
+            'name' => 'Proyecto Códigos',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->create([
+            'company_id' => $company->id,
+            'code' => 'ACT-TIME-BLOCK-CODE',
+            'name' => 'Actividad Códigos',
+            'active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-BLOCK-CODE',
+            'first_names' => 'Pablo',
+            'paternal_surname' => 'Toro',
+            'name' => 'Pablo Toro',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
+            'hourly_value' => 0.8,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-BLOCK-CODE',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_rate_currency_id' => null,
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $assignmentId = ProjectAssignment::query()->where('code', 'ASI-TIME-BLOCK-CODE')->valueOrFail('id');
+
+        foreach ([
+            ['code' => 'HOR-000010', 'entry_date' => '2026-08-03', 'period_batch_id' => 'batch-non-consecutive'],
+            ['code' => 'HOR-000020', 'entry_date' => '2026-08-04', 'period_batch_id' => 'batch-non-consecutive'],
+            ['code' => 'HOR-000021', 'entry_date' => '2026-08-05', 'period_batch_id' => 'batch-non-consecutive'],
+            ['code' => 'HOR-000011', 'entry_date' => '2026-08-06', 'period_batch_id' => null],
+            ['code' => 'HOR-000030', 'entry_date' => '2026-08-10', 'period_batch_id' => 'batch-consecutive'],
+            ['code' => 'HOR-000031', 'entry_date' => '2026-08-11', 'period_batch_id' => 'batch-consecutive'],
+            ['code' => 'HOR-000032', 'entry_date' => '2026-08-12', 'period_batch_id' => 'batch-consecutive'],
+            ['code' => 'HOR-000007', 'entry_date' => '2026-08-13', 'period_batch_id' => null],
+        ] as $entry) {
+            TimeEntry::query()->create([
+                'company_id' => $company->id,
+                'code' => $entry['code'],
+                'period_batch_id' => $entry['period_batch_id'],
+                'person_id' => $person->id,
+                'client_id' => $client->id,
+                'project_id' => $project->id,
+                'assignment_id' => $assignmentId,
+                'entry_date' => $entry['entry_date'],
+                'activity_id' => $activity->id,
+                'activity' => 'Actividad Códigos',
+                'hours_worked' => 1,
+                'hours_approved' => 1,
+                'hourly_value' => 0.8,
+                'approval_status_id' => $approvedStatus->id,
+                'approval_status' => 'approved',
+                'payment_status' => 'pending',
+            ]);
+        }
+
+        $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
+        $index->assertOk();
+        $index->assertSee('HOR-000030–HOR-000032', false);
+        $index->assertSee('HOR-000010 + 2 registros', false);
+        $index->assertSee('HOR-000007', false);
+        $index->assertSee('HOR-000011', false);
+        $index->assertDontSee('HOR-000010–HOR-000021', false);
+
+        $nonConsecutiveEntry = TimeEntry::query()->where('period_batch_id', 'batch-non-consecutive')->orderBy('entry_date')->firstOrFail();
+        $showNonConsecutive = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $nonConsecutiveEntry->id]));
+        $showNonConsecutive->assertOk();
+        $showNonConsecutive->assertSee('HOR-000010 + 2 registros', false);
+        $showNonConsecutive->assertDontSee('HOR-000010–HOR-000021', false);
+
+        $consecutiveEntry = TimeEntry::query()->where('period_batch_id', 'batch-consecutive')->orderBy('entry_date')->firstOrFail();
+        $showConsecutive = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $consecutiveEntry->id]));
+        $showConsecutive->assertOk();
+        $showConsecutive->assertSee('HOR-000030–HOR-000032', false);
+    }
+
     public function test_time_entries_period_blocks_can_be_edited_as_batches(): void
     {
         [$company, $admin] = $this->companyWithAdmin();

@@ -750,17 +750,70 @@ class OperationalCrudController extends Controller
 
     private function timeEntryBatchCodeDisplay(Collection $entries): string
     {
-        if ($entries->count() <= 1) {
-            return (string) $entries->first()?->code;
-        }
-
         $sorted = $entries->sortBy(fn (TimeEntry $entry): string => sprintf(
             '%s-%09d',
             optional($entry->entry_date)->format('Y-m-d') ?? '9999-12-31',
             (int) $entry->id
         ))->values();
 
-        return (string) $sorted->first()?->code.'–'.(string) $sorted->last()?->code;
+        if ($sorted->count() <= 1) {
+            return (string) $sorted->first()?->code;
+        }
+
+        if ($this->timeEntryBatchCodesAreConsecutive($sorted)) {
+            return (string) $sorted->first()?->code.'–'.(string) $sorted->last()?->code;
+        }
+
+        return (string) $sorted->first()?->code.' + '.($sorted->count() - 1).' '.($sorted->count() === 2 ? 'registro' : 'registros');
+    }
+
+    private function timeEntryBatchCodesAreConsecutive(Collection $entries): bool
+    {
+        $previous = null;
+
+        foreach ($entries as $entry) {
+            $parsed = $this->parseTimeEntryCodeSequence($entry->code);
+
+            if ($parsed === null) {
+                return false;
+            }
+
+            if ($previous === null) {
+                $previous = $parsed;
+
+                continue;
+            }
+
+            if ($parsed['prefix'] !== $previous['prefix'] || $parsed['width'] !== $previous['width']) {
+                return false;
+            }
+
+            if ($parsed['number'] !== $previous['number'] + 1) {
+                return false;
+            }
+
+            $previous = $parsed;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array{prefix: string, number: int, width: int}|null
+     */
+    private function parseTimeEntryCodeSequence(?string $code): ?array
+    {
+        $code = trim((string) $code);
+
+        if ($code === '' || preg_match('/^(.*?)(\d+)$/', $code, $matches) !== 1) {
+            return null;
+        }
+
+        return [
+            'prefix' => $matches[1],
+            'number' => (int) $matches[2],
+            'width' => strlen($matches[2]),
+        ];
     }
 
     private function timeEntryBatchRateDisplay(Collection $entries): string
