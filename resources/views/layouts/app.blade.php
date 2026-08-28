@@ -28,6 +28,7 @@
     $resourceConfig = $currentResource ? config("operational.$currentResource") : null;
     $resourceTitle = $resourceConfig['title'] ?? null;
     $resourceSingularTitle = $resourceConfig['singular_title'] ?? null;
+    $timeEntryBatchEditState = $timeEntryBatchEditState ?? null;
     $navigation = [
         [
             'title' => 'Dashboard',
@@ -182,7 +183,9 @@
     } elseif (str_starts_with((string) $currentRouteName, 'operational.') && $resourceTitle) {
         $action = match ($currentRouteName) {
             'operational.create' => $resourceConfig['create_title'] ?? ($resourceSingularTitle ? 'Nueva '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Nuevo'),
-            'operational.edit' => $resourceConfig['edit_title'] ?? ($resourceSingularTitle ? 'Editar '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Editar'),
+            'operational.edit' => $currentResource === 'time-entries' && is_array($timeEntryBatchEditState) && filled($timeEntryBatchEditState['period_batch_id'] ?? null)
+                ? 'Editar carga por período'
+                : ($resourceConfig['edit_title'] ?? ($resourceSingularTitle ? 'Editar '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Editar')),
             'operational.show' => 'Detalle',
             default => null,
         };

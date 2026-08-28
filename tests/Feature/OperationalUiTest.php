@@ -2422,6 +2422,7 @@ class OperationalUiTest extends TestCase
         $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $originalEntries->first()->id]));
         $edit->assertOk();
         $edit->assertSee('Editar carga por período', false);
+        $edit->assertSee('Operación / Horas / Editar carga por período', false);
         $edit->assertSee('Guardar bloque', false);
         $edit->assertSee('data-time-entry-period-preview-url', false);
         $edit->assertSee('03/08/2026', false);
@@ -2429,6 +2430,7 @@ class OperationalUiTest extends TestCase
         $edit->assertDontSee('<label for="period_distribution_mode"', false);
         $edit->assertDontSee('<label for="period_hours_per_day"', false);
         $edit->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga por período/s', $edit->getContent());
 
         $update = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $originalEntries->first()->id]), [
             'entry_mode' => 'period',
@@ -2582,9 +2584,11 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('Valor HH de costeo del proyecto: UF 0,80 / HH', false);
         $edit->assertSee('6 días hábiles', false);
         $edit->assertSee('10 h', false);
+        $edit->assertSee('Operación / Horas / Editar carga por período', false);
         $edit->assertDontSee('<label for="period_distribution_mode"', false);
         $edit->assertDontSee('<label for="period_hours_per_day"', false);
         $edit->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga por período/s', $edit->getContent());
         $this->assertSame($assignment->id, $entries->first()->assignment_id);
 
         $save = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $entries->first()->id]), [
