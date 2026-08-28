@@ -62,7 +62,8 @@ class TimeEntryPeriodService
             ];
         }
 
-        $rows = $this->buildRows($payload, $distributionMode, $startDate, $endDate);
+        $rows = $this->existingBatchRowsForUnchangedEdit($companyId, $payload, $startDate, $endDate)
+            ?? $this->buildRows($payload, $distributionMode, $startDate, $endDate);
 
         if ($rows->isEmpty() && $startDate && $endDate) {
             $fieldErrors['period_rows'][] = 'No hay fechas disponibles para el período indicado.';
@@ -608,6 +609,56 @@ class TimeEntryPeriodService
             ->pluck('total_hours', 'entry_date')
             ->map(fn ($value) => round((float) $value, 2))
             ->all();
+    }
+
+    private function existingBatchRowsForUnchangedEdit(int $companyId, array $payload, ?Carbon $startDate, ?Carbon $endDate): ?Collection
+    {
+        $batchId = filled($payload['period_batch_id'] ?? null) ? (string) $payload['period_batch_id'] : null;
+        if ($batchId === null || $batchId === '') {
+            return null;
+        }
+
+        $entries = TimeEntry::query()
+            ->where('company_id', $companyId)
+            ->where('period_batch_id', $batchId)
+            ->orderBy('entry_date')
+            ->orderBy('id')
+            ->get();
+
+        if ($entries->isEmpty()) {
+            return null;
+        }
+
+        $first = $entries->first();
+        $last = $entries->last();
+        $totalHours = round((float) $entries->sum('hours_worked'), 2);
+        $requestedTotal = $this->numericOrNull($payload['period_total_hours'] ?? null);
+
+        if ((int) $first->person_id !== (int) ($payload['person_id'] ?? 0)) {
+            return null;
+        }
+
+        if ((int) $first->project_id !== (int) ($payload['project_id'] ?? 0)) {
+            return null;
+        }
+
+        if (($startDate?->toDateString() ?? null) !== optional($first->entry_date)->toDateString()) {
+            return null;
+        }
+
+        if (($endDate?->toDateString() ?? null) !== optional($last->entry_date)->toDateString()) {
+            return null;
+        }
+
+        if ($requestedTotal === null || round($requestedTotal, 2) !== $totalHours) {
+            return null;
+        }
+
+        return $entries->map(fn (TimeEntry $entry): array => [
+            'entry_date' => optional($entry->entry_date)->toDateString(),
+            'included' => true,
+            'hours_worked' => $entry->hours_worked !== null ? round((float) $entry->hours_worked, 2) : null,
+        ])->values();
     }
 
     private function person(int $companyId, array $payload): ?Person

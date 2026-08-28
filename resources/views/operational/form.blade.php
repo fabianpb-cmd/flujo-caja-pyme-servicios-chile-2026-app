@@ -416,6 +416,7 @@
 })
 <?php
     $timeEntryBatchEditState = $timeEntryBatchEditState ?? null;
+    $timeEntryPeriodInitialPreview = $timeEntryPeriodInitialPreview ?? null;
     $isTimeEntryBatchEdit = $resource === 'time-entries' && $editing && is_array($timeEntryBatchEditState);
     $formTitle = match ($resource) {
         'assignments' => $editing ? 'Editar asignación' : 'Nueva asignación',
@@ -437,10 +438,20 @@
 @php($timeEntryEntryDateParsed = $resource === 'time-entries' ? \App\Support\UiFormatter::parseDateInput($timeEntryEntryDate) : null)
 @php($timeEntryPeriodStartDate = $resource === 'time-entries' ? old('period_start_date', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_start_date'] ?? null) : null) : null)
 @php($timeEntryPeriodEndDate = $resource === 'time-entries' ? old('period_end_date', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_end_date'] ?? null) : null) : null)
-@php($timeEntryPeriodDistributionMode = $resource === 'time-entries' ? old('period_distribution_mode', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_distribution_mode'] ?? 'manual') : 'equal') : 'equal')
+@php($timeEntryPeriodDistributionMode = $resource === 'time-entries' ? old('period_distribution_mode', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_distribution_mode'] ?? 'total') : 'equal') : 'equal')
 @php($timeEntryPeriodHoursPerDay = $resource === 'time-entries' ? old('period_hours_per_day', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_hours_per_day'] ?? null) : null) : null)
 @php($timeEntryPeriodTotalHours = $resource === 'time-entries' ? old('period_total_hours', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_total_hours'] ?? null) : null) : null)
 @php($timeEntryPeriodRowsPayload = $resource === 'time-entries' ? old('period_rows_payload', $isTimeEntryBatchEdit ? ($timeEntryBatchEditState['period_rows_payload'] ?? '') : '') : '')
+@php($timeEntryPeriodInitialRows = collect($isTimeEntryBatchEdit ? ($timeEntryPeriodInitialPreview['rows'] ?? []) : []))
+@php($timeEntryPeriodInitialSummary = $isTimeEntryBatchEdit ? ($timeEntryPeriodInitialPreview['summary'] ?? []) : [])
+@php($timeEntryPeriodInitialFieldErrors = $isTimeEntryBatchEdit ? collect($timeEntryPeriodInitialPreview['field_errors'] ?? [])->flatten()->values() : collect())
+@php($timeEntryPeriodInitialHasValidPreview = $isTimeEntryBatchEdit && $timeEntryPeriodInitialFieldErrors->isEmpty() && $timeEntryPeriodInitialRows->isNotEmpty())
+@php($timeEntryPeriodInitialClientDisplay = $isTimeEntryBatchEdit ? ($timeEntryPeriodInitialHasValidPreview && filled($timeEntryPeriodInitialSummary['client_label'] ?? null) ? 'Cliente: '.$timeEntryPeriodInitialSummary['client_label'] : 'Cliente: Pendiente de selección.') : '—')
+@php($timeEntryPeriodInitialAssignmentDisplay = $isTimeEntryBatchEdit ? ($timeEntryPeriodInitialHasValidPreview && filled($timeEntryPeriodInitialSummary['shared_assignment_label'] ?? null) ? 'Asignación: '.$timeEntryPeriodInitialSummary['shared_assignment_label'] : (($timeEntryPeriodInitialSummary['multiple_assignments'] ?? false) ? 'Asignación: El período utiliza más de una asignación vigente.' : 'Asignación: Pendiente de selección.')) : '—')
+@php($timeEntryPeriodInitialRateDisplay = $isTimeEntryBatchEdit ? ($timeEntryPeriodInitialHasValidPreview && filled($timeEntryPeriodInitialSummary['shared_rate_display'] ?? null) ? 'Valor HH de costeo del proyecto: '.($timeEntryPeriodInitialSummary['shared_rate_display'] ?? '').(filled($timeEntryPeriodInitialSummary['shared_rate_source'] ?? null) ? ' · '.$timeEntryPeriodInitialSummary['shared_rate_source'] : '') : (($timeEntryPeriodInitialSummary['multiple_rates'] ?? false) ? 'Valor HH de costeo del proyecto: El período utiliza más de un valor HH.' : 'Valor HH de costeo del proyecto: Pendiente de cálculo.')) : '—')
+@php($timeEntryPeriodInitialDaysCount = $timeEntryPeriodInitialHasValidPreview ? $timeEntryPeriodInitialRows->filter(fn (array $row): bool => ($row['included'] ?? false) && ($row['status'] ?? null) !== 'error')->count() : null)
+@php($timeEntryPeriodInitialDaysDisplay = $isTimeEntryBatchEdit ? ($timeEntryPeriodInitialDaysCount === null ? '—' : $timeEntryPeriodInitialDaysCount.' '.($timeEntryPeriodInitialDaysCount === 1 ? 'día hábil' : 'días hábiles')) : '—')
+@php($timeEntryPeriodInitialTotalDisplay = $isTimeEntryBatchEdit && $timeEntryPeriodInitialHasValidPreview ? \App\Support\UiFormatter::formatHours($timeEntryPeriodInitialPreview['total_hours'] ?? 0) : '—')
 @php($timeEntryPeriodAuthorizationFields = ['approval_status_id', 'payment_status'])
 @php($timeEntryMatchingRanges = $timeEntrySelectedProjectRanges->filter(function (array $range) use ($timeEntrySelectedPersonId, $timeEntryEntryDateParsed) {
     if ((string) ($range['person_id'] ?? '') !== (string) $timeEntrySelectedPersonId) {
@@ -923,6 +934,8 @@
         @if ($isTimeEntryBatchEdit)
             <input type="hidden" name="entry_mode" value="period">
             <input type="hidden" name="period_batch_id" value="{{ $timeEntryBatchEditState['period_batch_id'] ?? $item->period_batch_id }}">
+            <input type="hidden" name="period_distribution_mode" value="total" data-time-entry-period-distribution>
+            <input type="hidden" name="period_rows_payload" value="{{ $timeEntryPeriodRowsPayload }}" data-time-entry-period-rows-payload>
         @endif
         <div class="section-title">MODO DE CARGA</div>
         <div class="row g-3 mb-4">
@@ -1043,7 +1056,7 @@
                         <x-field-help :text="$resourceFieldHelp['time-entries']['cost_center_id']" />
                     </label>
                     <select id="cost_center_id" name="cost_center_id" class="form-select @error('cost_center_id') is-invalid @enderror" data-time-entry-cost-center-select="true">
-                        <option value="">Seleccione</option>
+                        <option value="">{{ $resource === 'time-entries' ? 'Sin centro de costo' : 'Seleccione' }}</option>
                         @foreach (($options['cost_center_id'] ?? []) as $key => $option)
                             @php($label = is_array($option) ? $option['label'] : $option)
                             <option value="{{ $key }}" @selected((string) old('cost_center_id', $item->cost_center_id ?? '') === (string) $key)>{{ $label }}</option>
@@ -1071,25 +1084,27 @@
                         <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
                 </div>
-                <div class="col-12 col-md-6 col-xl-3">
-                    <label for="period_distribution_mode" class="form-label">Distribución</label>
-                    <select id="period_distribution_mode" name="period_distribution_mode" class="form-select @error('period_distribution_mode') is-invalid @enderror" data-time-entry-period-distribution>
-                        <option value="equal" @selected($timeEntryPeriodDistributionMode === 'equal')>Horas iguales por día</option>
-                        <option value="total" @selected($timeEntryPeriodDistributionMode === 'total')>Total del período</option>
-                        <option value="manual" @selected($timeEntryPeriodDistributionMode === 'manual')>Manual</option>
-                    </select>
-                    @error('period_distribution_mode')
-                        <div class="invalid-feedback d-block">{{ $message }}</div>
-                    @enderror
-                </div>
-                <div class="col-12 col-md-6 col-xl-3 {{ $timeEntryPeriodDistributionMode === 'equal' ? '' : 'd-none' }}" data-time-entry-period-hours-per-day-wrap>
-                    <label for="period_hours_per_day" class="form-label">Horas por día</label>
-                    <input id="period_hours_per_day" name="period_hours_per_day" type="number" min="0.01" max="24" step="0.01" class="form-control @error('period_hours_per_day') is-invalid @enderror" value="{{ $timeEntryPeriodHoursPerDay }}" data-time-entry-period-hours-per-day>
-                    @error('period_hours_per_day')
-                        <div class="invalid-feedback d-block">{{ $message }}</div>
-                    @enderror
-                </div>
-                <div class="col-12 col-md-6 col-xl-3 {{ $timeEntryPeriodDistributionMode === 'total' ? '' : 'd-none' }}" data-time-entry-period-total-hours-wrap>
+                @if (! $isTimeEntryBatchEdit)
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <label for="period_distribution_mode" class="form-label">Distribución</label>
+                        <select id="period_distribution_mode" name="period_distribution_mode" class="form-select @error('period_distribution_mode') is-invalid @enderror" data-time-entry-period-distribution>
+                            <option value="equal" @selected($timeEntryPeriodDistributionMode === 'equal')>Horas iguales por día</option>
+                            <option value="total" @selected($timeEntryPeriodDistributionMode === 'total')>Total del período</option>
+                            <option value="manual" @selected($timeEntryPeriodDistributionMode === 'manual')>Manual</option>
+                        </select>
+                        @error('period_distribution_mode')
+                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-3 {{ $timeEntryPeriodDistributionMode === 'equal' ? '' : 'd-none' }}" data-time-entry-period-hours-per-day-wrap>
+                        <label for="period_hours_per_day" class="form-label">Horas por día</label>
+                        <input id="period_hours_per_day" name="period_hours_per_day" type="number" min="0.01" max="24" step="0.01" class="form-control @error('period_hours_per_day') is-invalid @enderror" value="{{ $timeEntryPeriodHoursPerDay }}" data-time-entry-period-hours-per-day>
+                        @error('period_hours_per_day')
+                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                        @enderror
+                    </div>
+                @endif
+                <div class="col-12 col-md-6 col-xl-3 {{ ! $isTimeEntryBatchEdit && $timeEntryPeriodDistributionMode === 'total' ? '' : ($isTimeEntryBatchEdit ? '' : 'd-none') }}" data-time-entry-period-total-hours-wrap>
                     <label for="period_total_hours" class="form-label">Total período</label>
                     <input id="period_total_hours" name="period_total_hours" type="number" min="0.01" step="0.01" class="form-control @error('period_total_hours') is-invalid @enderror" value="{{ $timeEntryPeriodTotalHours }}" data-time-entry-period-total-hours>
                     @error('period_total_hours')
@@ -1098,7 +1113,9 @@
                 </div>
             </div>
 
-            <input type="hidden" name="period_rows_payload" value="{{ $timeEntryPeriodRowsPayload }}" data-time-entry-period-rows-payload>
+            @if (! $isTimeEntryBatchEdit)
+                <input type="hidden" name="period_rows_payload" value="{{ $timeEntryPeriodRowsPayload }}" data-time-entry-period-rows-payload>
+            @endif
 
             <div class="app-panel p-3 mb-3" data-time-entry-period-authorization>
                 <div class="section-title mb-3">AUTORIZACIÓN</div>
@@ -1137,28 +1154,30 @@
                 <div class="row g-3">
                     <div class="col-12 col-lg-6">
                         <div class="small text-muted">Cliente derivado</div>
-                        <div class="fw-semibold" data-time-entry-period-summary-client>—</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-client>{{ $isTimeEntryBatchEdit ? $timeEntryPeriodInitialClientDisplay : '—' }}</div>
                     </div>
                     <div class="col-12 col-lg-6">
                         <div class="small text-muted">Asignación/es</div>
-                        <div class="fw-semibold" data-time-entry-period-summary-assignment>—</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-assignment>{{ $isTimeEntryBatchEdit ? $timeEntryPeriodInitialAssignmentDisplay : '—' }}</div>
                     </div>
                     <div class="col-12 col-lg-6">
                         <div class="small text-muted">Valor HH de costeo</div>
-                        <div class="fw-semibold" data-time-entry-period-summary-rate>—</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-rate>{{ $isTimeEntryBatchEdit ? $timeEntryPeriodInitialRateDisplay : '—' }}</div>
                     </div>
                     <div class="col-12 col-lg-3">
                         <div class="small text-muted">Días considerados</div>
-                        <div class="fw-semibold" data-time-entry-period-summary-days>—</div>
+                        <div class="fw-semibold" data-time-entry-period-summary-days>{{ $isTimeEntryBatchEdit ? $timeEntryPeriodInitialDaysDisplay : '—' }}</div>
                     </div>
                     <div class="col-12 col-lg-3">
                         <div class="small text-muted">Total a registrar</div>
-                        <div class="fw-semibold" data-time-entry-period-total-hours-display>—</div>
+                        <div class="fw-semibold" data-time-entry-period-total-hours-display>{{ $isTimeEntryBatchEdit ? $timeEntryPeriodInitialTotalDisplay : '—' }}</div>
                     </div>
-                    <div class="col-12">
-                        <div class="small text-muted">Distribución</div>
-                        <div class="fw-semibold" data-time-entry-period-summary-distribution>—</div>
-                    </div>
+                    @if (! $isTimeEntryBatchEdit)
+                        <div class="col-12">
+                            <div class="small text-muted">Distribución</div>
+                            <div class="fw-semibold" data-time-entry-period-summary-distribution>—</div>
+                        </div>
+                    @endif
                     <div class="col-12">
                         <div class="small text-muted" data-time-entry-period-multiple-summary></div>
                     </div>
@@ -1168,23 +1187,25 @@
                 </div>
             </div>
 
-            <div class="table-responsive border rounded mb-4 d-none" data-time-entry-period-table-wrapper>
-                <table class="table table-sm align-middle mb-0" data-time-entry-period-table>
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 56px;">Incluir</th>
-                            <th>Fecha</th>
-                            <th>Asignación</th>
-                            <th style="width: 140px;">Horas</th>
-                        </tr>
-                    </thead>
-                    <tbody data-time-entry-period-rows>
-                        <tr data-time-entry-period-empty-row>
-                            <td colspan="4" class="text-muted small py-3">Prepare el período para ver la distribución diaria antes de guardar.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            @if (! $isTimeEntryBatchEdit)
+                <div class="table-responsive border rounded mb-4 d-none" data-time-entry-period-table-wrapper>
+                    <table class="table table-sm align-middle mb-0" data-time-entry-period-table>
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 56px;">Incluir</th>
+                                <th>Fecha</th>
+                                <th>Asignación</th>
+                                <th style="width: 140px;">Horas</th>
+                            </tr>
+                        </thead>
+                        <tbody data-time-entry-period-rows>
+                            <tr data-time-entry-period-empty-row>
+                                <td colspan="4" class="text-muted small py-3">Prepare el período para ver la distribución diaria antes de guardar.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            @endif
 
             @error('period_rows')
                 <div class="invalid-feedback d-block mb-3">{{ $message }}</div>

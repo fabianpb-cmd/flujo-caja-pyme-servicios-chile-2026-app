@@ -227,6 +227,8 @@ class OperationalCrudController extends Controller
                     ->withErrors(['dependencies' => $message]);
             }
 
+            $timeEntryBatchEditState = $this->timeEntryBatchEditState($batchEntries);
+
             return view('operational.form', [
                 'resource' => $resource,
                 'config' => $config,
@@ -239,7 +241,22 @@ class OperationalCrudController extends Controller
                 'payrollCalculationBreakdown' => null,
                 'salesCalculationBreakdown' => null,
                 'assignmentCommitmentPreview' => null,
-                'timeEntryBatchEditState' => $this->timeEntryBatchEditState($batchEntries),
+                'timeEntryBatchEditState' => $timeEntryBatchEditState,
+                'timeEntryPeriodInitialPreview' => $this->timeEntryPeriods->preview($request->user()->company_id, [
+                    'entry_mode' => 'period',
+                    'period_batch_id' => $timeEntryBatchEditState['period_batch_id'],
+                    'person_id' => $item->person_id,
+                    'project_id' => $item->project_id,
+                    'activity_id' => $item->activity_id,
+                    'cost_center_id' => $item->cost_center_id,
+                    'approval_status_id' => $item->approval_status_id,
+                    'payment_status' => $item->payment_status,
+                    'period_start_date' => $timeEntryBatchEditState['period_start_date'],
+                    'period_end_date' => $timeEntryBatchEditState['period_end_date'],
+                    'period_distribution_mode' => $timeEntryBatchEditState['period_distribution_mode'],
+                    'period_total_hours' => $timeEntryBatchEditState['period_total_hours'],
+                    'period_rows_payload' => $timeEntryBatchEditState['period_rows_payload'],
+                ]),
             ]);
         }
 
@@ -835,20 +852,14 @@ class OperationalCrudController extends Controller
             ))
             ->values();
 
-        $rows = $ordered->map(fn (TimeEntry $entry): array => [
-            'entry_date' => optional($entry->entry_date)->toDateString(),
-            'included' => true,
-            'hours_worked' => $entry->hours_worked !== null ? round((float) $entry->hours_worked, 2) : null,
-        ])->values();
-
         return [
             'period_batch_id' => (string) $ordered->first()?->period_batch_id,
             'period_start_date' => optional($ordered->first()?->entry_date)->toDateString(),
             'period_end_date' => optional($ordered->last()?->entry_date)->toDateString(),
-            'period_distribution_mode' => 'manual',
+            'period_distribution_mode' => 'total',
             'period_hours_per_day' => null,
             'period_total_hours' => round((float) $ordered->sum('hours_worked'), 2),
-            'period_rows_payload' => $rows->toJson(JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'period_rows_payload' => '',
         ];
     }
 

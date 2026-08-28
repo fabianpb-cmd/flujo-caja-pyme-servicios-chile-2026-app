@@ -2426,6 +2426,9 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('data-time-entry-period-preview-url', false);
         $edit->assertSee('03/08/2026', false);
         $edit->assertSee('10/08/2026', false);
+        $edit->assertDontSee('<label for="period_distribution_mode"', false);
+        $edit->assertDontSee('<label for="period_hours_per_day"', false);
+        $edit->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
 
         $update = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $originalEntries->first()->id]), [
             'entry_mode' => 'period',
@@ -2478,6 +2481,145 @@ class OperationalUiTest extends TestCase
         $show->assertSee('UF 0,80 / HH', false);
         $show->assertSee('Editar', false);
         $show->assertDontSee('1,67 h', false);
+    }
+
+    public function test_time_entries_period_batch_edit_renders_initial_summary_and_save_without_changes_is_idempotent(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-IDEMP',
+            'legal_name' => 'Clinica Los Andes',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-IDEMP',
+            'name' => 'Kardex',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-IDEMP'],
+            ['name' => 'Soporte Idempotente', 'active' => true, 'sort_order' => 1]
+        );
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-IDEMP',
+            'first_names' => 'Pablo',
+            'paternal_surname' => 'Toro',
+            'name' => 'Pablo Toro',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-IDEMP',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $create = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 10,
+            'period_rows_payload' => '',
+        ]);
+
+        $create->assertRedirect(route('operational.index', 'time-entries'));
+
+        $entries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->whereNotNull('period_batch_id')
+            ->orderBy('entry_date')
+            ->get();
+
+        $batchId = (string) $entries->first()->period_batch_id;
+        $originalIds = $entries->pluck('id')->all();
+        $originalSignature = $entries->map(fn (TimeEntry $entry): array => [
+            'id' => $entry->id,
+            'date' => optional($entry->entry_date)->toDateString(),
+            'hours' => round((float) $entry->hours_worked, 2),
+            'assignment_id' => $entry->assignment_id,
+        ])->all();
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $entries->first()->id]));
+        $edit->assertOk();
+        $edit->assertSee('Pablo Toro', false);
+        $edit->assertSee('Kardex', false);
+        $edit->assertSee('Soporte Idempotente', false);
+        $edit->assertSee('03/08/2026', false);
+        $edit->assertSee('10/08/2026', false);
+        $edit->assertSee('10', false);
+        $edit->assertSee('Cliente: Clinica Los Andes', false);
+        $edit->assertSee('Asignación: ASI-TIME-IDEMP · Kardex', false);
+        $edit->assertSee('Valor HH de costeo del proyecto: UF 0,80 / HH', false);
+        $edit->assertSee('6 días hábiles', false);
+        $edit->assertSee('10 h', false);
+        $edit->assertDontSee('<label for="period_distribution_mode"', false);
+        $edit->assertDontSee('<label for="period_hours_per_day"', false);
+        $edit->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
+        $this->assertSame($assignment->id, $entries->first()->assignment_id);
+
+        $save = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $entries->first()->id]), [
+            'entry_mode' => 'period',
+            'period_batch_id' => $batchId,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 10,
+            'period_rows_payload' => '',
+        ]);
+
+        $after = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('period_batch_id', $batchId)
+            ->orderBy('entry_date')
+            ->get();
+
+        $save->assertRedirect(route('operational.show', ['time-entries', $after->first()->id]));
+        $this->assertSame($originalIds, $after->pluck('id')->all());
+        $this->assertCount(1, $after->pluck('period_batch_id')->unique());
+        $this->assertSame($batchId, (string) $after->first()->period_batch_id);
+        $this->assertSame(6, $after->count());
+        $this->assertSame(10.0, round((float) $after->sum('hours_worked'), 2));
+        $this->assertSame($originalSignature, $after->map(fn (TimeEntry $entry): array => [
+            'id' => $entry->id,
+            'date' => optional($entry->entry_date)->toDateString(),
+            'hours' => round((float) $entry->hours_worked, 2),
+            'assignment_id' => $entry->assignment_id,
+        ])->all());
     }
 
     public function test_time_entries_period_batch_edit_recalculates_person_project_assignment_and_preserves_uf(): void
