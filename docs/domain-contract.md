@@ -87,6 +87,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | Carga por período de Horas | Se crea, visualiza, edita y elimina como una única operación lógica; el usuario informa un rango de fechas y un total de horas. La distribución entre `TimeEntry` diarios es automática e interna. Mantiene granularidad diaria en persistencia y los `TimeEntry` generados por la misma operación comparten `period_batch_id` para validación, costeo, aprobación, remuneraciones, prefacturación y trazabilidad. |
 | Carga por período transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
 | Carga por período límite operativo | Una carga por período admite como máximo 31 días calendario por operación. |
+| Mutación de Horas con dependencias | Un `TimeEntry` o una carga por período consumida por dependencias operativas protegidas no puede modificarse ni eliminarse desde Horas. Si cualquier fila de un `period_batch_id` tiene dependencias, la operación completa del batch queda bloqueada. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
 | Remuneraciones incompletas | Si falta una fuente obligatoria para la modalidad vigente, la remuneración queda en revisión/incompleta; un valor persistido en cero no equivale a un cálculo válido. |
 | Horas automáticas en Remuneraciones | Un snapshot automático de horas aprobadas proveniente de Horas no equivale por sí mismo a un override manual. |

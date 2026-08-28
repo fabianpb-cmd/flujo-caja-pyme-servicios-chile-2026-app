@@ -11,6 +11,7 @@
     $projectCommitmentSaleCurrencyCode = null;
     $payrollDetailRowIndex = 0;
     $isTimeEntryBatch = $resource === 'time-entries' && filled($item->period_batch_id ?? null);
+    $timeEntryUpdateBlockedMessage = $resource === 'time-entries' ? ($item->time_entry_update_blocked_message ?? null) : null;
 
     if ($resource === 'assignments' && $item instanceof \App\Models\ProjectAssignment) {
         $item->loadMissing(['project.salesCurrency', 'hourlyRateCurrency', 'person.hourlyRateCurrency']);
@@ -39,11 +40,18 @@
     </div>
     <div class="page-toolbar">
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Volver</a>
-        <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
+        @if (blank($timeEntryUpdateBlockedMessage))
+            <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
+        @endif
     </div>
 </div>
 
 <div class="app-panel p-4">
+    @if (filled($timeEntryUpdateBlockedMessage))
+        <div class="alert alert-warning" role="alert">
+            {{ $timeEntryUpdateBlockedMessage }}
+        </div>
+    @endif
     @php($payrollHoursApprovedDisplay = $resource === 'payroll-records' && filled(data_get($payrollHourlyCost ?? [], 'worked_hours')) ? \App\Support\UiFormatter::formatHours(data_get($payrollHourlyCost, 'worked_hours')) : null)
 @if ($resource === 'payroll-records' && ! empty($payrollHourlyCost))
         <div class="app-panel p-3 mb-4">

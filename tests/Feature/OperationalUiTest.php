@@ -1588,6 +1588,159 @@ class OperationalUiTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar registro de horas/s', $edit->getContent());
     }
 
+    public function test_time_entries_daily_edit_update_and_delete_are_blocked_when_prefactured(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-DAY-LOCK',
+            'legal_name' => 'Cliente Día Bloqueado',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-DAY-LOCK',
+            'name' => 'Proyecto Día Bloqueado',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-DAY-LOCK'],
+            ['name' => 'Actividad Día Bloqueada', 'active' => true, 'sort_order' => 1]
+        );
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+        $rejectedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'rejected'],
+            ['name' => 'Rechazado', 'active' => true, 'sort_order' => 2]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-DAY-LOCK',
+            'first_names' => 'Dario',
+            'paternal_surname' => 'Bloqueado',
+            'name' => 'Dario Bloqueado',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+        ]);
+
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-DAY-LOCK',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+        ]);
+
+        $entry = TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HOR-TIME-DAY-LOCK',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-08-12',
+            'activity_id' => $activity->id,
+            'activity' => 'Actividad Día Bloqueada',
+            'hours_worked' => 8,
+            'hours_approved' => 8,
+            'approval_status_id' => $approvedStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+            'hourly_value' => 0.8,
+        ]);
+
+        $document = SalesDocument::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ING-TIME-DAY-LOCK',
+            'document_type_id' => $this->documentTypeId($company->id, 'sales', 'FACTURA'),
+            'document_type' => 'Factura',
+            'issue_date' => '2026-08-13',
+            'net_amount' => 1000,
+            'vat_amount' => 190,
+            'gross_amount' => 1190,
+            'status' => 'Pendiente',
+        ]);
+
+        SalesDocumentTimeEntry::query()->create([
+            'company_id' => $company->id,
+            'sales_document_id' => $document->id,
+            'time_entry_id' => $entry->id,
+            'project_assignment_id' => $assignment->id,
+            'hours_approved' => 8,
+            'hourly_rate_amount' => 0.8,
+            'rate_unit_type' => 'UF',
+            'currency_id' => null,
+            'subtotal_original' => 6.4,
+            'conversion_rate' => 39000,
+            'conversion_date' => '2026-08-13',
+            'subtotal_clp' => 249600,
+        ]);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $entry->id]));
+        $show->assertOk();
+        $show->assertSee('No se puede modificar el registro porque está siendo utilizado por: 1 líneas de prefacturación. Desactívelo o reasigne las dependencias antes de continuar.', false);
+        $show->assertDontSee('<a class="btn btn-primary" href="'.route('operational.edit', ['time-entries', $entry->id]).'">Editar</a>', false);
+
+        $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
+        $index->assertOk();
+        $index->assertDontSee('<a class="btn btn-sm btn-outline-primary" href="'.route('operational.edit', ['time-entries', $entry->id]).'">Editar</a>', false);
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $entry->id]));
+        $edit->assertRedirect(route('operational.show', ['time-entries', $entry->id]));
+        $edit->assertSessionHasErrors('dependencies');
+
+        $update = $this->actingAs($admin)
+            ->from(route('operational.show', ['time-entries', $entry->id]))
+            ->put(route('operational.update', ['time-entries', $entry->id]), [
+                'code' => 'HOR-TIME-DAY-LOCK',
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'client_id' => '',
+                'entry_date' => '12/08/2026',
+                'activity_id' => $activity->id,
+                'hours_worked' => 6,
+                'hours_approved' => 0,
+                'approval_status_id' => $rejectedStatus->id,
+                'payment_status' => 'pending',
+                'cost_center_id' => '',
+            ]);
+
+        $update->assertRedirect(route('operational.show', ['time-entries', $entry->id]));
+        $update->assertSessionHasErrors('dependencies');
+
+        $delete = $this->actingAs($admin)
+            ->from(route('operational.show', ['time-entries', $entry->id]))
+            ->delete(route('operational.destroy', ['time-entries', $entry->id]));
+
+        $delete->assertRedirect(route('operational.show', ['time-entries', $entry->id]));
+        $delete->assertSessionHasErrors('dependencies');
+
+        $this->assertDatabaseHas('time_entries', [
+            'id' => $entry->id,
+            'hours_worked' => 8,
+            'hours_approved' => 8,
+            'payment_status' => 'pending',
+        ]);
+    }
+
     public function test_time_entries_index_and_show_preserve_effective_rate_currency_and_unit(): void
     {
         [$company, $admin] = $this->companyWithAdmin();

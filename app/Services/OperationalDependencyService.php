@@ -43,17 +43,22 @@ class OperationalDependencyService
 
     public function deletionMessage(Model $record): ?string
     {
+        return $this->mutationMessage($record, 'eliminar');
+    }
+
+    public function mutationMessage(Model $record, string $action = 'modificar'): ?string
+    {
         $blockers = $this->blockers($record);
 
         if ($blockers->isEmpty()) {
             return null;
         }
 
-        $references = $blockers
-            ->map(fn (array $dependency): string => $dependency['count'].' '.$dependency['label'])
-            ->implode(', ');
-
-        return 'No se puede eliminar el registro porque está siendo utilizado por: '.$references.'. Desactívelo o reasigne las dependencias antes de eliminarlo.';
+        return sprintf(
+            'No se puede %s el registro porque está siendo utilizado por: %s. Desactívelo o reasigne las dependencias antes de continuar.',
+            $action,
+            $this->references($blockers),
+        );
     }
 
     /**
@@ -146,5 +151,15 @@ class OperationalDependencyService
     private function queryDependency(string $label, callable $query): array
     {
         return compact('label', 'query');
+    }
+
+    /**
+     * @param Collection<int, array{label: string, count: int}> $blockers
+     */
+    private function references(Collection $blockers): string
+    {
+        return $blockers
+            ->map(fn (array $dependency): string => $dependency['count'].' '.$dependency['label'])
+            ->implode(', ');
     }
 }

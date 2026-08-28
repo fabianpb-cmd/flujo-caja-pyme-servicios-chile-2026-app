@@ -260,6 +260,14 @@ class OperationalCrudController extends Controller
             ]);
         }
 
+        if ($resource === 'time-entries' && $item instanceof TimeEntry) {
+            if ($message = $this->dependencies->mutationMessage($item, 'modificar')) {
+                return redirect()
+                    ->route('operational.show', [$resource, $item->id])
+                    ->withErrors(['dependencies' => $message]);
+            }
+        }
+
         return view('operational.form', [
             'resource' => $resource,
             'config' => $config,
@@ -369,6 +377,14 @@ class OperationalCrudController extends Controller
                     $result['days_count'],
                     UiFormatter::formatHours($result['total_hours'])
                 ));
+        }
+
+        if ($resource === 'time-entries' && $item instanceof TimeEntry) {
+            if ($message = $this->dependencies->mutationMessage($item, 'modificar')) {
+                return redirect()
+                    ->route('operational.show', [$resource, $item->id])
+                    ->withErrors(['dependencies' => $message]);
+            }
         }
 
         try {
@@ -752,6 +768,9 @@ class OperationalCrudController extends Controller
         $presented->setAttribute('period_batch_hourly_value_display', $isBatch ? $this->timeEntryBatchRateDisplay($ordered) : null);
         $presented->setAttribute('period_batch_approval_status_display', $isBatch ? $this->timeEntryBatchApprovalDisplay($ordered) : null);
         $presented->setAttribute('period_batch_payment_status_display', $isBatch ? $this->timeEntryBatchPaymentDisplay($ordered) : null);
+        $presented->setAttribute('time_entry_update_blocked_message', $isBatch
+            ? $this->batchDependencyMessage($ordered, 'modificar')
+            : $this->dependencies->mutationMessage($entry, 'modificar'));
         $presented->setAttribute('_presentation_sort_key', (int) $last->id);
 
         if ($isBatch) {
