@@ -117,15 +117,26 @@ class PayrollBatchService
                 continue;
             }
 
-            $record = DB::transaction(function () use ($existing, $payload): PayrollRecord {
-                if ($existing) {
-                    MassAssignment::fillAndSave($existing, $payload);
+            try {
+                $record = DB::transaction(function () use ($existing, $payload, $person): PayrollRecord {
+                    if ($existing) {
+                        MassAssignment::fillAndSave($existing, $payload);
+                        $this->payroll->syncHourlyTimeEntryTrace($existing->refresh(), $person);
 
-                    return $existing->refresh();
-                }
+                        return $existing->refresh();
+                    }
 
-                return MassAssignment::create(PayrollRecord::class, $payload)->refresh();
-            });
+                    $record = MassAssignment::create(PayrollRecord::class, $payload)->refresh();
+                    $this->payroll->syncHourlyTimeEntryTrace($record, $person);
+
+                    return $record->refresh();
+                });
+            } catch (DomainException $exception) {
+                $summary['errors']++;
+                $summary['messages'][] = "{$person->full_name}: ".$exception->getMessage();
+
+                continue;
+            }
 
             $existing ? $summary['updated']++ : $summary['generated']++;
 

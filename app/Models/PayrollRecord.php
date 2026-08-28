@@ -7,6 +7,7 @@ use App\Models\Concerns\GuardsSensitiveAttributes;
 use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class PayrollRecord extends Model
 {
@@ -121,5 +122,11 @@ class PayrollRecord extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function timeEntries(): BelongsToMany
+    {
+        return $this->belongsToMany(TimeEntry::class, 'payroll_record_time_entries')
+            ->withTimestamps();
     }
 }

@@ -170,9 +170,19 @@ class OperationalCrudController extends Controller
         if ($resource === 'cash-movements') {
             $this->cashMovements->create($data, $request->user());
         } else {
-            $model = DB::transaction(function () use ($config, $data) {
-                return MassAssignment::create($config['model'], $data);
-            });
+            try {
+                $model = DB::transaction(function () use ($config, $data) {
+                    $model = MassAssignment::create($config['model'], $data);
+
+                    if ($model instanceof PayrollRecord) {
+                        $this->payroll->syncHourlyTimeEntryTrace($model->refresh());
+                    }
+
+                    return $model;
+                });
+            } catch (DomainException $exception) {
+                return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+            }
 
             $this->refreshDerivedState($model);
             $this->audit->record('operational.created', $model->refresh(), $request->user());
@@ -396,7 +406,17 @@ class OperationalCrudController extends Controller
             unset($data['code']);
         }
         $before = $item->toArray();
-        DB::transaction(fn () => MassAssignment::fillAndSave($item, $data));
+        try {
+            DB::transaction(function () use ($item, $data): void {
+                MassAssignment::fillAndSave($item, $data);
+
+                if ($item instanceof PayrollRecord) {
+                    $this->payroll->syncHourlyTimeEntryTrace($item->refresh());
+                }
+            });
+        } catch (DomainException $exception) {
+            return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+        }
         $this->refreshDerivedState($item->refresh());
         $this->audit->record('operational.updated', $item->refresh(), $request->user(), $before);
 

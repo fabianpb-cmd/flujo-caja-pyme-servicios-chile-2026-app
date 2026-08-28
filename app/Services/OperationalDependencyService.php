@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\ExpenseDocument;
 use App\Models\PayrollAdjustment;
 use App\Models\PayrollRecord;
+use App\Models\PayrollRecordTimeEntry;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
@@ -100,6 +101,7 @@ class OperationalDependencyService
             ],
             TimeEntry::class => [
                 $this->dependency(SalesDocumentTimeEntry::class, 'time_entry_id', 'líneas de prefacturación'),
+                $this->dependency(PayrollRecordTimeEntry::class, 'time_entry_id', 'remuneraciones por hora'),
             ],
             SalesDocument::class => [
                 $this->dependency(SalesDocumentTimeEntry::class, 'sales_document_id', 'líneas de prefacturación'),

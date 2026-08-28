@@ -88,9 +88,12 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | Carga por período transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
 | Carga por período límite operativo | Una carga por período admite como máximo 31 días calendario por operación. |
 | Mutación de Horas con dependencias | Un `TimeEntry` o una carga por período consumida por dependencias operativas protegidas no puede modificarse ni eliminarse desde Horas. Si cualquier fila de un `period_batch_id` tiene dependencias, la operación completa del batch queda bloqueada. |
+| Trazabilidad TimeEntry → Payroll por hora | La remuneración por hora conserva una relación persistente entre `PayrollRecord` y los `TimeEntry` exactos consumidos. Un `TimeEntry` solo puede participar en una remuneración por hora, queda inmutable desde Horas mientras exista ese vínculo y, en un `period_batch_id`, una dependencia en cualquier fila bloquea el batch completo. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
+| Remuneraciones mensuales / proyecto-hito | Las remuneraciones mensuales y por proyecto/hito no generan vínculo `TimeEntry` → `PayrollRecord` porque las horas no determinan su base económica. |
 | Remuneraciones incompletas | Si falta una fuente obligatoria para la modalidad vigente, la remuneración queda en revisión/incompleta; un valor persistido en cero no equivale a un cálculo válido. |
 | Horas automáticas en Remuneraciones | Un snapshot automático de horas aprobadas proveniente de Horas no equivale por sí mismo a un override manual. |
+| `time_entries.payment_status` | No representa consumo por Payroll ni reemplaza la trazabilidad persistente de remuneración por hora. |
 | Costo HH real | Se obtiene desde costo empresa real del período / horas productivas aprobadas. No equivale al valor HH base de Persona ni al valor HH de costeo de la Asignación. |
 | Presupuesto | Es planificación manual y no reemplaza compromiso ni costo real. |
 | Presupuesto por período | Un mismo proyecto/escenario no debe tener dos presupuestos para el mismo período. |

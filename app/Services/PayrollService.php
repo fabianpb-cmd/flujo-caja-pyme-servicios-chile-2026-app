@@ -11,7 +11,10 @@ use App\Models\ProjectAssignment;
 use App\Models\TimeEntry;
 use App\Support\UiFormatter;
 use Carbon\CarbonInterface;
+use DomainException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class PayrollService
 {
@@ -39,6 +42,16 @@ class PayrollService
             'project_value' => $context['project_value_auto'],
             'health_additional' => $context['health_additional_auto'],
         ];
+    }
+
+    public function hourlyPayrollTimeEntries(Person $person, CarbonInterface|string $periodDate, ?int $projectId = null): Collection
+    {
+        return $this->payrollApprovedTimeEntries(
+            $person->company_id,
+            $person->id,
+            Carbon::parse($periodDate)->startOfMonth(),
+            $projectId
+        );
     }
 
     public function modalityFlags(Person $person): array
@@ -169,7 +182,7 @@ class PayrollService
         ];
     }
 
-    private function payrollApprovedTimeEntries(int $companyId, int $personId, Carbon $period, ?int $projectId = null): \Illuminate\Support\Collection
+    private function payrollApprovedTimeEntries(int $companyId, int $personId, Carbon $period, ?int $projectId = null): Collection
     {
         $query = TimeEntry::query()
             ->forCompany($companyId)
@@ -183,6 +196,49 @@ class PayrollService
         }
 
         return $query->get()->filter(fn (TimeEntry $entry): bool => $this->isApproved($entry))->values();
+    }
+
+    public function syncHourlyTimeEntryTrace(PayrollRecord $record, ?Person $person = null): void
+    {
+        $person ??= $record->relationLoaded('person')
+            ? $record->person
+            : Person::query()->forCompany($record->company_id)->findOrFail($record->person_id);
+
+        if (! $record->period_date) {
+            $record->timeEntries()->sync([]);
+
+            return;
+        }
+
+        if (! $this->modalityFlags($person)['is_hourly']) {
+            $record->timeEntries()->sync([]);
+
+            return;
+        }
+
+        $timeEntryIds = $this->hourlyPayrollTimeEntries($person, $record->period_date, $record->project_id)
+            ->modelKeys();
+
+        $this->guardHourlyTimeEntryTraceConflicts($record, $timeEntryIds);
+        $record->timeEntries()->sync($timeEntryIds);
+    }
+
+    private function guardHourlyTimeEntryTraceConflicts(PayrollRecord $record, array $timeEntryIds): void
+    {
+        if ($timeEntryIds === []) {
+            return;
+        }
+
+        $conflicts = DB::table('payroll_record_time_entries')
+            ->join('payroll_records', 'payroll_records.id', '=', 'payroll_record_time_entries.payroll_record_id')
+            ->whereIn('payroll_record_time_entries.time_entry_id', $timeEntryIds)
+            ->where('payroll_record_time_entries.payroll_record_id', '!=', $record->id)
+            ->where('payroll_records.company_id', $record->company_id)
+            ->exists();
+
+        if ($conflicts) {
+            throw new DomainException('Una o más horas aprobadas ya están asociadas a otra remuneración.');
+        }
     }
 
     private function isApproved(TimeEntry $entry): bool

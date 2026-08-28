@@ -72,6 +72,12 @@ class TimeEntry extends Model
             ->withTimestamps();
     }
 
+    public function payrollRecords(): BelongsToMany
+    {
+        return $this->belongsToMany(PayrollRecord::class, 'payroll_record_time_entries')
+            ->withTimestamps();
+    }
+
     public function getHourlyRateDisplayCurrencyAttribute(): mixed
     {
         $resolution = app(HourlyRateService::class)->resolveCostingForEntry($this);
