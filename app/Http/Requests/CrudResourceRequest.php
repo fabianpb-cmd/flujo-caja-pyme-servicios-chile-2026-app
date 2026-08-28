@@ -82,9 +82,9 @@ class CrudResourceRequest extends FormRequest
                 $rules['hours_approved'] = ['nullable', 'numeric', 'min:0', 'max:24'];
                 $rules['period_start_date'] = ['required', 'date'];
                 $rules['period_end_date'] = ['required', 'date', 'after_or_equal:period_start_date'];
-                $rules['period_distribution_mode'] = ['required', Rule::in(['equal', 'total', 'manual'])];
-                $rules['period_hours_per_day'] = ['nullable', 'numeric', 'gt:0', 'max:24', 'required_if:period_distribution_mode,equal'];
-                $rules['period_total_hours'] = ['nullable', 'numeric', 'gt:0', 'required_if:period_distribution_mode,total'];
+                $rules['period_distribution_mode'] = ['required', Rule::in(['total'])];
+                $rules['period_hours_per_day'] = ['nullable', 'numeric', 'gt:0', 'max:24'];
+                $rules['period_total_hours'] = ['required', 'numeric', 'gt:0'];
                 $rules['period_rows_payload'] = ['nullable', 'string'];
                 $rules['period_rows'] = ['nullable', 'array'];
             }
@@ -206,8 +206,15 @@ class CrudResourceRequest extends FormRequest
         if ($resource === 'time-entries') {
             $this->merge([
                 'entry_mode' => strtolower((string) $this->input('entry_mode', 'daily')),
-                'period_distribution_mode' => strtolower((string) $this->input('period_distribution_mode', 'equal')),
             ]);
+
+            if (strtolower((string) $this->input('entry_mode', 'daily')) === 'period') {
+                $this->merge([
+                    'period_distribution_mode' => 'total',
+                    'period_hours_per_day' => null,
+                    'period_rows_payload' => '',
+                ]);
+            }
 
             foreach (['period_start_date', 'period_end_date'] as $field) {
                 if (filled($this->input($field))) {

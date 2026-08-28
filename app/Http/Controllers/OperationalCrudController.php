@@ -242,7 +242,7 @@ class OperationalCrudController extends Controller
                 'salesCalculationBreakdown' => null,
                 'assignmentCommitmentPreview' => null,
                 'timeEntryBatchEditState' => $timeEntryBatchEditState,
-                'timeEntryPeriodInitialPreview' => $this->timeEntryPeriods->preview($request->user()->company_id, [
+                'timeEntryPeriodInitialPreview' => $this->timeEntryPeriods->preview($request->user()->company_id, $this->normalizeTimeEntryPeriodPayload([
                     'entry_mode' => 'period',
                     'period_batch_id' => $timeEntryBatchEditState['period_batch_id'],
                     'person_id' => $item->person_id,
@@ -256,7 +256,7 @@ class OperationalCrudController extends Controller
                     'period_distribution_mode' => $timeEntryBatchEditState['period_distribution_mode'],
                     'period_total_hours' => $timeEntryBatchEditState['period_total_hours'],
                     'period_rows_payload' => $timeEntryBatchEditState['period_rows_payload'],
-                ]),
+                ])),
             ]);
         }
 
@@ -324,7 +324,10 @@ class OperationalCrudController extends Controller
         }
 
         return response()->json(
-            $this->timeEntryPeriods->preview($request->user()->company_id, $request->all())
+            $this->timeEntryPeriods->preview(
+                $request->user()->company_id,
+                $this->normalizeTimeEntryPeriodPayload($request->all())
+            )
         );
     }
 
@@ -553,6 +556,19 @@ class OperationalCrudController extends Controller
         }
 
         return $data;
+    }
+
+    private function normalizeTimeEntryPeriodPayload(array $payload): array
+    {
+        if (strtolower((string) ($payload['entry_mode'] ?? 'daily')) !== 'period') {
+            return $payload;
+        }
+
+        $payload['period_distribution_mode'] = 'total';
+        $payload['period_hours_per_day'] = null;
+        $payload['period_rows_payload'] = '';
+
+        return $payload;
     }
 
     private function payrollRecordDefaults(int $companyId, int $personId, Carbon $period, mixed $projectId): array

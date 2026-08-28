@@ -1784,26 +1784,25 @@ class OperationalUiTest extends TestCase
         $create->assertSee('data-time-entry-period-preview-url', false);
         $create->assertSee('period_start_date', false);
         $create->assertSee('period_end_date', false);
-        $create->assertSee('Horas iguales por día');
-        $create->assertSee('Total del período');
-        $create->assertSee('Manual');
+        $create->assertSee('Total período');
         $create->assertSee('AUTORIZACIÓN');
         $create->assertSee('RESUMEN');
         $create->assertSee('Las condiciones seleccionadas se aplicarán a todos los días incluidos en esta carga.');
         $create->assertSee('El pago común del lote se propagará a cada registro diario creado.');
+        $create->assertSee('Las horas se distribuirán automáticamente entre los días aplicables del período. El sistema mantendrá registros diarios para validación y trazabilidad.');
         $create->assertSee('data-time-entry-period-summary-panel', false);
         $create->assertSee('<div class="fw-semibold" data-time-entry-period-summary-days>—</div>', false);
         $create->assertSee('<div class="fw-semibold" data-time-entry-period-total-hours-display>—</div>', false);
-        $create->assertSee('data-time-entry-period-table-wrapper', false);
-        $create->assertSee('data-time-entry-period-table', false);
-        $create->assertSee('data-time-entry-period-rows-payload', false);
-        $create->assertSee('La carga por período genera múltiples registros diarios', false);
-        $create->assertSee('<th style="width: 56px;">Incluir</th>', false);
-        $create->assertSee('<th>Fecha</th>', false);
-        $create->assertSee('<th>Asignación</th>', false);
-        $create->assertSee('<th style="width: 140px;">Horas</th>', false);
-        $create->assertDontSee('<th style="width: 140px;">Aprobadas</th>', false);
-        $create->assertDontSee('<th style="width: 200px;">Estado</th>', false);
+        $create->assertDontSee('Distribución');
+        $create->assertDontSee('Horas iguales por día');
+        $create->assertDontSee('Horas por día');
+        $create->assertDontSee('Manual');
+        $this->assertDoesNotMatchRegularExpression('/<div[^>]*data-time-entry-period-table-wrapper/s', $create->getContent());
+        $this->assertDoesNotMatchRegularExpression('/<table[^>]*data-time-entry-period-table/s', $create->getContent());
+        $create->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
+        $create->assertDontSee('<th>Fecha</th>', false);
+        $create->assertDontSee('<th>Asignación</th>', false);
+        $create->assertDontSee('<th style="width: 140px;">Horas</th>', false);
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
     }
 
@@ -1846,7 +1845,7 @@ class OperationalUiTest extends TestCase
         $create->assertSee('PERÍODO');
         $create->assertSee('AUTORIZACIÓN');
         $create->assertSee('RESUMEN');
-        $create->assertSee('Registrar período');
+        $create->assertSee('Registrar horas');
         $create->assertSee('data-time-entry-period-panel', false);
         $create->assertSee('data-time-entry-period-load-container', false);
         $create->assertSee('data-time-entry-daily-load-container', false);
@@ -1869,6 +1868,83 @@ class OperationalUiTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
     }
 
+    public function test_time_entries_period_preview_marks_variable_rates_without_faking_a_single_summary_value(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-TIME-VAR-RATE',
+            'legal_name' => 'Cliente Variable',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-TIME-VAR-RATE',
+            'name' => 'Proyecto Variable',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-VAR-RATE',
+            'first_names' => 'Valeria',
+            'paternal_surname' => 'Variable',
+            'name' => 'Valeria Variable',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-VAR-RATE-A',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-03',
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-VAR-RATE-B',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 1.0,
+            'start_date' => '2026-08-04',
+            'end_date' => '2026-08-05',
+        ]);
+
+        $response = $this->actingAs($admin)->postJson(route('operational.time-entry-period-preview', 'time-entries'), [
+            'entry_mode' => 'period',
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_start_date' => '01/08/2026',
+            'period_end_date' => '05/08/2026',
+            'period_distribution_mode' => 'manual',
+            'period_total_hours' => 10,
+            'payment_status' => 'pending',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('can_save', true);
+        $response->assertJsonPath('summary.client_label', 'Cliente Variable');
+        $response->assertJsonPath('summary.shared_rate_display', null);
+        $response->assertJsonPath('summary.multiple_rates', true);
+    }
+
     public function test_time_entries_period_preview_keeps_common_validation_compact_before_daily_resolution(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
@@ -1880,8 +1956,8 @@ class OperationalUiTest extends TestCase
             'project_id' => null,
             'period_start_date' => '01/08/2020',
             'period_end_date' => '20/08/2026',
-            'period_distribution_mode' => 'equal',
-            'period_hours_per_day' => 10,
+            'period_distribution_mode' => 'manual',
+            'period_total_hours' => 10,
             'payment_status' => 'pending',
         ]);
 
@@ -1931,7 +2007,7 @@ class OperationalUiTest extends TestCase
             'period_start_date' => '01/08/2020',
             'period_end_date' => '20/08/2026',
             'period_distribution_mode' => 'equal',
-            'period_hours_per_day' => 10,
+            'period_total_hours' => 10,
             'payment_status' => 'pending',
         ]);
 
@@ -1943,7 +2019,7 @@ class OperationalUiTest extends TestCase
         $response->assertJsonMissingPath('field_errors.period_rows.0');
     }
 
-    public function test_time_entries_period_load_creates_daily_entries_with_equal_total_and_manual_distribution(): void
+    public function test_time_entries_period_load_creates_daily_entries_from_total_hours_only(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
 
@@ -2012,7 +2088,7 @@ class OperationalUiTest extends TestCase
             'end_date' => '2026-08-28',
         ]);
 
-        $equal = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+        $total = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
             'entry_mode' => 'period',
             'person_id' => $personSplit->id,
             'project_id' => $project->id,
@@ -2021,13 +2097,12 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '24/08/2026',
             'period_end_date' => '28/08/2026',
-            'period_distribution_mode' => 'equal',
-            'period_hours_per_day' => 8,
-            'period_rows_payload' => '',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 40,
         ]);
 
-        $equal->assertRedirect(route('operational.index', 'time-entries'));
-        $equal->assertSessionHas('status', 'Se registraron 5 días y 40 h.');
+        $total->assertRedirect(route('operational.index', 'time-entries'));
+        $total->assertSessionHas('status', 'Se registraron 5 días y 40 h.');
 
         $splitEntries = TimeEntry::query()
             ->where('company_id', $company->id)
@@ -2041,13 +2116,14 @@ class OperationalUiTest extends TestCase
         $this->assertSame(40.0, round((float) $splitEntries->sum('hours_worked'), 2));
         $this->assertSame(40.0, round((float) $splitEntries->sum('hours_approved'), 2));
         $this->assertSame([$assignmentA->id, $assignmentA->id, $assignmentA->id, $assignmentB->id, $assignmentB->id], $splitEntries->pluck('assignment_id')->all());
+        $this->assertSame([8.0, 8.0, 8.0, 8.0, 8.0], $splitEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
 
-        $personTotal = Person::query()->create([
+        $personManipulated = Person::query()->create([
             'company_id' => $company->id,
-            'code' => 'PER-TIME-TOTAL',
+            'code' => 'PER-TIME-MANIP',
             'first_names' => 'Tomás',
-            'paternal_surname' => 'Total',
-            'name' => 'Tomás Total',
+            'paternal_surname' => 'Manipulado',
+            'name' => 'Tomás Manipulado',
             'modality' => 'Dependiente mensual',
             'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
@@ -2057,10 +2133,10 @@ class OperationalUiTest extends TestCase
 
         ProjectAssignment::query()->create([
             'company_id' => $company->id,
-            'person_id' => $personTotal->id,
+            'person_id' => $personManipulated->id,
             'client_id' => $client->id,
             'project_id' => $project->id,
-            'code' => 'ASI-TIME-TOTAL',
+            'code' => 'ASI-TIME-MANIP',
             'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
             'hourly_rate_unit_type' => 'UF',
             'hourly_value' => 0.65,
@@ -2068,95 +2144,41 @@ class OperationalUiTest extends TestCase
             'end_date' => '2026-09-04',
         ]);
 
-        $total = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+        $manipulated = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
             'entry_mode' => 'period',
-            'person_id' => $personTotal->id,
+            'person_id' => $personManipulated->id,
             'project_id' => $project->id,
             'activity_id' => $activity->id,
             'approval_status_id' => $approvedStatus->id,
             'payment_status' => 'pending',
             'period_start_date' => '31/08/2026',
             'period_end_date' => '04/09/2026',
-            'period_distribution_mode' => 'total',
-            'period_total_hours' => 40,
-            'period_rows_payload' => '',
-        ]);
-
-        $total->assertRedirect(route('operational.index', 'time-entries'));
-
-        $totalEntries = TimeEntry::query()
-            ->where('company_id', $company->id)
-            ->where('person_id', $personTotal->id)
-            ->orderBy('entry_date')
-            ->get();
-
-        $this->assertCount(5, $totalEntries);
-        $this->assertNotNull($totalEntries->first()->period_batch_id);
-        $this->assertCount(1, $totalEntries->pluck('period_batch_id')->unique());
-        $this->assertNotSame($splitEntries->first()->period_batch_id, $totalEntries->first()->period_batch_id);
-        $this->assertSame(40.0, round((float) $totalEntries->sum('hours_worked'), 2));
-        $this->assertSame([8.0, 8.0, 8.0, 8.0, 8.0], $totalEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
-
-        $personManual = Person::query()->create([
-            'company_id' => $company->id,
-            'code' => 'PER-TIME-MANUAL',
-            'first_names' => 'Mónica',
-            'paternal_surname' => 'Manual',
-            'name' => 'Mónica Manual',
-            'modality' => 'Dependiente mensual',
-            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
-            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
-            'hourly_rate_unit_type' => 'UF',
-            'hourly_value' => 0.6,
-        ]);
-
-        ProjectAssignment::query()->create([
-            'company_id' => $company->id,
-            'person_id' => $personManual->id,
-            'client_id' => $client->id,
-            'project_id' => $project->id,
-            'code' => 'ASI-TIME-MANUAL',
-            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
-            'hourly_rate_unit_type' => 'UF',
-            'hourly_value' => 0.6,
-            'start_date' => '2026-09-07',
-            'end_date' => '2026-09-09',
-        ]);
-
-        $manualRows = json_encode([
-            ['entry_date' => '2026-09-07', 'included' => true, 'hours_worked' => 3.33],
-            ['entry_date' => '2026-09-08', 'included' => true, 'hours_worked' => 3.33],
-            ['entry_date' => '2026-09-09', 'included' => true, 'hours_worked' => 3.34],
-        ], JSON_THROW_ON_ERROR);
-
-        $manual = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'entry_mode' => 'period',
-            'person_id' => $personManual->id,
-            'project_id' => $project->id,
-            'activity_id' => $activity->id,
-            'approval_status_id' => $approvedStatus->id,
-            'payment_status' => 'pending',
-            'period_start_date' => '07/09/2026',
-            'period_end_date' => '09/09/2026',
             'period_distribution_mode' => 'manual',
-            'period_rows_payload' => $manualRows,
+            'period_total_hours' => 40,
+            'period_hours_per_day' => 2,
+            'period_rows_payload' => json_encode([
+                ['entry_date' => '2026-08-31', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-09-01', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-09-02', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-09-03', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-09-04', 'included' => true, 'hours_worked' => 36],
+            ], JSON_THROW_ON_ERROR),
         ]);
 
-        $manual->assertRedirect(route('operational.index', 'time-entries'));
+        $manipulated->assertRedirect(route('operational.index', 'time-entries'));
 
-        $manualEntries = TimeEntry::query()
+        $manipulatedEntries = TimeEntry::query()
             ->where('company_id', $company->id)
-            ->where('person_id', $personManual->id)
+            ->where('person_id', $personManipulated->id)
             ->orderBy('entry_date')
             ->get();
 
-        $this->assertCount(3, $manualEntries);
-        $this->assertNotNull($manualEntries->first()->period_batch_id);
-        $this->assertCount(1, $manualEntries->pluck('period_batch_id')->unique());
-        $this->assertNotSame($splitEntries->first()->period_batch_id, $manualEntries->first()->period_batch_id);
-        $this->assertNotSame($totalEntries->first()->period_batch_id, $manualEntries->first()->period_batch_id);
-        $this->assertSame([3.33, 3.33, 3.34], $manualEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
-        $this->assertSame(10.0, round((float) $manualEntries->sum('hours_worked'), 2));
+        $this->assertCount(5, $manipulatedEntries);
+        $this->assertNotNull($manipulatedEntries->first()->period_batch_id);
+        $this->assertCount(1, $manipulatedEntries->pluck('period_batch_id')->unique());
+        $this->assertNotSame($splitEntries->first()->period_batch_id, $manipulatedEntries->first()->period_batch_id);
+        $this->assertSame(40.0, round((float) $manipulatedEntries->sum('hours_worked'), 2));
+        $this->assertSame([8.0, 8.0, 8.0, 8.0, 8.0], $manipulatedEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
     }
 
     public function test_time_entries_index_groups_period_loads_into_blocks_and_hides_individual_edit_for_batch_rows(): void
@@ -2269,9 +2291,8 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '12/08/2026',
             'period_end_date' => '13/08/2026',
-            'period_distribution_mode' => 'equal',
-            'period_hours_per_day' => 2,
-            'period_rows_payload' => '',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 4,
         ]);
 
         $periodTwo->assertRedirect(route('operational.index', 'time-entries'));
@@ -2973,9 +2994,8 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '03/08/2026',
             'period_end_date' => '04/08/2026',
-            'period_distribution_mode' => 'equal',
-            'period_hours_per_day' => 2,
-            'period_rows_payload' => '',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 4,
         ]);
 
         $create->assertRedirect(route('operational.index', 'time-entries'));
@@ -3125,9 +3145,8 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '04/08/2026',
             'period_end_date' => '05/08/2026',
-            'period_distribution_mode' => 'equal',
-            'period_hours_per_day' => 2,
-            'period_rows_payload' => '',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 4,
         ]);
 
         $create->assertRedirect(route('operational.index', 'time-entries'));
@@ -3261,9 +3280,8 @@ class OperationalUiTest extends TestCase
                 'payment_status' => 'pending',
                 'period_start_date' => '24/08/2026',
                 'period_end_date' => '25/08/2026',
-                'period_distribution_mode' => 'equal',
-                'period_hours_per_day' => 8,
-                'period_rows_payload' => '',
+                'period_distribution_mode' => 'total',
+                'period_total_hours' => 16,
             ]);
 
         $dailyOverflow->assertRedirect(route('operational.create', 'time-entries'));
@@ -3281,9 +3299,8 @@ class OperationalUiTest extends TestCase
                 'payment_status' => 'pending',
                 'period_start_date' => '01/09/2026',
                 'period_end_date' => '02/09/2026',
-                'period_distribution_mode' => 'equal',
-                'period_hours_per_day' => 8,
-                'period_rows_payload' => '',
+                'period_distribution_mode' => 'total',
+                'period_total_hours' => 16,
             ]);
 
         $outOfRange->assertSessionHasErrors('period_rows');
@@ -3311,9 +3328,8 @@ class OperationalUiTest extends TestCase
                 'payment_status' => 'pending',
                 'period_start_date' => '25/08/2026',
                 'period_end_date' => '26/08/2026',
-                'period_distribution_mode' => 'equal',
-                'period_hours_per_day' => 2,
-                'period_rows_payload' => '',
+                'period_distribution_mode' => 'total',
+                'period_total_hours' => 4,
             ]);
 
         $ambiguous->assertSessionHasErrors('period_rows');
@@ -3330,9 +3346,8 @@ class OperationalUiTest extends TestCase
                 'payment_status' => 'paid',
                 'period_start_date' => '27/08/2026',
                 'period_end_date' => '28/08/2026',
-                'period_distribution_mode' => 'equal',
-                'period_hours_per_day' => 2,
-                'period_rows_payload' => '',
+                'period_distribution_mode' => 'total',
+                'period_total_hours' => 4,
             ]);
 
         $invalidPayment->assertSessionHasErrors('payment_status');
