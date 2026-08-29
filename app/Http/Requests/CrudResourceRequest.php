@@ -34,7 +34,6 @@ class CrudResourceRequest extends FormRequest
 
         $rules = $config['rules'];
         $resource = (string) $this->route('resource');
-        $timeEntryEntryMode = strtolower((string) $this->input('entry_mode', 'daily'));
         $recordId = $this->route('record') ?? null;
         $autoManagedCode = $this->autoManagedCode($config['model']);
 
@@ -74,20 +73,12 @@ class CrudResourceRequest extends FormRequest
         }
 
         if ($resource === 'time-entries') {
-            $rules['entry_mode'] = ['required', Rule::in(['daily', 'period'])];
-
-            if ($timeEntryEntryMode === 'period') {
-                $rules['entry_date'] = ['nullable', 'date'];
-                $rules['hours_worked'] = ['nullable', 'numeric', 'gt:0', 'max:24'];
-                $rules['hours_approved'] = ['nullable', 'numeric', 'min:0', 'max:24'];
-                $rules['period_start_date'] = ['required', 'date'];
-                $rules['period_end_date'] = ['required', 'date', 'after_or_equal:period_start_date'];
-                $rules['period_distribution_mode'] = ['required', Rule::in(['total'])];
-                $rules['period_hours_per_day'] = ['nullable', 'numeric', 'gt:0', 'max:24'];
-                $rules['period_total_hours'] = ['required', 'numeric', 'gt:0'];
-                $rules['period_rows_payload'] = ['nullable', 'string'];
-                $rules['period_rows'] = ['nullable', 'array'];
-            }
+            $rules['entry_date'] = ['nullable', 'date'];
+            $rules['hours_worked'] = ['nullable', 'numeric', 'gt:0', 'max:24'];
+            $rules['hours_approved'] = ['nullable', 'numeric', 'min:0', 'max:24'];
+            $rules['period_start_date'] = ['required', 'date'];
+            $rules['period_end_date'] = ['required', 'date', 'after_or_equal:period_start_date'];
+            $rules['period_total_hours'] = ['required', 'numeric', 'gt:0'];
         }
 
         foreach ($config['fields'] as $field => $definition) {
@@ -205,32 +196,14 @@ class CrudResourceRequest extends FormRequest
 
         if ($resource === 'time-entries') {
             $this->merge([
-                'entry_mode' => strtolower((string) $this->input('entry_mode', 'daily')),
+                'period_rows' => [],
             ]);
-
-            if (strtolower((string) $this->input('entry_mode', 'daily')) === 'period') {
-                $this->merge([
-                    'period_distribution_mode' => 'total',
-                    'period_hours_per_day' => null,
-                    'period_rows_payload' => '',
-                ]);
-            }
 
             foreach (['period_start_date', 'period_end_date'] as $field) {
                 if (filled($this->input($field))) {
                     $this->merge([$field => $this->normalizeDateInput($this->input($field))]);
                 }
             }
-
-            $decodedRows = [];
-            if (filled($this->input('period_rows_payload'))) {
-                $decoded = json_decode((string) $this->input('period_rows_payload'), true);
-                if (is_array($decoded)) {
-                    $decodedRows = $decoded;
-                }
-            }
-
-            $this->merge(['period_rows' => $decodedRows]);
         }
     }
 
@@ -275,11 +248,7 @@ class CrudResourceRequest extends FormRequest
             }
 
             if ($resource === 'time-entries') {
-                if (strtolower((string) $this->input('entry_mode', 'daily')) === 'period') {
-                    $this->validateTimeEntryPeriodIntegrity($validator);
-                } elseif (filled($this->input('project_id')) && filled($this->input('person_id')) && filled($this->input('entry_date'))) {
-                    $this->validateTimeEntryIntegrity($validator);
-                }
+                $this->validateTimeEntryPeriodIntegrity($validator);
             }
 
             if ($resource === 'budgets') {

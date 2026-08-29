@@ -205,10 +205,12 @@ class PayrollTimeEntryTraceTest extends TestCase
         $this->assertSame(1, PayrollRecordTimeEntry::query()->where('time_entry_id', $entry->id)->count());
     }
 
-    public function test_consumed_daily_time_entry_is_blocked_for_edit_update_and_delete(): void
+    public function test_consumed_single_entry_batch_is_blocked_for_edit_update_and_delete(): void
     {
         [$person, $project, $assignment] = $this->hourlyFixtures();
-        $entry = $this->timeEntry($person, $project, $assignment, '2026-08-04', 4);
+        $entry = $this->timeEntry($person, $project, $assignment, '2026-08-04', 4, [
+            'period_batch_id' => (string) Str::uuid(),
+        ]);
         $record = $this->createHourlyPayrollRecord($person, $project, '2026-08-01');
         app(PayrollService::class)->syncHourlyTimeEntryTrace($record, $person);
 
@@ -225,12 +227,12 @@ class PayrollTimeEntryTraceTest extends TestCase
             ->from(route('operational.edit', ['time-entries', $entry->id]))
             ->put(route('operational.update', ['time-entries', $entry->id]), [
                 'person_id' => $person->id,
-                'client_id' => $project->client_id,
                 'project_id' => $project->id,
                 'activity_id' => $entry->activity_id,
-                'entry_date' => '2026-08-04',
-                'hours_worked' => 5,
-                'hours_approved' => 4,
+                'period_batch_id' => $entry->period_batch_id,
+                'period_start_date' => '2026-08-04',
+                'period_end_date' => '2026-08-04',
+                'period_total_hours' => 5,
                 'approval_status_id' => $this->approvedStatusId,
                 'payment_status' => 'pending',
             ]);

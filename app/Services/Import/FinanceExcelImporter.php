@@ -27,6 +27,7 @@ use App\Services\ReceivablesService;
 use App\Support\ChileanRut;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Throwable;
 
 class FinanceExcelImporter
@@ -474,6 +475,11 @@ class FinanceExcelImporter
             $this->valid('horas');
 
             if (! $this->dryRun) {
+                $existingEntry = TimeEntry::query()
+                    ->where('company_id', $this->companyId())
+                    ->where('code', $code)
+                    ->first();
+
                 TimeEntry::query()->updateOrCreate(
                     ['code' => $code],
                     [
@@ -482,6 +488,7 @@ class FinanceExcelImporter
                         'client_id' => Client::query()->where('company_id', $this->companyId())->where('code', $clientCode)->value('id'),
                         'project_id' => Project::query()->where('company_id', $this->companyId())->where('code', $projectCode)->value('id'),
                         'assignment_id' => $this->assignmentIdFor($personCode, $projectCode),
+                        'period_batch_id' => $existingEntry?->period_batch_id ?: (string) Str::uuid(),
                         'entry_date' => $this->date($this->get($row, ['Fecha'])) ?: now()->toDateString(),
                         'activity' => $this->str($this->get($row, ['Actividad'])) ?: 'Actividad importada',
                         'hours_worked' => $this->number($this->get($row, ['Horas trabajadas'])),

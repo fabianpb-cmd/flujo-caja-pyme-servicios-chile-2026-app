@@ -1576,8 +1576,8 @@ class OperationalUiTest extends TestCase
         $editEntry = TimeEntry::query()->where('code', 'HOR-TIME-OK')->firstOrFail();
         $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $editEntry->id]));
         $edit->assertOk();
-        $edit->assertSee('Editar registro de horas');
-        $edit->assertSee('Operación / Horas / Editar registro de horas');
+        $edit->assertSee('Editar carga de horas');
+        $edit->assertSee('Operación / Horas / Editar carga de horas');
         $edit->assertSee('Asignación: ASI-TIME-DAY');
         $edit->assertSee('Vigencia: 01/08/2026 al 30/09/2026');
         $edit->assertSee('Cliente: Cliente Día Horas');
@@ -1585,7 +1585,7 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('Valor HH de costeo del proyecto:');
         $edit->assertSee('UF');
         $edit->assertSee('/ HH');
-        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar registro de horas/s', $edit->getContent());
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga de horas/s', $edit->getContent());
     }
 
     public function test_time_entries_daily_edit_update_and_delete_are_blocked_when_prefactured(): void
@@ -1894,7 +1894,7 @@ class OperationalUiTest extends TestCase
         $showClp->assertDontSee('/ HH / HH', false);
     }
 
-    public function test_time_entries_create_view_exposes_period_load_mode_without_replacing_daily_mode(): void
+    public function test_time_entries_create_view_uses_a_single_unified_batch_form(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
         [$client, , $project] = $this->clientProjectFixtures($company->id);
@@ -1926,40 +1926,35 @@ class OperationalUiTest extends TestCase
         $create = $this->actingAs($admin)->get(route('operational.create', 'time-entries'));
 
         $create->assertOk();
-        $create->assertSeeInOrder(['Carga por período', 'Carga diaria']);
-        $create->assertSee('MODO DE CARGA');
+        $create->assertSee('Registrar horas');
         $create->assertSee('DATOS DE LA CARGA');
         $create->assertSee('PERÍODO');
-        $create->assertSee('data-time-entry-period-load-container', false);
-        $create->assertSee('data-time-entry-daily-load-container', false);
-        $this->assertMatchesRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-period-load-container/s', $create->getContent());
-        $this->assertDoesNotMatchRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-daily-load-container/s', $create->getContent());
-        $create->assertSee('data-time-entry-period-preview-url', false);
-        $create->assertSee('period_start_date', false);
-        $create->assertSee('period_end_date', false);
         $create->assertSee('Total período');
         $create->assertSee('AUTORIZACIÓN');
         $create->assertSee('RESUMEN');
-        $create->assertSee('Las condiciones seleccionadas se aplicarán a todos los días incluidos en esta carga.');
-        $create->assertSee('El pago común del lote se propagará a cada registro diario creado.');
         $create->assertSee('Las horas se distribuirán automáticamente entre los días aplicables del período. El sistema mantendrá registros diarios para validación y trazabilidad.');
+        $create->assertSee('data-time-entry-period-load-container', false);
+        $create->assertSee('data-time-entry-period-preview-url', false);
         $create->assertSee('data-time-entry-period-summary-panel', false);
         $create->assertSee('<div class="fw-semibold" data-time-entry-period-summary-days>—</div>', false);
         $create->assertSee('<div class="fw-semibold" data-time-entry-period-total-hours-display>—</div>', false);
+        $create->assertDontSee('Carga diaria');
+        $create->assertDontSee('Carga por período');
+        $create->assertDontSee('MODO DE CARGA');
         $create->assertDontSee('Distribución');
         $create->assertDontSee('Horas iguales por día');
         $create->assertDontSee('Horas por día');
         $create->assertDontSee('Manual');
-        $this->assertDoesNotMatchRegularExpression('/<div[^>]*data-time-entry-period-table-wrapper/s', $create->getContent());
-        $this->assertDoesNotMatchRegularExpression('/<table[^>]*data-time-entry-period-table/s', $create->getContent());
-        $create->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
-        $create->assertDontSee('<th>Fecha</th>', false);
-        $create->assertDontSee('<th>Asignación</th>', false);
-        $create->assertDontSee('<th style="width: 140px;">Horas</th>', false);
+        $create->assertDontSee('<input type="radio" class="btn-check" name="entry_mode"', false);
+        $create->assertDontSee('id="entry_date"', false);
+        $create->assertDontSee('id="hours_worked"', false);
+        $create->assertDontSee('id="hours_approved"', false);
+        $create->assertDontSee('id="client_id_display"', false);
+        $create->assertDontSee('id="hourly_value_display"', false);
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
     }
 
-    public function test_time_entries_period_mode_hides_daily_form_block_completely(): void
+    public function test_time_entries_create_rejects_legacy_daily_payloads_that_try_to_bypass_the_batch_flow(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
         [$client, , $project] = $this->clientProjectFixtures($company->id);
@@ -1988,37 +1983,29 @@ class OperationalUiTest extends TestCase
             'end_date' => '2026-09-30',
         ]);
 
-        $create = $this->actingAs($admin)
-            ->withSession(['_old_input' => ['entry_mode' => 'period']])
-            ->get(route('operational.create', 'time-entries'));
+        $response = $this->actingAs($admin)
+            ->from(route('operational.create', 'time-entries'))
+            ->post(route('operational.store', 'time-entries'), [
+                'entry_mode' => 'daily',
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => Activity::query()->firstOrCreate(
+                    ['company_id' => $company->id, 'code' => 'ACT-TIME-PERIOD-HIDE'],
+                    ['name' => 'Actividad Unificada', 'active' => true, 'sort_order' => 1]
+                )->id,
+                'approval_status_id' => ApprovalStatus::query()->firstOrCreate(
+                    ['company_id' => $company->id, 'code' => 'approved'],
+                    ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+                )->id,
+                'payment_status' => 'pending',
+                'entry_date' => '30/08/2026',
+                'hours_worked' => 4,
+                'hours_approved' => 4,
+            ]);
 
-        $create->assertOk();
-        $create->assertSee('Carga por período');
-        $create->assertSee('DATOS DE LA CARGA');
-        $create->assertSee('PERÍODO');
-        $create->assertSee('AUTORIZACIÓN');
-        $create->assertSee('RESUMEN');
-        $create->assertSee('Registrar horas');
-        $create->assertSee('data-time-entry-period-panel', false);
-        $create->assertSee('data-time-entry-period-load-container', false);
-        $create->assertSee('data-time-entry-daily-load-container', false);
-        $this->assertMatchesRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-daily-load-container/s', $create->getContent());
-        $this->assertDoesNotMatchRegularExpression('/<div[^>]*class="[^"]*d-none[^"]*"[^>]*data-time-entry-period-load-container/s', $create->getContent());
-        $content = $create->getContent();
-        $this->assertSame(1, preg_match_all('/<select[^>]*id="person_id"[^>]*data-time-entry-person-select="true"/s', $content));
-        $this->assertSame(1, preg_match_all('/<select[^>]*id="project_id"[^>]*data-time-entry-project-select="true"/s', $content));
-        $this->assertSame(1, preg_match_all('/<select[^>]*id="activity_id"/s', $content));
-        $this->assertSame(1, preg_match_all('/<select[^>]*id="cost_center_id"/s', $content));
-        $this->assertSame(1, preg_match_all('/<select[^>]*id="approval_status_id"/s', $content));
-        $this->assertSame(1, preg_match_all('/<select[^>]*id="payment_status"/s', $content));
-        $this->assertSame(0, preg_match_all('/<input[^>]*id="entry_date"/s', $content));
-        $this->assertSame(0, preg_match_all('/<input[^>]*id="hours_worked"/s', $content));
-        $this->assertSame(0, preg_match_all('/<input[^>]*id="hours_approved"/s', $content));
-        $this->assertSame(0, preg_match_all('/<input[^>]*id="client_id_display"/s', $content));
-        $this->assertSame(0, preg_match_all('/<input[^>]*id="hourly_value_display"/s', $content));
-        $create->assertDontSee('data-time-entry-daily-context', false);
-        $create->assertDontSee('data-time-entry-assignment-context', false);
-        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
+        $response->assertRedirect(route('operational.create', 'time-entries'));
+        $response->assertSessionHasErrors(['period_start_date', 'period_end_date', 'period_total_hours']);
+        $this->assertSame(0, TimeEntry::query()->where('company_id', $company->id)->count());
     }
 
     public function test_time_entries_period_preview_marks_variable_rates_without_faking_a_single_summary_value(): void
@@ -2081,12 +2068,10 @@ class OperationalUiTest extends TestCase
         ]);
 
         $response = $this->actingAs($admin)->postJson(route('operational.time-entry-period-preview', 'time-entries'), [
-            'entry_mode' => 'period',
             'person_id' => $person->id,
             'project_id' => $project->id,
             'period_start_date' => '01/08/2026',
             'period_end_date' => '05/08/2026',
-            'period_distribution_mode' => 'manual',
             'period_total_hours' => 10,
             'payment_status' => 'pending',
         ]);
@@ -2104,12 +2089,10 @@ class OperationalUiTest extends TestCase
         [$client, , $project] = $this->clientProjectFixtures($company->id);
 
         $response = $this->actingAs($admin)->postJson(route('operational.time-entry-period-preview', 'time-entries'), [
-            'entry_mode' => 'period',
             'person_id' => null,
             'project_id' => null,
             'period_start_date' => '01/08/2020',
             'period_end_date' => '20/08/2026',
-            'period_distribution_mode' => 'manual',
             'period_total_hours' => 10,
             'payment_status' => 'pending',
         ]);
@@ -2154,12 +2137,10 @@ class OperationalUiTest extends TestCase
         ]);
 
         $response = $this->actingAs($admin)->postJson(route('operational.time-entry-period-preview', 'time-entries'), [
-            'entry_mode' => 'period',
             'person_id' => $person->id,
             'project_id' => $project->id,
             'period_start_date' => '01/08/2020',
             'period_end_date' => '20/08/2026',
-            'period_distribution_mode' => 'equal',
             'period_total_hours' => 10,
             'payment_status' => 'pending',
         ]);
@@ -2172,7 +2153,7 @@ class OperationalUiTest extends TestCase
         $response->assertJsonMissingPath('field_errors.period_rows.0');
     }
 
-    public function test_time_entries_period_load_creates_daily_entries_from_total_hours_only(): void
+    public function test_time_entries_unified_load_creates_daily_entries_from_total_hours_only(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
 
@@ -2242,7 +2223,6 @@ class OperationalUiTest extends TestCase
         ]);
 
         $total = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'entry_mode' => 'period',
             'person_id' => $personSplit->id,
             'project_id' => $project->id,
             'activity_id' => $activity->id,
@@ -2250,12 +2230,11 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '24/08/2026',
             'period_end_date' => '28/08/2026',
-            'period_distribution_mode' => 'total',
             'period_total_hours' => 40,
         ]);
 
         $total->assertRedirect(route('operational.index', 'time-entries'));
-        $total->assertSessionHas('status', 'Se registraron 5 días y 40 h.');
+        $total->assertSessionHas('status', 'Se registró la carga: 5 días y 40 h.');
 
         $splitEntries = TimeEntry::query()
             ->where('company_id', $company->id)
@@ -2270,71 +2249,165 @@ class OperationalUiTest extends TestCase
         $this->assertSame(40.0, round((float) $splitEntries->sum('hours_approved'), 2));
         $this->assertSame([$assignmentA->id, $assignmentA->id, $assignmentA->id, $assignmentB->id, $assignmentB->id], $splitEntries->pluck('assignment_id')->all());
         $this->assertSame([8.0, 8.0, 8.0, 8.0, 8.0], $splitEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
+    }
 
-        $personManipulated = Person::query()->create([
+    public function test_time_entries_single_day_batches_allow_explicit_saturday_and_sunday_dates(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-WEEKEND'],
+            ['name' => 'Actividad Fin de Semana', 'active' => true, 'sort_order' => 1]
+        );
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
             'company_id' => $company->id,
-            'code' => 'PER-TIME-MANIP',
-            'first_names' => 'Tomás',
-            'paternal_surname' => 'Manipulado',
-            'name' => 'Tomás Manipulado',
+            'code' => 'PER-TIME-WEEKEND',
+            'first_names' => 'Claudia',
+            'paternal_surname' => 'FinDeSemana',
+            'name' => 'Claudia FinDeSemana',
             'modality' => 'Dependiente mensual',
             'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
             'hourly_rate_unit_type' => 'UF',
-            'hourly_value' => 0.65,
+            'hourly_value' => 0.8,
         ]);
 
         ProjectAssignment::query()->create([
             'company_id' => $company->id,
-            'person_id' => $personManipulated->id,
+            'person_id' => $person->id,
             'client_id' => $client->id,
             'project_id' => $project->id,
-            'code' => 'ASI-TIME-MANIP',
+            'code' => 'ASI-TIME-WEEKEND',
             'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
             'hourly_rate_unit_type' => 'UF',
-            'hourly_value' => 0.65,
-            'start_date' => '2026-08-31',
-            'end_date' => '2026-09-04',
+            'hourly_value' => 0.8,
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
         ]);
 
-        $manipulated = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'entry_mode' => 'period',
-            'person_id' => $personManipulated->id,
+        foreach (['29/08/2026', '30/08/2026'] as $date) {
+            $response = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+                'person_id' => $person->id,
+                'project_id' => $project->id,
+                'activity_id' => $activity->id,
+                'approval_status_id' => $approvedStatus->id,
+                'payment_status' => 'pending',
+                'period_start_date' => $date,
+                'period_end_date' => $date,
+                'period_total_hours' => 4,
+            ]);
+
+            $response->assertRedirect(route('operational.index', 'time-entries'));
+        }
+
+        $entries = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $person->id)
+            ->orderBy('entry_date')
+            ->get();
+
+        $this->assertCount(2, $entries);
+        $this->assertSame(['2026-08-29', '2026-08-30'], $entries->map(fn (TimeEntry $entry) => $entry->entry_date?->toDateString())->all());
+        $this->assertSame([4.0, 4.0], $entries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
+        $this->assertSame([4.0, 4.0], $entries->pluck('hours_approved')->map(fn ($value) => round((float) $value, 2))->all());
+        $this->assertTrue($entries->pluck('period_batch_id')->every(fn ($value) => filled($value)));
+        $this->assertCount(2, $entries->pluck('period_batch_id')->unique());
+
+        $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $entries->first()->id]));
+        $edit->assertOk();
+        $edit->assertSee('Editar carga de horas', false);
+        $edit->assertDontSee('Carga diaria', false);
+        $edit->assertDontSee('Distribución', false);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $entries->first()->id]));
+        $show->assertOk();
+        $show->assertSee('Carga de horas', false);
+        $show->assertSee('29/08/2026', false);
+        $show->assertSee('Registros diarios', false);
+        $this->assertDoesNotMatchRegularExpression('/<div class="text-muted small">Tipo<\/div>/s', $show->getContent());
+    }
+
+    public function test_time_entries_external_distribution_inputs_are_ignored_and_total_distribution_remains_the_only_productive_model(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client, , $project] = $this->clientProjectFixtures($company->id);
+
+        $activity = Activity::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'ACT-TIME-TOTAL-ONLY'],
+            ['name' => 'Actividad Total', 'active' => true, 'sort_order' => 1]
+        );
+        $approvedStatus = ApprovalStatus::query()->firstOrCreate(
+            ['company_id' => $company->id, 'code' => 'approved'],
+            ['name' => 'Aprobado', 'active' => true, 'sort_order' => 1]
+        );
+
+        $person = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PER-TIME-TOTAL-ONLY',
+            'first_names' => 'Teresa',
+            'paternal_surname' => 'Total',
+            'name' => 'Teresa Total',
+            'modality' => 'Dependiente mensual',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'DEPENDIENTE_MENSUAL'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.6,
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-TIME-TOTAL-ONLY',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'hourly_rate_unit_type' => 'UF',
+            'hourly_value' => 0.6,
+            'start_date' => '2026-08-03',
+            'end_date' => '2026-08-07',
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'person_id' => $person->id,
             'project_id' => $project->id,
             'activity_id' => $activity->id,
             'approval_status_id' => $approvedStatus->id,
             'payment_status' => 'pending',
-            'period_start_date' => '31/08/2026',
-            'period_end_date' => '04/09/2026',
+            'period_start_date' => '03/08/2026',
+            'period_end_date' => '07/08/2026',
+            'period_total_hours' => 10,
             'period_distribution_mode' => 'manual',
-            'period_total_hours' => 40,
-            'period_hours_per_day' => 2,
+            'period_hours_per_day' => 1,
             'period_rows_payload' => json_encode([
-                ['entry_date' => '2026-08-31', 'included' => true, 'hours_worked' => 1],
-                ['entry_date' => '2026-09-01', 'included' => true, 'hours_worked' => 1],
-                ['entry_date' => '2026-09-02', 'included' => true, 'hours_worked' => 1],
-                ['entry_date' => '2026-09-03', 'included' => true, 'hours_worked' => 1],
-                ['entry_date' => '2026-09-04', 'included' => true, 'hours_worked' => 36],
+                ['entry_date' => '2026-08-03', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-08-04', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-08-05', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-08-06', 'included' => true, 'hours_worked' => 1],
+                ['entry_date' => '2026-08-07', 'included' => true, 'hours_worked' => 6],
             ], JSON_THROW_ON_ERROR),
         ]);
 
-        $manipulated->assertRedirect(route('operational.index', 'time-entries'));
+        $response->assertRedirect(route('operational.index', 'time-entries'));
 
-        $manipulatedEntries = TimeEntry::query()
+        $entries = TimeEntry::query()
             ->where('company_id', $company->id)
-            ->where('person_id', $personManipulated->id)
+            ->where('person_id', $person->id)
             ->orderBy('entry_date')
             ->get();
 
-        $this->assertCount(5, $manipulatedEntries);
-        $this->assertNotNull($manipulatedEntries->first()->period_batch_id);
-        $this->assertCount(1, $manipulatedEntries->pluck('period_batch_id')->unique());
-        $this->assertNotSame($splitEntries->first()->period_batch_id, $manipulatedEntries->first()->period_batch_id);
-        $this->assertSame(40.0, round((float) $manipulatedEntries->sum('hours_worked'), 2));
-        $this->assertSame([8.0, 8.0, 8.0, 8.0, 8.0], $manipulatedEntries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
+        $this->assertCount(5, $entries);
+        $this->assertCount(1, $entries->pluck('period_batch_id')->unique());
+        $this->assertSame(10.0, round((float) $entries->sum('hours_worked'), 2));
+        $this->assertSame([2.0, 2.0, 2.0, 2.0, 2.0], $entries->pluck('hours_worked')->map(fn ($value) => round((float) $value, 2))->all());
     }
 
-    public function test_time_entries_index_groups_period_loads_into_blocks_and_hides_individual_edit_for_batch_rows(): void
+    public function test_time_entries_index_groups_all_productive_loads_as_batches(): void
     {
         [$company, $admin] = $this->companyWithAdmin();
 
@@ -2401,26 +2474,25 @@ class OperationalUiTest extends TestCase
             'end_date' => '2026-08-31',
         ]);
 
-        $daily = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'code' => 'HOR-TIME-DAILY',
-            'entry_mode' => 'daily',
+        $singleDay = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
             'person_id' => $person->id,
             'project_id' => $project->id,
-            'client_id' => $client->id,
-            'entry_date' => '02/08/2026',
             'activity_id' => $activity->id,
-            'hours_worked' => 2,
-            'hours_approved' => 2,
             'approval_status_id' => $approvedStatus->id,
             'payment_status' => 'pending',
+            'period_start_date' => '02/08/2026',
+            'period_end_date' => '02/08/2026',
+            'period_total_hours' => 2,
         ]);
 
-        $daily->assertRedirect(route('operational.index', 'time-entries'));
-        $dailyEntry = TimeEntry::query()->where('code', 'HOR-TIME-DAILY')->firstOrFail();
-        $this->assertNull($dailyEntry->period_batch_id);
+        $singleDay->assertRedirect(route('operational.index', 'time-entries'));
+        $singleDayEntry = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->whereDate('entry_date', '2026-08-02')
+            ->firstOrFail();
+        $this->assertNotNull($singleDayEntry->period_batch_id);
 
         $periodOne = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'entry_mode' => 'period',
             'person_id' => $person->id,
             'project_id' => $project->id,
             'activity_id' => $activity->id,
@@ -2428,15 +2500,12 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '03/08/2026',
             'period_end_date' => '10/08/2026',
-            'period_distribution_mode' => 'total',
             'period_total_hours' => 10,
-            'period_rows_payload' => '',
         ]);
 
         $periodOne->assertRedirect(route('operational.index', 'time-entries'));
 
         $periodTwo = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'entry_mode' => 'period',
             'person_id' => $person->id,
             'project_id' => $project->id,
             'activity_id' => $activity->id,
@@ -2444,7 +2513,6 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '12/08/2026',
             'period_end_date' => '13/08/2026',
-            'period_distribution_mode' => 'total',
             'period_total_hours' => 4,
         ]);
 
@@ -2458,12 +2526,17 @@ class OperationalUiTest extends TestCase
 
         $this->assertCount(9, $entries);
         $batchIds = $entries->pluck('period_batch_id')->filter()->unique()->values();
-        $this->assertCount(2, $batchIds);
+        $this->assertCount(3, $batchIds);
 
-        $periodOneEntries = $entries->where('period_batch_id', $batchIds->first());
-        $periodTwoEntries = $entries->where('period_batch_id', $batchIds->last());
+        $singleDayEntries = $entries->where('period_batch_id', $singleDayEntry->period_batch_id);
+        $periodOneBatchId = (string) $entries->firstWhere(fn (TimeEntry $entry) => $entry->entry_date?->toDateString() === '2026-08-03')?->period_batch_id;
+        $periodTwoBatchId = (string) $entries->firstWhere(fn (TimeEntry $entry) => $entry->entry_date?->toDateString() === '2026-08-12')?->period_batch_id;
+        $periodOneEntries = $entries->where('period_batch_id', $periodOneBatchId);
+        $periodTwoEntries = $entries->where('period_batch_id', $periodTwoBatchId);
+        $this->assertCount(1, $singleDayEntries);
         $this->assertCount(6, $periodOneEntries);
         $this->assertCount(2, $periodTwoEntries);
+        $this->assertSame(2.0, round((float) $singleDayEntries->sum('hours_worked'), 2));
         $this->assertSame(10.0, round((float) $periodOneEntries->sum('hours_worked'), 2));
         $this->assertSame(4.0, round((float) $periodTwoEntries->sum('hours_worked'), 2));
 
@@ -2477,13 +2550,14 @@ class OperationalUiTest extends TestCase
         $this->assertStringContainsString('10/08/2026', $content);
         $this->assertStringContainsString('12/08/2026', $content);
         $this->assertStringContainsString('13/08/2026', $content);
+        $index->assertSee('2 h', false);
         $index->assertSee('10 h', false);
         $index->assertSee('4 h', false);
         $index->assertSee('UF 0,80 / HH', false);
 
         $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $periodOneEntries->first()->id]));
         $show->assertOk();
-        $show->assertSee('Carga por período', false);
+        $show->assertSee('Carga de horas', false);
         $show->assertSee('Pablo Toro', false);
         $show->assertSee('Kardex', false);
         $this->assertStringContainsString('03/08/2026', $show->getContent());
@@ -2491,13 +2565,13 @@ class OperationalUiTest extends TestCase
         $show->assertSee('6', false);
         $show->assertSee('10 h', false);
         $show->assertSee('UF 0,80 / HH', false);
-        $show->assertSee('Eliminar bloque', false);
+        $show->assertSee('Eliminar carga', false);
         $show->assertSee('Editar', false);
         $show->assertDontSee('1,67 h', false);
 
         $delete = $this->actingAs($admin)->delete(route('operational.destroy', ['time-entries', $periodOneEntries->first()->id]));
         $delete->assertRedirect(route('operational.index', 'time-entries'));
-        $this->assertSame(0, TimeEntry::query()->where('period_batch_id', $batchIds->first())->count());
+        $this->assertSame(0, TimeEntry::query()->where('period_batch_id', $periodOneBatchId)->count());
         $this->assertSame(3, TimeEntry::query()->where('company_id', $company->id)->where('person_id', $person->id)->count());
 
         $indexAfterDelete = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
@@ -2714,19 +2788,18 @@ class OperationalUiTest extends TestCase
 
         $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $originalEntries->first()->id]));
         $edit->assertOk();
-        $edit->assertSee('Editar carga por período', false);
-        $edit->assertSee('Operación / Horas / Editar carga por período', false);
-        $edit->assertSee('Guardar bloque', false);
+        $edit->assertSee('Editar carga de horas', false);
+        $edit->assertSee('Operación / Horas / Editar carga de horas', false);
+        $edit->assertSee('Guardar carga', false);
         $edit->assertSee('data-time-entry-period-preview-url', false);
         $edit->assertSee('03/08/2026', false);
         $edit->assertSee('10/08/2026', false);
         $edit->assertDontSee('<label for="period_distribution_mode"', false);
         $edit->assertDontSee('<label for="period_hours_per_day"', false);
         $edit->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
-        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga por período/s', $edit->getContent());
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga de horas/s', $edit->getContent());
 
         $update = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $originalEntries->first()->id]), [
-            'entry_mode' => 'period',
             'period_batch_id' => $batchId,
             'person_id' => $person->id,
             'project_id' => $project->id,
@@ -2735,9 +2808,7 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '04/08/2026',
             'period_end_date' => '12/08/2026',
-            'period_distribution_mode' => 'total',
             'period_total_hours' => 12,
-            'period_rows_payload' => '',
         ]);
 
         $updatedEntries = TimeEntry::query()
@@ -2768,7 +2839,7 @@ class OperationalUiTest extends TestCase
 
         $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $updatedEntries->first()->id]));
         $show->assertOk();
-        $show->assertSee('Carga por período', false);
+        $show->assertSee('Carga de horas', false);
         $show->assertSee('Actividad Editada', false);
         $show->assertSee('04/08/2026', false);
         $show->assertSee('12/08/2026', false);
@@ -2875,17 +2946,16 @@ class OperationalUiTest extends TestCase
         $edit->assertSee('Cliente: Clinica Los Andes', false);
         $edit->assertSee('Asignación: ASI-TIME-IDEMP · Kardex', false);
         $edit->assertSee('Valor HH de costeo del proyecto: UF 0,80 / HH', false);
-        $edit->assertSee('6 días hábiles', false);
+        $edit->assertSee('6 días', false);
         $edit->assertSee('10 h', false);
-        $edit->assertSee('Operación / Horas / Editar carga por período', false);
+        $edit->assertSee('Operación / Horas / Editar carga de horas', false);
         $edit->assertDontSee('<label for="period_distribution_mode"', false);
         $edit->assertDontSee('<label for="period_hours_per_day"', false);
         $edit->assertDontSee('<th style="width: 56px;">Incluir</th>', false);
-        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga por período/s', $edit->getContent());
+        $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga de horas/s', $edit->getContent());
         $this->assertSame($assignment->id, $entries->first()->assignment_id);
 
         $save = $this->actingAs($admin)->put(route('operational.update', ['time-entries', $entries->first()->id]), [
-            'entry_mode' => 'period',
             'period_batch_id' => $batchId,
             'person_id' => $person->id,
             'project_id' => $project->id,
@@ -2894,9 +2964,7 @@ class OperationalUiTest extends TestCase
             'payment_status' => 'pending',
             'period_start_date' => '03/08/2026',
             'period_end_date' => '10/08/2026',
-            'period_distribution_mode' => 'total',
             'period_total_hours' => 10,
-            'period_rows_payload' => '',
         ]);
 
         $after = TimeEntry::query()

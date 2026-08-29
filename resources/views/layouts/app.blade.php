@@ -183,9 +183,7 @@
     } elseif (str_starts_with((string) $currentRouteName, 'operational.') && $resourceTitle) {
         $action = match ($currentRouteName) {
             'operational.create' => $resourceConfig['create_title'] ?? ($resourceSingularTitle ? 'Nueva '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Nuevo'),
-            'operational.edit' => $currentResource === 'time-entries' && is_array($timeEntryBatchEditState) && filled($timeEntryBatchEditState['period_batch_id'] ?? null)
-                ? 'Editar carga por período'
-                : ($resourceConfig['edit_title'] ?? ($resourceSingularTitle ? 'Editar '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Editar')),
+            'operational.edit' => $resourceConfig['edit_title'] ?? ($resourceSingularTitle ? 'Editar '.Illuminate\Support\Str::lower($resourceSingularTitle) : 'Editar'),
             'operational.show' => 'Detalle',
             default => null,
         };

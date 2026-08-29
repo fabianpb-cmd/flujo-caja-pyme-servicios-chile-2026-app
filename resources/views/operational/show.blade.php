@@ -175,12 +175,8 @@
     @endif
 
     @if ($isTimeEntryBatch)
-        <div class="section-title">Carga por período</div>
+        <div class="section-title">Carga de horas</div>
         <div class="row g-3">
-            <div class="col-12 col-md-6 col-xl-4">
-                <div class="text-muted small">Tipo</div>
-                <div class="fw-semibold">Carga por período</div>
-            </div>
             <div class="col-12 col-md-6 col-xl-4">
                 <div class="text-muted small">Persona</div>
                 <div class="fw-semibold">{{ $item->person?->full_name ?: $item->person?->name ?: '—' }}</div>
@@ -206,7 +202,7 @@
                 <div class="fw-semibold">{{ $item->period_batch_date_display ?? (filled($item->entry_date) ? \App\Support\UiFormatter::formatDate($item->entry_date) : '—') }}</div>
             </div>
             <div class="col-12 col-md-6 col-xl-4">
-                <div class="text-muted small">Días generados</div>
+                <div class="text-muted small">Registros diarios</div>
                 <div class="fw-semibold">{{ $item->period_batch_entry_count ?? 1 }}</div>
             </div>
             <div class="col-12 col-md-6 col-xl-4">
@@ -277,7 +273,7 @@
         <form method="POST" action="{{ route('operational.destroy', [$resource, $item->id]) }}" class="mt-4">
             @csrf
             @method('DELETE')
-            <button type="submit" class="btn btn-outline-danger">{{ $isTimeEntryBatch ? 'Eliminar bloque' : 'Eliminar' }}</button>
+            <button type="submit" class="btn btn-outline-danger">{{ $isTimeEntryBatch ? 'Eliminar carga' : 'Eliminar' }}</button>
         </form>
     @endif
 </div>

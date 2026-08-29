@@ -261,9 +261,9 @@ return [
     ],
     'time-entries' => [
         'title' => 'Horas',
-        'singular_title' => 'Registro de horas',
+        'singular_title' => 'Carga de horas',
         'create_title' => 'Registrar horas',
-        'edit_title' => 'Editar registro de horas',
+        'edit_title' => 'Editar carga de horas',
         'section' => 'Operación',
         'model' => TimeEntry::class,
         'display' => 'activity',

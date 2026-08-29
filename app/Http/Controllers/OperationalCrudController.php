@@ -144,8 +144,11 @@ class OperationalCrudController extends Controller
         $config = $this->config($resource);
         $this->authorizeResource($request, $config, 'create');
 
-        if ($resource === 'time-entries' && $request->input('entry_mode') === 'period') {
-            $result = $this->timeEntryPeriods->create($request->user()->company_id, $request->validated());
+        if ($resource === 'time-entries') {
+            $result = $this->timeEntryPeriods->create(
+                $request->user()->company_id,
+                $this->normalizeTimeEntryPeriodPayload($request->validated())
+            );
 
             foreach ($result['created'] as $entry) {
                 $this->refreshDerivedState($entry);
@@ -155,8 +158,9 @@ class OperationalCrudController extends Controller
             return redirect()
                 ->route('operational.index', $resource)
                 ->with('status', sprintf(
-                    'Se registraron %d días y %s.',
+                    'Se registró la carga: %d %s y %s.',
                     $result['days_count'],
+                    $result['days_count'] === 1 ? 'día' : 'días',
                     UiFormatter::formatHours($result['total_hours'])
                 ));
         }
@@ -253,7 +257,6 @@ class OperationalCrudController extends Controller
                 'assignmentCommitmentPreview' => null,
                 'timeEntryBatchEditState' => $timeEntryBatchEditState,
                 'timeEntryPeriodInitialPreview' => $this->timeEntryPeriods->preview($request->user()->company_id, $this->normalizeTimeEntryPeriodPayload([
-                    'entry_mode' => 'period',
                     'period_batch_id' => $timeEntryBatchEditState['period_batch_id'],
                     'person_id' => $item->person_id,
                     'project_id' => $item->project_id,
@@ -263,9 +266,7 @@ class OperationalCrudController extends Controller
                     'payment_status' => $item->payment_status,
                     'period_start_date' => $timeEntryBatchEditState['period_start_date'],
                     'period_end_date' => $timeEntryBatchEditState['period_end_date'],
-                    'period_distribution_mode' => $timeEntryBatchEditState['period_distribution_mode'],
                     'period_total_hours' => $timeEntryBatchEditState['period_total_hours'],
-                    'period_rows_payload' => $timeEntryBatchEditState['period_rows_payload'],
                 ])),
             ]);
         }
@@ -364,7 +365,11 @@ class OperationalCrudController extends Controller
                     ->withErrors(['dependencies' => $message]);
             }
 
-            $result = $this->timeEntryPeriods->update($request->user()->company_id, $batchEntries, $request->validated());
+            $result = $this->timeEntryPeriods->update(
+                $request->user()->company_id,
+                $batchEntries,
+                $this->normalizeTimeEntryPeriodPayload($request->validated())
+            );
 
             foreach ($result['created'] as $entry) {
                 $this->refreshDerivedState($entry);
@@ -383,8 +388,9 @@ class OperationalCrudController extends Controller
             return redirect()
                 ->route('operational.show', [$resource, $result['primary_entry']->id])
                 ->with('status', sprintf(
-                    'Se actualizó la carga por período: %d días y %s.',
+                    'Se actualizó la carga: %d %s y %s.',
                     $result['days_count'],
+                    $result['days_count'] === 1 ? 'día' : 'días',
                     UiFormatter::formatHours($result['total_hours'])
                 ));
         }
@@ -596,13 +602,13 @@ class OperationalCrudController extends Controller
 
     private function normalizeTimeEntryPeriodPayload(array $payload): array
     {
-        if (strtolower((string) ($payload['entry_mode'] ?? 'daily')) !== 'period') {
-            return $payload;
-        }
-
-        $payload['period_distribution_mode'] = 'total';
-        $payload['period_hours_per_day'] = null;
-        $payload['period_rows_payload'] = '';
+        unset(
+            $payload['entry_mode'],
+            $payload['period_distribution_mode'],
+            $payload['period_hours_per_day'],
+            $payload['period_rows_payload'],
+            $payload['period_rows']
+        );
 
         return $payload;
     }
@@ -933,7 +939,7 @@ class OperationalCrudController extends Controller
             ->implode(', ');
 
         return sprintf(
-            'No se puede %s la carga por período porque está siendo utilizada por: %s. Desactívela o reasigne las dependencias antes de continuar.',
+            'No se puede %s la carga de horas porque está siendo utilizada por: %s. Desactívela o reasigne las dependencias antes de continuar.',
             $action,
             $references
         );
@@ -964,10 +970,7 @@ class OperationalCrudController extends Controller
             'period_batch_id' => (string) $ordered->first()?->period_batch_id,
             'period_start_date' => optional($ordered->first()?->entry_date)->toDateString(),
             'period_end_date' => optional($ordered->last()?->entry_date)->toDateString(),
-            'period_distribution_mode' => 'total',
-            'period_hours_per_day' => null,
             'period_total_hours' => round((float) $ordered->sum('hours_worked'), 2),
-            'period_rows_payload' => '',
         ];
     }
 

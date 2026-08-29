@@ -37,7 +37,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | `hours_worked` | `time_entries.hours_worked` | No aplica | Sí | No | `> 0` y suma diaria `<= 24` | Ejecución real, productividad, controles operativos |
 | `hours_approved` | `time_entries.hours_approved` | No aplica | Sí | No | `0 <= hours_approved <= hours_worked` | Remuneraciones, costo real, productividad |
 | `hourly_value` | Valor HH de costeo resuelto para la entrada | `assignment.hourly_value`, luego `person.hourly_value` | Derivado en el flujo actual | No | Depende de la fuente resuelta | Cálculo del monto de la hora registrada, UI de Horas |
-| `period_batch_id` | `time_entries.period_batch_id` | `null` para carga diaria | Derivado por la operación de carga por período | No | Identifica un lote lógico sin alterar la granularidad diaria | Agrupación funcional en UI operativa, trazabilidad de carga por período |
+| `period_batch_id` | `time_entries.period_batch_id` | No aplica | Derivado por la operación de carga de horas | No | Identifica un lote lógico sin alterar la granularidad diaria | Agrupación funcional en UI operativa, trazabilidad de la carga |
 | `person_id` / `project_id` / `assignment_id` | Relación operativa de la entrada | No aplica | Sí | No | Deben mantener integridad persona-proyecto-asignación | Ejecución real, remuneraciones, costo real |
 
 ## Remuneraciones
@@ -84,10 +84,15 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | ProjectCommitmentService | Calcula costo comprometido de personal desde HH comprometidas y valor HH de costeo; no depende de la modalidad de payroll y no usa `project_value` como base del compromiso. |
 | ProjectCommitmentService temporalidad mensual | Un intervalo desde una fecha hasta la misma fecha del mes siguiente equivale exactamente a un mes de compromiso; la fecha término no genera un período parcial adicional. |
 | Horas | Representa ejecución real. No es compromiso ni presupuesto. |
-| Carga por período de Horas | Se crea, visualiza, edita y elimina como una única operación lógica; el usuario informa un rango de fechas y un total de horas. La distribución entre `TimeEntry` diarios es automática e interna. Mantiene granularidad diaria en persistencia y los `TimeEntry` generados por la misma operación comparten `period_batch_id` para validación, costeo, aprobación, remuneraciones, prefacturación y trazabilidad. |
-| Carga por período transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
-| Carga por período límite operativo | Una carga por período admite como máximo 31 días calendario por operación. |
-| Mutación de Horas con dependencias | Un `TimeEntry` o una carga por período consumida por dependencias operativas protegidas no puede modificarse ni eliminarse desde Horas. Si cualquier fila de un `period_batch_id` tiene dependencias, la operación completa del batch queda bloqueada. |
+| Registrar horas | Existe una única operación de alta en Horas. El usuario informa Persona, Proyecto, Actividad, Centro de costo, Fecha inicio, Fecha término, Total horas, Aprobación y Pago. |
+| Carga de horas batch | Toda carga productiva genera `period_batch_id`. Si el rango tiene un solo día, el batch contiene un único `TimeEntry`; si el rango tiene múltiples días, contiene varios `TimeEntry` diarios. |
+| Distribución interna de Horas | El usuario informa un rango y un total de horas. La distribución entre `TimeEntry` diarios es automática e interna. Mantiene granularidad diaria en persistencia para validación, costeo, aprobación, remuneraciones, prefacturación y trazabilidad. |
+| Carga de horas transaccional | Si alguna fecha del período es inválida, no se crean registros parciales. |
+| Carga de horas límite operativo | Una carga admite como máximo 31 días calendario por operación. |
+| Fin de semana en carga de un día | Si `fecha_inicio == fecha_término`, la fecha explícita puede registrarse aunque sea sábado o domingo, siempre que cumpla vigencia, asignación y máximo diario. |
+| Rangos múltiples de Horas | En rangos de más de un día se mantiene la política actual de distribución sobre días aplicables de semana; la UI no expone selección manual de distribución ni inclusión de fin de semana. |
+| Aprobación en alta de Horas | La alta de horas aplica aprobación común al batch: `approved` registra horas aprobadas equivalentes al total distribuido y `rejected` registra `0`. No existe aprobación parcial en la alta. |
+| Mutación de Horas con dependencias | Un `TimeEntry` o una carga de horas consumida por dependencias operativas protegidas no puede modificarse ni eliminarse desde Horas. Si cualquier fila de un `period_batch_id` tiene dependencias, la operación completa del batch queda bloqueada. |
 | Trazabilidad TimeEntry → Payroll por hora | La remuneración por hora conserva una relación persistente entre `PayrollRecord` y los `TimeEntry` exactos consumidos. Un `TimeEntry` solo puede participar en una remuneración por hora, queda inmutable desde Horas mientras exista ese vínculo y, en un `period_batch_id`, una dependencia en cualquier fila bloquea el batch completo. |
 | Remuneraciones | Es snapshot/costo real del período. No es compromiso ni presupuesto. |
 | Remuneraciones mensuales / proyecto-hito | Las remuneraciones mensuales y por proyecto/hito no generan vínculo `TimeEntry` → `PayrollRecord` porque las horas no determinan su base económica. |

@@ -25,17 +25,6 @@ class TimeEntryPeriodService
 
     public function preview(int $companyId, array $payload): array
     {
-        $entryMode = strtolower((string) ($payload['entry_mode'] ?? 'daily'));
-        if ($entryMode !== 'period') {
-            return [
-                'rows' => [],
-                'total_hours' => 0.0,
-                'can_save' => false,
-                'field_errors' => [],
-                'summary' => [],
-            ];
-        }
-
         $fieldErrors = [];
         $rows = [];
         $person = $this->person($companyId, $payload);
@@ -49,9 +38,7 @@ class TimeEntryPeriodService
 
         $startDate = UiFormatter::parseDateInput($payload['period_start_date'] ?? null);
         $endDate = UiFormatter::parseDateInput($payload['period_end_date'] ?? null);
-        $distributionMode = strtolower((string) ($payload['period_distribution_mode'] ?? 'equal'));
-
-        $commonErrors = $this->validatePeriodPrerequisites($person, $project, $startDate, $endDate, $distributionMode, $payload);
+        $commonErrors = $this->validatePeriodPrerequisites($person, $project, $startDate, $endDate, $payload);
         if ($commonErrors !== []) {
             return [
                 'rows' => [],
@@ -63,7 +50,7 @@ class TimeEntryPeriodService
         }
 
         $rows = $this->existingBatchRowsForUnchangedEdit($companyId, $payload, $startDate, $endDate)
-            ?? $this->buildRows($payload, $distributionMode, $startDate, $endDate);
+            ?? $this->buildRows($payload, $startDate, $endDate);
 
         if ($rows->isEmpty() && $startDate && $endDate) {
             $fieldErrors['period_rows'][] = 'No hay fechas disponibles para el período indicado.';
@@ -149,7 +136,6 @@ class TimeEntryPeriodService
         ?Project $project,
         ?Carbon $startDate,
         ?Carbon $endDate,
-        string $distributionMode,
         array $payload,
     ): array {
         $fieldErrors = [];
@@ -176,22 +162,9 @@ class TimeEntryPeriodService
             }
         }
 
-        if (! in_array($distributionMode, ['equal', 'total', 'manual'], true)) {
-            $fieldErrors['period_distribution_mode'][] = 'Seleccione una distribución válida.';
-        }
-
-        if ($distributionMode === 'equal') {
-            $hoursPerDay = $this->numericOrNull($payload['period_hours_per_day'] ?? null);
-            if ($hoursPerDay === null || $hoursPerDay <= 0 || $hoursPerDay > 24) {
-                $fieldErrors['period_hours_per_day'][] = 'Ingrese horas por día válidas entre 0,01 y 24.';
-            }
-        }
-
-        if ($distributionMode === 'total') {
-            $totalHours = $this->numericOrNull($payload['period_total_hours'] ?? null);
-            if ($totalHours === null || $totalHours <= 0) {
-                $fieldErrors['period_total_hours'][] = 'Ingrese un total de horas válido mayor que 0.';
-            }
+        $totalHours = $this->numericOrNull($payload['period_total_hours'] ?? null);
+        if ($totalHours === null || $totalHours <= 0) {
+            $fieldErrors['period_total_hours'][] = 'Ingrese un total de horas válido mayor que 0.';
         }
 
         return $fieldErrors;
@@ -271,7 +244,6 @@ class TimeEntryPeriodService
 
         $batchId = (string) $orderedExisting->pluck('period_batch_id')->filter()->unique()->sole();
         $preview = $this->preview($companyId, array_merge($payload, [
-            'entry_mode' => 'period',
             'period_batch_id' => $batchId,
         ]));
 
@@ -368,55 +340,24 @@ class TimeEntryPeriodService
         });
     }
 
-    private function buildRows(array $payload, string $distributionMode, ?Carbon $startDate, ?Carbon $endDate): Collection
+    private function buildRows(array $payload, ?Carbon $startDate, ?Carbon $endDate): Collection
     {
-        $providedRows = collect($payload['period_rows'] ?? [])
-            ->map(function (array $row): array {
-                return [
-                    'entry_date' => UiFormatter::parseDateInput($row['entry_date'] ?? null)?->toDateString(),
-                    'included' => filter_var($row['included'] ?? true, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false,
-                    'hours_worked' => $this->numericOrNull($row['hours_worked'] ?? null),
-                ];
-            })
-            ->filter(fn (array $row): bool => filled($row['entry_date']))
-            ->values();
+        $baseRows = $this->defaultRowsForRange($startDate, $endDate);
+        $totalHours = $this->numericOrNull($payload['period_total_hours'] ?? null);
+        $includedCount = max(1, $baseRows->where('included', true)->count());
+        $distributed = $this->distributeTotalAcrossRows((float) ($totalHours ?? 0), $includedCount);
+        $distributedIndex = 0;
 
-        $baseRows = $providedRows->isNotEmpty()
-            ? $providedRows
-            : $this->defaultRowsForRange($startDate, $endDate);
+        return $baseRows->map(function (array $row) use (&$distributedIndex, $distributed): array {
+            if (! $row['included']) {
+                return [...$row, 'hours_worked' => null];
+            }
 
-        if ($distributionMode === 'manual') {
-            return $baseRows;
-        }
+            $hours = $distributed[$distributedIndex] ?? null;
+            $distributedIndex++;
 
-        if ($distributionMode === 'equal') {
-            $hoursPerDay = $this->numericOrNull($payload['period_hours_per_day'] ?? null);
-
-            return $baseRows->map(fn (array $row): array => [
-                ...$row,
-                'hours_worked' => $row['included'] && $hoursPerDay !== null ? $hoursPerDay : null,
-            ])->values();
-        }
-
-        if ($distributionMode === 'total') {
-            $totalHours = $this->numericOrNull($payload['period_total_hours'] ?? null);
-            $includedCount = max(1, $baseRows->where('included', true)->count());
-            $distributed = $this->distributeTotalAcrossRows((float) ($totalHours ?? 0), $includedCount);
-            $distributedIndex = 0;
-
-            return $baseRows->map(function (array $row) use (&$distributedIndex, $distributed): array {
-                if (! $row['included']) {
-                    return [...$row, 'hours_worked' => null];
-                }
-
-                $hours = $distributed[$distributedIndex] ?? null;
-                $distributedIndex++;
-
-                return [...$row, 'hours_worked' => $hours];
-            })->values();
-        }
-
-        return $baseRows;
+            return [...$row, 'hours_worked' => $hours];
+        })->values();
     }
 
     private function defaultRowsForRange(?Carbon $startDate, ?Carbon $endDate): Collection
@@ -427,10 +368,11 @@ class TimeEntryPeriodService
 
         $rows = [];
         $cursor = $startDate->copy();
+        $singleDay = $startDate->isSameDay($endDate);
         while ($cursor->lte($endDate)) {
             $rows[] = [
                 'entry_date' => $cursor->toDateString(),
-                'included' => ! $cursor->isWeekend(),
+                'included' => $singleDay || ! $cursor->isWeekend(),
                 'hours_worked' => null,
             ];
             $cursor->addDay();
