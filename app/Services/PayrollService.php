@@ -75,18 +75,34 @@ class PayrollService
     private function payrollContext(Person $person, Carbon $period, ?int $projectId = null): array
     {
         $person->loadMissing(['employmentMode', 'employmentContractType', 'afp', 'healthSystemCatalog']);
+        $flags = $this->modalityFlags($person);
+        $isHourly = $flags['is_hourly'];
 
         $companyId = $person->company_id;
-        $assignmentContext = $this->payrollAssignmentContext($companyId, $person->id, $period, $projectId);
+        $hourlyConsumption = $isHourly ? $this->hourlyPayrollConsumption($person, $period, $projectId) : null;
+        $assignmentContext = $isHourly
+            ? [
+                'assignment' => $hourlyConsumption['assignment'],
+                'assignments' => $hourlyConsumption['assignments'],
+                'ambiguous' => false,
+                'multiple_assignments_used' => $hourlyConsumption['multiple_assignments_used'],
+                'assignment_display' => $hourlyConsumption['assignment_display'],
+                'assignment_range_display' => $hourlyConsumption['assignment_range_display'],
+            ]
+            : $this->payrollAssignmentContext($companyId, $person->id, $period, $projectId);
         $assignment = $assignmentContext['assignment'];
-        $project = $assignment?->project ?: ($projectId ? Project::query()->forCompany($companyId)->with('salesCurrency')->find($projectId) : null);
-        $timeEntries = $this->payrollApprovedTimeEntries($companyId, $person->id, $period, $project?->id);
+        $project = $isHourly
+            ? $hourlyConsumption['project']
+            : ($assignment?->project ?: ($projectId ? Project::query()->forCompany($companyId)->with('salesCurrency')->find($projectId) : null));
+        $timeEntries = $isHourly
+            ? $hourlyConsumption['time_entries']
+            : $this->payrollApprovedTimeEntries($companyId, $person->id, $period, $project?->id);
 
         $hoursApprovedAuto = round((float) $timeEntries->sum('hours_approved'), 2);
         $notes = [];
         $requiresReview = false;
 
-        if ($assignmentContext['ambiguous']) {
+        if (! $isHourly && $assignmentContext['ambiguous']) {
             $notes[] = 'Existe más de una asignación vigente para la persona y el proyecto en el período.';
             $requiresReview = true;
         }
@@ -99,7 +115,19 @@ class PayrollService
         $projectValueAuto = null;
         $projectValueSource = null;
 
-        if (! $assignmentContext['ambiguous']) {
+        if ($isHourly) {
+            if ((float) $person->hourly_value > 0) {
+                $hourlyValueAuto = (float) $this->hourlyRates->resolvePersonRate($person, $period);
+                $hourlyValueSource = [
+                    'type' => 'person',
+                    'person_name' => $person->full_name,
+                    'rate_value' => $person->hourly_value,
+                    'rate_unit_type' => strtoupper((string) ($person->hourly_rate_unit_type ?: 'CURRENCY')),
+                    'currency' => $person->hourlyRateDisplayCurrency ?? 'CLP',
+                ];
+            }
+            $hourlyValueLegacyAuto = $hourlyValueAuto;
+        } elseif (! $assignmentContext['ambiguous']) {
             if ((float) $person->hourly_value > 0) {
                 $hourlyValueAuto = (float) $this->hourlyRates->resolvePersonRate($person, $period);
                 $hourlyValueSource = [
@@ -148,6 +176,68 @@ class PayrollService
             'health_additional_auto' => $healthAdditionalAuto,
             'notes' => $notes,
             'requires_review' => $requiresReview,
+            'project_display' => $isHourly
+                ? $hourlyConsumption['project_display']
+                : ($project ? trim((string) ($project->code ?: $project->name)) : '—'),
+            'client_display' => $isHourly
+                ? $hourlyConsumption['client_display']
+                : ($project?->client?->legal_name ?? '—'),
+        ];
+    }
+
+    public function hourlyPayrollConsumption(Person $person, CarbonInterface|string $periodDate, ?int $projectId = null): array
+    {
+        $period = Carbon::parse($periodDate)->startOfMonth();
+        $timeEntries = $this->payrollApprovedTimeEntries($person->company_id, $person->id, $period, $projectId);
+        $projects = $timeEntries
+            ->filter(fn (TimeEntry $entry): bool => $entry->project !== null)
+            ->unique(fn (TimeEntry $entry): string => (string) $entry->project_id)
+            ->map(fn (TimeEntry $entry) => $entry->project)
+            ->values();
+        $assignments = $timeEntries
+            ->filter(fn (TimeEntry $entry): bool => $entry->assignment !== null)
+            ->unique(fn (TimeEntry $entry): string => (string) $entry->assignment_id)
+            ->map(fn (TimeEntry $entry) => $entry->assignment)
+            ->values();
+        $project = $projects->count() === 1 ? $projects->first() : null;
+        $assignment = $assignments->count() === 1 ? $assignments->first() : null;
+        $clients = $projects
+            ->filter(fn ($entryProject) => $entryProject?->client !== null)
+            ->unique(fn ($entryProject): string => (string) $entryProject->client_id)
+            ->map(fn ($entryProject) => $entryProject->client)
+            ->values();
+
+        return [
+            'time_entries' => $timeEntries,
+            'project' => $project,
+            'project_id' => $project?->id,
+            'projects' => $projects,
+            'project_ids' => $projects->pluck('id')->map(fn ($id): int => (int) $id)->values(),
+            'multiple_projects_used' => $projects->count() > 1,
+            'project_display' => match (true) {
+                $projects->count() === 1 => trim((string) ($project?->code ?: $project?->name ?: '—')),
+                $projects->count() > 1 => 'Varios proyectos',
+                default => '—',
+            },
+            'client_display' => match (true) {
+                $clients->count() === 1 => (string) ($clients->first()?->legal_name ?: '—'),
+                $clients->count() > 1 => 'Varios clientes',
+                default => '—',
+            },
+            'assignment' => $assignment,
+            'assignments' => $assignments,
+            'assignment_ids' => $assignments->pluck('id')->map(fn ($id): int => (int) $id)->values(),
+            'multiple_assignments_used' => $assignments->count() > 1,
+            'assignment_display' => match (true) {
+                $assignments->count() === 1 => trim((string) (($assignment?->code ?: 'ASI').' · '.($assignment?->project?->name ?: $project?->name ?: 'No informado'))),
+                $assignments->count() > 1 => 'Múltiples asignaciones',
+                default => 'No configurada',
+            },
+            'assignment_range_display' => match (true) {
+                $assignments->count() === 1 => $this->payrollAssignmentRangeLabel($assignment),
+                $assignments->count() > 1 => 'Según las horas remuneradas del período',
+                default => 'No configurada',
+            },
         ];
     }
 
@@ -313,9 +403,11 @@ class PayrollService
             $requiresReview = true;
         }
 
-        if ($context['assignment_context']['ambiguous']) {
-            $hourlyValue = 0.0;
+        if ($context['assignment_context']['ambiguous'] && ! $isHourly) {
             $projectValue = 0.0;
+            if ($isProject) {
+                $hourlyValue = 0.0;
+            }
         }
 
         $data['hours_approved'] = $hoursApproved;
@@ -709,10 +801,10 @@ class PayrollService
 
         $sourceRows = [
             ['label' => 'Persona', 'value' => $record->person?->full_name ?? '—'],
-            ['label' => 'Proyecto', 'value' => $record->project ? trim((string) ($record->project->code ?: $record->project->name)) : '—'],
-            ['label' => 'Cliente', 'value' => $record->project?->client?->legal_name ?? '—'],
-            ['label' => 'Asignación', 'value' => $assignment?->code ? trim((string) ($assignment->code.' · '.($assignment->project?->name ?: $record->project?->name ?: 'No informado'))) : 'No configurada'],
-            ['label' => 'Vigencia asignación', 'value' => $this->payrollAssignmentRangeLabel($assignment)],
+            ['label' => 'Proyecto', 'value' => $context['project_display'] ?? ($record->project ? trim((string) ($record->project->code ?: $record->project->name)) : '—')],
+            ['label' => 'Cliente', 'value' => $context['client_display'] ?? ($record->project?->client?->legal_name ?? '—')],
+            ['label' => 'Asignación', 'value' => $context['assignment_context']['assignment_display'] ?? ($assignment?->code ? trim((string) ($assignment->code.' · '.($assignment->project?->name ?: $record->project?->name ?: 'No informado'))) : 'No configurada')],
+            ['label' => 'Vigencia asignación', 'value' => $context['assignment_context']['assignment_range_display'] ?? $this->payrollAssignmentRangeLabel($assignment)],
             ['label' => 'Horas aprobadas del período', 'value' => UiFormatter::formatHours($hoursApprovedState['automatic'] ?? 0)],
             ['label' => 'Origen horas', 'value' => 'Módulo Horas'],
             ['label' => 'Override horas', 'value' => $this->payrollOverrideDisplay($hoursApprovedState, true)],
@@ -983,7 +1075,7 @@ class PayrollService
         return [
             'context' => [
                 'assignment' => null,
-                'assignment_context' => ['ambiguous' => false],
+                'assignment_context' => ['ambiguous' => false, 'multiple_assignments_used' => false, 'assignment_display' => 'No configurada', 'assignment_range_display' => 'No configurada'],
                 'project' => null,
                 'project_id' => null,
                 'time_entries' => collect(),
@@ -997,6 +1089,8 @@ class PayrollService
                 'health_additional_auto' => null,
                 'notes' => [],
                 'requires_review' => false,
+                'project_display' => '—',
+                'client_display' => '—',
             ],
             'adjustments' => [
                 'hours_approved' => null,

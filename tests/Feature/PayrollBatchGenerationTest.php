@@ -231,6 +231,165 @@ class PayrollBatchGenerationTest extends TestCase
         $this->assertSame($validProject->id, PayrollRecord::query()->where('person_id', $person->id)->firstOrFail()->project_id);
     }
 
+    public function test_hourly_payroll_uses_person_clp_rate_for_single_assignment(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por hora',
+            'monthly_value' => 0,
+            'hourly_value' => 2000,
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-HOURLY-CLP');
+        $assignment = $this->assignment($person, $project, '2026-08-01', '2026-08-31', [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $this->approvedTimeEntry($person, $project, $assignment, '2026-08-05', 10, 2000);
+
+        app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+
+        $this->assertSame($project->id, $record->project_id);
+        $this->assertSame('OK', $record->calculation_status);
+        $this->assertSame(10.0, (float) $record->hours_approved);
+        $this->assertSame(2000.0, (float) $record->hourly_value);
+        $this->assertStringNotContainsString('Tarifa de remuneración por hora no configurada', (string) $record->calculation_notes);
+    }
+
+    public function test_hourly_payroll_uses_person_uf_rate_for_single_assignment(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por hora',
+            'monthly_value' => 0,
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-HOURLY-UF');
+        $assignment = $this->assignment($person, $project, '2026-08-01', '2026-08-31', [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $this->approvedTimeEntry($person, $project, $assignment, '2026-08-05', 10, 40845);
+
+        app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+        $explanationJson = json_encode(app(PayrollService::class)->explain($record), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $this->assertSame($project->id, $record->project_id);
+        $this->assertSame('OK', $record->calculation_status);
+        $this->assertSame(10.0, (float) $record->hours_approved);
+        $this->assertSame(app(PayrollService::class)->payrollDefaultValues($person->fresh(['hourlyRateCurrency']), '2026-08-01', $project->id)['hourly_value'], (float) $record->hourly_value);
+        $this->assertStringContainsString('UF 1,00 / HH', $explanationJson);
+        $this->assertStringNotContainsString('Tarifa de remuneración por hora no configurada', (string) $record->calculation_notes);
+    }
+
+    public function test_hourly_payroll_with_multiple_assignments_in_same_project_stays_calculable_and_persists_the_project(): void
+    {
+        $person = $this->person([
+            'name' => 'Jaime Soriano',
+            'modality' => 'Honorarios por hora',
+            'monthly_value' => 0,
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-ALERTA');
+        $assignmentA = $this->assignment($person, $project, '2026-08-01', '2026-08-31', [
+            'code' => 'ASI-JS-01',
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+        $assignmentB = $this->assignment($person, $project, '2026-08-10', '2026-08-31', [
+            'code' => 'ASI-JS-02',
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $this->approvedTimeEntry($person, $project, $assignmentA, '2026-08-24', 10, 40845);
+        $this->approvedTimeEntry($person, $project, $assignmentB, '2026-08-28', 12, 40845);
+
+        app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+        $explanationJson = json_encode(app(PayrollService::class)->explain($record), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $this->assertSame($project->id, $record->project_id);
+        $this->assertSame('OK', $record->calculation_status);
+        $this->assertSame('Borrador', $record->status);
+        $this->assertSame(22.0, (float) $record->hours_approved);
+        $this->assertSame(app(PayrollService::class)->payrollDefaultValues($person->fresh(['hourlyRateCurrency']), '2026-08-01', $project->id)['hourly_value'], (float) $record->hourly_value);
+        $this->assertStringNotContainsString('Tarifa de remuneración por hora no configurada', (string) $record->calculation_notes);
+        $this->assertStringNotContainsString('Proyecto pendiente', (string) $record->calculation_notes);
+        $this->assertStringContainsString('Múltiples asignaciones', $explanationJson);
+        $this->assertStringNotContainsString('No configurada', $explanationJson);
+        $this->assertStringContainsString('UF 1,00 / HH', $explanationJson);
+    }
+
+    public function test_hourly_payroll_with_multiple_projects_keeps_project_null_and_calculates_normally(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por hora',
+            'monthly_value' => 0,
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'employment_mode_id' => null,
+        ]);
+        $projectA = $this->project('PRY-HOUR-A');
+        $projectB = $this->project('PRY-HOUR-B');
+        $assignmentA = $this->assignment($person, $projectA, '2026-08-01', '2026-08-31', [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+        $assignmentB = $this->assignment($person, $projectB, '2026-08-01', '2026-08-31', [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $this->approvedTimeEntry($person, $projectA, $assignmentA, '2026-08-05', 10, 40845);
+        $this->approvedTimeEntry($person, $projectB, $assignmentB, '2026-08-06', 12, 40845);
+
+        app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+        $explanationJson = json_encode(app(PayrollService::class)->explain($record), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $this->assertNull($record->project_id);
+        $this->assertSame('OK', $record->calculation_status);
+        $this->assertSame(22.0, (float) $record->hours_approved);
+        $this->assertSame(app(PayrollService::class)->payrollDefaultValues($person->fresh(['hourlyRateCurrency']), '2026-08-01', null)['hourly_value'], (float) $record->hourly_value);
+        $this->assertStringContainsString('Varios proyectos', $explanationJson);
+        $this->assertStringNotContainsString('Tarifa de remuneración por hora no configurada', (string) $record->calculation_notes);
+    }
+
+    public function test_hourly_payroll_without_person_rate_still_requires_review(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por hora',
+            'monthly_value' => 0,
+            'hourly_value' => null,
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-HOURLY-MISSING');
+        $assignment = $this->assignment($person, $project, '2026-08-01', '2026-08-31', [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $this->approvedTimeEntry($person, $project, $assignment, '2026-08-05', 10, 0);
+
+        app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+
+        $this->assertSame('REQUIERE_REVISION', $record->calculation_status);
+        $this->assertStringContainsString('Tarifa de remuneración por hora no configurada en la ficha de Personal.', (string) $record->calculation_notes);
+    }
+
     public function test_route_generates_period_and_returns_summary(): void
     {
         $this->person();
@@ -450,6 +609,26 @@ class PayrollBatchGenerationTest extends TestCase
             'employee_commission_rate' => 0.0127,
             'employer_commission_rate' => 0,
             'insurance_rate' => 0,
+        ]);
+    }
+
+    private function approvedTimeEntry(Person $person, Project $project, ProjectAssignment $assignment, string $date, float $hours, float $hourlyValue): TimeEntry
+    {
+        return TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HRS-'.uniqid(),
+            'person_id' => $person->id,
+            'client_id' => $project->client_id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => $date,
+            'activity' => 'Trabajo payroll',
+            'hours_worked' => $hours,
+            'hours_approved' => $hours,
+            'hourly_value' => $hourlyValue,
+            'calculated_amount' => round($hours * $hourlyValue, 2),
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
         ]);
     }
 }

@@ -16,6 +16,7 @@ use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
 use App\Models\TimeEntry;
+use App\Models\UfValue;
 use App\Models\User;
 use App\Services\CashMovementService;
 use App\Services\PayrollBatchService;
@@ -61,6 +62,11 @@ class PayrollTimeEntryTraceTest extends TestCase
             'value' => 0.1525,
             'unit' => '%',
             'active' => true,
+        ]);
+        UfValue::query()->create([
+            'company_id' => $this->company->id,
+            'value_date' => '2026-08-01',
+            'value' => 40844.79,
         ]);
 
         $this->approvedStatusId = ApprovalStatus::query()->create([
@@ -132,6 +138,48 @@ class PayrollTimeEntryTraceTest extends TestCase
         $this->assertSame(2, PayrollRecordTimeEntry::query()->where('payroll_record_id', $record->id)->count());
         $this->assertSame(10.0, (float) $record->hours_approved);
         $this->assertSame(5000.0, (float) $record->bonuses);
+    }
+
+    public function test_hourly_batch_with_multiple_projects_links_all_consumed_entries_without_creating_a_second_payroll(): void
+    {
+        $projectA = $this->project('CLI-HOURLY-A', 'PRY-HOURLY-A');
+        $projectB = $this->project('CLI-HOURLY-B', 'PRY-HOURLY-B');
+        $person = Person::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'PER-HOURLY-MULTI-'.uniqid(),
+            'name' => 'Persona Horaria Multi '.uniqid(),
+            'modality' => 'Honorarios por hora',
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'status' => 'active',
+        ]);
+
+        $assignmentA = $this->assignment($person, $projectA, [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+        $assignmentB = $this->assignment($person, $projectB, [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $first = $this->timeEntry($person, $projectA, $assignmentA, '2026-08-04', 10, ['hourly_value' => 40845]);
+        $second = $this->timeEntry($person, $projectB, $assignmentB, '2026-08-05', 12, ['hourly_value' => 40845]);
+
+        $summary = app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+        $explanationJson = json_encode(app(PayrollService::class)->explain($record), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $this->assertSame(1, $summary['generated']);
+        $this->assertSame(1, PayrollRecord::query()->where('person_id', $person->id)->count());
+        $this->assertNull($record->project_id);
+        $this->assertSame(22.0, (float) $record->hours_approved);
+        $this->assertEqualsCanonicalizing([$first->id, $second->id], $record->timeEntries()->pluck('time_entries.id')->all());
+        $this->assertSame(2, PayrollRecordTimeEntry::query()->where('payroll_record_id', $record->id)->count());
+        $this->assertSame('OK', $record->calculation_status);
+        $this->assertStringContainsString('Varios proyectos', $explanationJson);
+        $this->assertStringContainsString('UF 1,00 / HH', $explanationJson);
     }
 
     public function test_manual_payroll_crud_create_and_update_also_synchronize_hourly_trace(): void

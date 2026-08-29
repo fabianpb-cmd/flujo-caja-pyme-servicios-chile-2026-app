@@ -74,15 +74,26 @@ class PayrollBatchService
             }
 
             $assignments = $this->validAssignments($person, $period, $periodEnd);
-            $data = $this->adjustmentData($companyId, $person->id, $period);
+            $isHourly = $this->payroll->modalityFlags($person)['is_hourly'];
             $projectId = $assignments->count() === 1 ? $assignments->first()->project_id : null;
+            if ($isHourly) {
+                $projectId = $this->payroll->hourlyPayrollConsumption($person, $period)['project_id'];
+            } elseif ($existing) {
+                $projectId ??= $existing->project_id;
+            }
+            $data = array_merge(
+                array_filter(
+                    $this->payroll->payrollDefaultValues($person, $period, $projectId),
+                    static fn (mixed $value): bool => $value !== null
+                ),
+                $this->adjustmentData($companyId, $person->id, $period),
+            );
             if ($existing) {
                 $data = array_merge($data, $this->payroll->manualOverrideInputs($existing));
-                $projectId ??= $existing->project_id;
             }
             $notes = [];
 
-            if ($assignments->count() > 1) {
+            if (! $isHourly && $assignments->count() > 1) {
                 $notes[] = 'Proyecto pendiente: persona con múltiples asignaciones válidas en el período.';
             }
 
