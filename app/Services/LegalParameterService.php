@@ -54,7 +54,14 @@ class LegalParameterService
 
     public function ufValue(int $companyId, CarbonInterface|string $date): string
     {
-        return $this->ufValueExact($companyId, $date);
+        $date = Carbon::parse($date)->toDateString();
+        $uf = $this->latestOfficialUfOnOrBefore($companyId, $date);
+
+        if ($uf === null) {
+            throw new DomainException("Falta UF oficial para {$date}.");
+        }
+
+        return (string) $uf['value'];
     }
 
     public function latestOfficialUfOnOrBefore(int $companyId, CarbonInterface|string $date): ?array

@@ -116,6 +116,26 @@ class DashboardUfFallbackTest extends TestCase
         $this->assertFalse($info['is_exact']);
     }
 
+    public function test_uf_value_uses_latest_official_fallback_when_exact_day_is_missing(): void
+    {
+        $company = Company::query()->create([
+            'code' => 'CMP-UF3',
+            'name' => 'Empresa UF 3',
+            'status' => 'active',
+        ]);
+
+        UfValue::query()->create([
+            'company_id' => $company->id,
+            'value_date' => '2026-08-09',
+            'value' => 40840.11,
+            'active' => true,
+        ]);
+
+        $service = app(LegalParameterService::class);
+
+        $this->assertSame('40840.1100', $service->ufValue($company->id, '2026-08-10'));
+    }
+
     private function seedDashboardBase(): User
     {
         $company = Company::query()->create([

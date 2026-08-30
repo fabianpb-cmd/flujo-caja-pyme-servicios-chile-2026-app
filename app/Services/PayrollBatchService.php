@@ -81,16 +81,7 @@ class PayrollBatchService
             } elseif ($existing) {
                 $projectId ??= $existing->project_id;
             }
-            $data = array_merge(
-                array_filter(
-                    $this->payroll->payrollDefaultValues($person, $period, $projectId),
-                    static fn (mixed $value): bool => $value !== null
-                ),
-                $this->adjustmentData($companyId, $person->id, $period),
-            );
-            if ($existing) {
-                $data = array_merge($data, $this->payroll->manualOverrideInputs($existing));
-            }
+            $data = $this->adjustmentData($companyId, $person->id, $period);
             $notes = [];
 
             if (! $isHourly && $assignments->count() > 1) {
@@ -98,6 +89,21 @@ class PayrollBatchService
             }
 
             try {
+                $data = array_merge(
+                    array_filter(
+                        $this->payroll->payrollDefaultValues($person, $period, $projectId),
+                        static fn (mixed $value): bool => $value !== null
+                    ),
+                    $data,
+                );
+                if ($existing) {
+                    $manualOverrides = $this->payroll->manualOverrideInputs($existing);
+                    unset($manualOverrides['hours_approved']);
+
+                    // Keep historical monetary overrides, but always refresh approved hours from Horas.
+                    $data = array_merge($data, $manualOverrides);
+                }
+
                 $calculation = $this->payroll->calculate($person, $period, $data);
                 $calculationStatus = ($calculation['calculation_status'] ?? 'OK') === 'REQUIERE_REVISION' || ! empty($notes)
                     ? 'REQUIERE_REVISION'

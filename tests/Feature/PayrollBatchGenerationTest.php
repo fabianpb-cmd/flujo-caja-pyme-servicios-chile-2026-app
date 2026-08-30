@@ -288,6 +288,45 @@ class PayrollBatchGenerationTest extends TestCase
         $this->assertStringNotContainsString('Tarifa de remuneración por hora no configurada', (string) $record->calculation_notes);
     }
 
+    public function test_hourly_payroll_uses_latest_official_uf_when_period_day_is_missing(): void
+    {
+        $person = $this->person([
+            'modality' => 'Honorarios por hora',
+            'monthly_value' => 0,
+            'hourly_value' => 1.00,
+            'hourly_rate_unit_type' => 'UF',
+            'employment_mode_id' => null,
+        ]);
+        $project = $this->project('PRY-HOURLY-UF-MISS');
+        $assignment = $this->assignment($person, $project, '2026-09-01', '2026-09-30', [
+            'hourly_value' => null,
+            'project_value' => null,
+        ]);
+
+        $this->approvedTimeEntry($person, $project, $assignment, '2026-09-01', 10, 0);
+        UfValue::query()->where('company_id', $this->company->id)->delete();
+        UfValue::query()->create([
+            'company_id' => $this->company->id,
+            'value_date' => '2026-08-31',
+            'value' => 41000,
+            'active' => true,
+        ]);
+
+        $summary = app(PayrollBatchService::class)->generate($this->company->id, '2026-09-01');
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->whereDate('period_date', '2026-09-01')->firstOrFail();
+
+        $this->assertSame(1, $summary['evaluated']);
+        $this->assertSame(1, $summary['generated']);
+        $this->assertSame(0, $summary['warnings']);
+        $this->assertSame(0, $summary['errors']);
+        $this->assertSame('OK', $record->calculation_status);
+        $this->assertSame('Borrador', $record->status);
+        $this->assertSame(41000.0, (float) $record->hourly_value);
+        $this->assertSame(410000.0, (float) $record->base_salary);
+        $this->assertStringNotContainsString('Falta UF oficial para 2026-09-01.', (string) $record->calculation_notes);
+    }
+
     public function test_hourly_payroll_with_multiple_assignments_in_same_project_stays_calculable_and_persists_the_project(): void
     {
         $person = $this->person([
@@ -452,7 +491,7 @@ class PayrollBatchGenerationTest extends TestCase
         $this->assertSame([], $overrides);
     }
 
-    public function test_recalculate_preserves_existing_manual_overrides_that_differ_from_automatic_sources(): void
+    public function test_recalculate_refreshes_hours_from_time_entries_while_preserving_other_manual_overrides(): void
     {
         $person = $this->person([
             'modality' => 'Honorarios por proyecto',
@@ -505,7 +544,7 @@ class PayrollBatchGenerationTest extends TestCase
 
         $this->assertSame(1, $summary['updated']);
         $this->assertSame(1, $summaryAgain['updated']);
-        $this->assertSame(12.0, (float) $record->hours_approved);
+        $this->assertSame(10.0, (float) $record->hours_approved);
         $this->assertSame(25000.0, (float) $record->hourly_value);
         $this->assertSame(5000000.0, (float) $record->project_value);
     }

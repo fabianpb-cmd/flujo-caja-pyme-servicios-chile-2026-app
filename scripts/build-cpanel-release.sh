@@ -135,7 +135,11 @@ validate_env_template() {
 
 validate_sql_dump() {
   local validator
-  validator="$(mktemp "${TMPDIR:-/tmp}/cpanel-sql-validate.XXXXXX.php")"
+  local profile="${BOOTSTRAP_PROFILE:-$release_mode}"
+  local validator_base
+  validator_base="$(mktemp "${TMPDIR:-/tmp}/cpanel-sql-validate.XXXXXX")"
+  validator="${validator_base}.php"
+  mv "$validator_base" "$validator"
 
   cat > "$validator" <<'PHP'
 <?php
@@ -146,9 +150,18 @@ if ($sql === false) {
     exit(1);
 }
 
-foreach (["Empresa Staging", "Jaime", "Emilio", "IRIS Consultor", "Empresa Demo"] as $forbidden) {
-    if (str_contains($sql, $forbidden)) {
-        fwrite(STDERR, "El dump SQL contiene datos demo o marcadores no permitidos: ".$forbidden.PHP_EOL);
+$profile = trim((string) getenv("BOOTSTRAP_PROFILE"));
+$forbidden = ["Jaime", "Emilio", "IRIS Consultor", "Empresa Demo"];
+
+if ($profile === "production") {
+    $forbidden[] = "Empresa Staging";
+} else {
+    $forbidden[] = "Empresa Producción";
+}
+
+foreach ($forbidden as $forbiddenString) {
+    if (str_contains($sql, $forbiddenString)) {
+        fwrite(STDERR, "El dump SQL contiene datos demo o marcadores no permitidos: ".$forbiddenString.PHP_EOL);
         exit(1);
     }
 }
@@ -164,7 +177,7 @@ if (str_contains($sql, '\\$2y\\$') || str_contains($sql, '\\$2b\\$') || str_cont
 }
 PHP
 
-  php "$validator" "$1"
+  BOOTSTRAP_PROFILE="$profile" php "$validator" "$1"
   rm -f "$validator"
 }
 

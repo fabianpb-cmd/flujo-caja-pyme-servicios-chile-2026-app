@@ -68,9 +68,16 @@ db_password="${DB_PASSWORD:-$(read_env DB_PASSWORD)}"
 db_name="${DB_DATABASE:-flujo_caja_staging_build}"
 bootstrap_admin_email="${BOOTSTRAP_ADMIN_EMAIL:-$default_admin_email}"
 bootstrap_admin_password="${BOOTSTRAP_ADMIN_PASSWORD:-}"
+bootstrap_admin_password_file="${BOOTSTRAP_ADMIN_PASSWORD_FILE:-$repo_root/storage/app/private/BOOTSTRAP_ADMIN_PASSWORD.txt}"
 
 if [ -z "$bootstrap_admin_password" ] || [ "$bootstrap_admin_password" = "DEFINE_THIS_OUTSIDE_GIT" ]; then
-  echo "BOOTSTRAP_ADMIN_PASSWORD debe definirse fuera de Git para generar el bootstrap SQL." >&2
+  if [ -f "$bootstrap_admin_password_file" ]; then
+    bootstrap_admin_password="$(tr -d '\r\n' < "$bootstrap_admin_password_file")"
+  fi
+fi
+
+if [ -z "$bootstrap_admin_password" ] || [ "$bootstrap_admin_password" = "DEFINE_THIS_OUTSIDE_GIT" ]; then
+  echo "BOOTSTRAP_ADMIN_PASSWORD debe definirse fuera de Git o en storage/app/private/BOOTSTRAP_ADMIN_PASSWORD.txt para generar el bootstrap SQL." >&2
   exit 1
 fi
 
@@ -104,7 +111,7 @@ seed_env=(
   BOOTSTRAP_COMPANY_CODE="${BOOTSTRAP_COMPANY_CODE:-$default_company_code}"
   BOOTSTRAP_ADMIN_NAME="${BOOTSTRAP_ADMIN_NAME:-$default_admin_name}"
   BOOTSTRAP_ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-$default_admin_email}"
-  BOOTSTRAP_ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-DEFINE_THIS_OUTSIDE_GIT}"
+  BOOTSTRAP_ADMIN_PASSWORD="$bootstrap_admin_password"
 )
 
 env "${seed_env[@]}" php artisan migrate:fresh --force
@@ -184,9 +191,18 @@ if ($sql === false) {
     exit(1);
 }
 
-foreach (["Empresa Staging", "Empresa Producción", "Jaime", "Emilio", "IRIS Consultor", "Empresa Demo"] as $forbidden) {
-    if (str_contains($sql, $forbidden)) {
-        fwrite(STDERR, "El dump SQL contiene datos demo o marcadores no permitidos: ".$forbidden.PHP_EOL);
+$profile = trim((string) getenv("BOOTSTRAP_PROFILE"));
+$forbidden = ["Jaime", "Emilio", "IRIS Consultor", "Empresa Demo"];
+
+if ($profile === "production") {
+    $forbidden[] = "Empresa Staging";
+} else {
+    $forbidden[] = "Empresa Producción";
+}
+
+foreach ($forbidden as $forbiddenString) {
+    if (str_contains($sql, $forbiddenString)) {
+        fwrite(STDERR, "El dump SQL contiene datos demo o marcadores no permitidos: ".$forbiddenString.PHP_EOL);
         exit(1);
     }
 }
@@ -201,7 +217,7 @@ if (str_contains($sql, '\\$2y\\$') || str_contains($sql, '\\$2b\\$') || str_cont
     exit(1);
 }
 PHP
-php "$sql_validator" "$sql_output"
+BOOTSTRAP_PROFILE="$bootstrap_profile" php "$sql_validator" "$sql_output"
 rm -f "$sql_validator"
 
 echo "$sql_output"
