@@ -41,9 +41,105 @@ trap cleanup EXIT
 
 mkdir -p "$dist_root" "$private_root" "$public_root"
 
-command -v rsync >/dev/null 2>&1 || {
-  echo "Falta rsync en el sistema." >&2
-  exit 1
+copy_private_tree() {
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a \
+      --exclude '.git/' \
+      --exclude '.DS_Store' \
+      --exclude '.env' \
+      --exclude '.env.*' \
+      --exclude 'dist/' \
+      --exclude '.phpunit.result.cache' \
+      --exclude 'README.md' \
+      --exclude 'CLAUDE.md' \
+      --exclude 'docs/' \
+      --exclude 'node_modules/' \
+      --exclude 'tests/' \
+      --exclude 'phpunit.xml' \
+      --exclude 'phpunit.mysql.xml' \
+      --exclude 'scripts/' \
+      --exclude 'public/' \
+      --exclude 'database/*.sqlite' \
+      --exclude 'storage/logs/*' \
+      --exclude 'storage/app/import_report.json' \
+      --exclude 'storage/app/private/import_report.json' \
+      --exclude 'storage/app/private/uat_credentials.json' \
+      --exclude 'storage/app/private/UAT_ADMIN_PASSWORD_FALLBACK.txt' \
+      --exclude 'database/seeders/DemoDataSeeder.php' \
+      --exclude 'bootstrap/cache/*.php' \
+      "$repo_root/" "$private_root/"
+
+    return
+  fi
+
+  (
+    cd "$repo_root"
+    tar -cf - \
+      --exclude='./.git' \
+      --exclude='./.DS_Store' \
+      --exclude='*/.DS_Store' \
+      --exclude='./.env' \
+      --exclude='./.env.*' \
+      --exclude='./dist' \
+      --exclude='./.phpunit.result.cache' \
+      --exclude='./README.md' \
+      --exclude='./CLAUDE.md' \
+      --exclude='./docs' \
+      --exclude='./node_modules' \
+      --exclude='./tests' \
+      --exclude='./phpunit.xml' \
+      --exclude='./phpunit.mysql.xml' \
+      --exclude='./scripts' \
+      --exclude='./public' \
+      --exclude='./database/*.sqlite' \
+      --exclude='./storage/logs/*' \
+      --exclude='./storage/app/import_report.json' \
+      --exclude='./storage/app/private/import_report.json' \
+      --exclude='./storage/app/private/uat_credentials.json' \
+      --exclude='./storage/app/private/UAT_ADMIN_PASSWORD_FALLBACK.txt' \
+      --exclude='./database/seeders/DemoDataSeeder.php' \
+      --exclude='./bootstrap/cache/*.php' \
+      .
+  ) | (cd "$private_root" && tar -xf -)
+}
+
+create_zip() {
+  local source_dir="$1"
+  local zip_file="$2"
+  local php_zip_args=()
+
+  if ! php -r 'exit(class_exists("ZipArchive") ? 0 : 1);'; then
+    php_zip_args=(-d extension=zip)
+  fi
+
+  php "${php_zip_args[@]}" -r '
+    $source = rtrim($argv[1], "/\\");
+    $target = $argv[2];
+    $zip = new ZipArchive();
+    if ($zip->open($target, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        fwrite(STDERR, "No se pudo crear el ZIP: ".$target.PHP_EOL);
+        exit(1);
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    foreach ($iterator as $item) {
+        $path = $item->getPathname();
+        $relative = str_replace("\\", "/", substr($path, strlen($source) + 1));
+        if ($item->isDir()) {
+            $zip->addEmptyDir($relative);
+        } else {
+            $zip->addFile($path, $relative);
+        }
+    }
+
+    if (! $zip->close()) {
+        fwrite(STDERR, "No se pudo cerrar el ZIP: ".$target.PHP_EOL);
+        exit(1);
+    }
+  ' "$source_dir" "$zip_file"
 }
 
 validate_dotenv_template() {
@@ -240,31 +336,7 @@ find "$dist_root" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 validate_env_template
 validate_public_index_template
 
-rsync -a \
-  --exclude '.git/' \
-  --exclude '.DS_Store' \
-  --exclude '.env' \
-  --exclude '.env.*' \
-  --exclude 'dist/' \
-  --exclude '.phpunit.result.cache' \
-  --exclude 'README.md' \
-  --exclude 'CLAUDE.md' \
-  --exclude 'docs/' \
-  --exclude 'node_modules/' \
-  --exclude 'tests/' \
-  --exclude 'phpunit.xml' \
-  --exclude 'phpunit.mysql.xml' \
-  --exclude 'scripts/' \
-  --exclude 'public/' \
-  --exclude 'database/*.sqlite' \
-  --exclude 'storage/logs/*' \
-  --exclude 'storage/app/import_report.json' \
-  --exclude 'storage/app/private/import_report.json' \
-  --exclude 'storage/app/private/uat_credentials.json' \
-  --exclude 'storage/app/private/UAT_ADMIN_PASSWORD_FALLBACK.txt' \
-  --exclude 'database/seeders/DemoDataSeeder.php' \
-  --exclude 'bootstrap/cache/*.php' \
-  "$repo_root/" "$private_root/"
+copy_private_tree
 
 find "$private_root/database" -name '*.sqlite' -delete
 find "$private_root" -name '.DS_Store' -delete
@@ -320,9 +392,18 @@ cp "$repo_root/$env_template" "$dist_root/$env_template"
 
 rm -f "$dist_root/app-private.zip" "$dist_root/public.zip" "$checksums_file" "$manifest_file"
 
-(cd "$private_root" && zip -qr "$dist_root/app-private.zip" .)
+if command -v zip >/dev/null 2>&1; then
+  (cd "$private_root" && zip -qr "$dist_root/app-private.zip" .)
+else
+  create_zip "$private_root" "$dist_root/app-private.zip"
+fi
 
-rsync -a "$repo_root/public/" "$public_root/"
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a "$repo_root/public/" "$public_root/"
+else
+  cp -a "$repo_root/public/." "$public_root/"
+  rm -rf "$public_root/storage"
+fi
 cat > "$public_root/index.php" <<PHP
 <?php
 
@@ -344,7 +425,11 @@ require '$app_root/vendor/autoload.php';
 \$app->handleRequest(Request::capture());
 PHP
 
-(cd "$public_root" && zip -qr "$dist_root/public.zip" .)
+if command -v zip >/dev/null 2>&1; then
+  (cd "$public_root" && zip -qr "$dist_root/public.zip" .)
+else
+  create_zip "$public_root" "$dist_root/public.zip"
+fi
 
 DIST_ROOT="$dist_root" SQL_OUTPUT_NAME="$sql_output_name" "$script_dir/build-staging-bootstrap-db.sh" >/dev/null
 
