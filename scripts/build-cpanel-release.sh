@@ -287,6 +287,12 @@ PHP
 }
 
 generate_manifest() {
+  local git_commit
+  if ! git_commit="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null)" || [ -z "$git_commit" ]; then
+    echo "No se pudo determinar el commit Git para manifest.json." >&2
+    exit 1
+  fi
+
   php -r '
     $repoRoot = $argv[1];
     $manifest = $argv[2];
@@ -296,8 +302,8 @@ generate_manifest() {
     $publicZip = $argv[6];
     $sqlName = $argv[7];
     $requiresDbMigration = $argv[8] === "true";
+    $gitCommit = $argv[9];
 
-    $gitCommit = trim((string) shell_exec("cd ".escapeshellarg($repoRoot)." && git rev-parse --short HEAD 2>/dev/null"));
     $composer = json_decode((string) file_get_contents($repoRoot."/composer.json"), true);
     $lock = json_decode((string) file_get_contents($repoRoot."/composer.lock"), true);
     $laravelVersion = null;
@@ -315,7 +321,7 @@ generate_manifest() {
         "release_id" => $releaseId,
         "timestamp" => gmdate(DATE_ATOM),
         "mode" => $mode,
-        "git_commit" => $gitCommit !== "" ? $gitCommit : null,
+        "git_commit" => $gitCommit,
         "php_min" => "8.4",
         "laravel_version" => $laravelVersion,
         "migrations" => $migrationFiles,
@@ -328,7 +334,7 @@ generate_manifest() {
     ];
 
     file_put_contents($manifest, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL);
-  ' "$repo_root" "$manifest_file" "$release_id" "$release_mode" "$dist_root/app-private.zip" "$dist_root/public.zip" "$sql_output_name" "$requires_db_migration"
+  ' "$repo_root" "$manifest_file" "$release_id" "$release_mode" "$dist_root/app-private.zip" "$dist_root/public.zip" "$sql_output_name" "$requires_db_migration" "$git_commit"
 }
 
 find "$dist_root" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
