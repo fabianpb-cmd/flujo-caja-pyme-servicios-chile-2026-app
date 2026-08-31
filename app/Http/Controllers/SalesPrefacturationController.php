@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\SalesPrefacturationService;
+use App\Support\PeriodInput;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -68,14 +69,9 @@ class SalesPrefacturationController extends Controller
 
     private function period(string $raw): Carbon
     {
-        foreach (['m/Y', 'Y-m', 'd/m/Y', 'Y-m-d'] as $format) {
-            try {
-                $date = Carbon::createFromFormat($format, trim($raw));
-                if ($date !== false) {
-                    return $date->startOfMonth();
-                }
-            } catch (\Throwable) {
-            }
+        $period = PeriodInput::parse($raw);
+        if ($period) {
+            return $period;
         }
 
         abort(422, 'Período inválido. Use mm/aaaa.');

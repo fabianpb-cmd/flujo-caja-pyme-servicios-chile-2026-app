@@ -440,6 +440,47 @@ class PayrollBatchGenerationTest extends TestCase
         $this->assertSame(1, PayrollRecord::query()->count());
     }
 
+    public function test_route_recalculates_drafts_for_the_exact_requested_month(): void
+    {
+        $person = $this->person(['monthly_value' => 1000000]);
+
+        $september = PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'REM-SEP',
+            'person_id' => $person->id,
+            'period_date' => '2026-09-01',
+            'gross_amount' => 123,
+            'net_pay' => 123,
+            'employer_cost' => 123,
+            'status' => 'Borrador',
+        ]);
+
+        $october = PayrollRecord::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'REM-OCT',
+            'person_id' => $person->id,
+            'period_date' => '2026-10-01',
+            'gross_amount' => 456,
+            'net_pay' => 456,
+            'employer_cost' => 456,
+            'status' => 'Borrador',
+        ]);
+
+        $response = $this->actingAs($this->admin)->post(route('payroll.recalculate-drafts'), ['period' => '09/2026']);
+
+        $response->assertRedirect(route('operational.index', ['resource' => 'payroll-records', 'period' => '09/2026']));
+        $response->assertSessionHas('payroll_batch_summary', function (array $summary): bool {
+            return ($summary['period_date'] ?? null) === '2026-09-01';
+        });
+
+        $this->assertNotSame(123.0, (float) $september->fresh()->gross_amount);
+        $this->assertSame(456.0, (float) $october->fresh()->gross_amount);
+        $this->assertSame('2026-09-01', $september->fresh()->period_date?->toDateString());
+        $this->assertSame('2026-10-01', $october->fresh()->period_date?->toDateString());
+        $this->assertSame(1, PayrollRecord::query()->where('person_id', $person->id)->whereDate('period_date', '2026-09-01')->count());
+        $this->assertSame(1, PayrollRecord::query()->where('person_id', $person->id)->whereDate('period_date', '2026-10-01')->count());
+    }
+
     public function test_manual_override_inputs_ignore_historical_values_that_match_automatic_sources(): void
     {
         $person = $this->person([

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\PayrollBatchService;
+use App\Support\PeriodInput;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -41,15 +42,9 @@ class PayrollBatchController extends Controller
             'period' => ['required', 'string', 'max:10'],
         ]);
 
-        $raw = trim((string) $request->input('period'));
-        foreach (['m/Y', 'Y-m', 'd/m/Y', 'Y-m-d'] as $format) {
-            try {
-                $date = Carbon::createFromFormat($format, $raw);
-                if ($date !== false) {
-                    return $date->startOfMonth();
-                }
-            } catch (\Throwable) {
-            }
+        $period = PeriodInput::parse($request->input('period'));
+        if ($period) {
+            return $period;
         }
 
         abort(422, 'Período inválido. Use mm/aaaa.');
