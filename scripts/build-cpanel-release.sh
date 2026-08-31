@@ -12,6 +12,15 @@ case "$release_mode" in
     ;;
 esac
 
+requires_db_migration="${REQUIRES_DB_MIGRATION:-$( [ "$release_mode" = "production" ] && echo true || echo false )}"
+case "$requires_db_migration" in
+  true|false) ;;
+  *)
+    echo "REQUIRES_DB_MIGRATION debe ser true o false" >&2
+    exit 1
+    ;;
+esac
+
 dist_root="$repo_root/dist/cpanel-$release_mode"
 temp_root="$(mktemp -d "${TMPDIR:-/tmp}/cpanel-release.XXXXXX")"
 private_root="$temp_root/app-private"
@@ -223,7 +232,7 @@ generate_manifest() {
     ];
 
     file_put_contents($manifest, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL);
-  ' "$repo_root" "$manifest_file" "$release_id" "$release_mode" "$dist_root/app-private.zip" "$dist_root/public.zip" "$sql_output_name" "$( [ "$release_mode" = "production" ] && echo true || echo false )"
+  ' "$repo_root" "$manifest_file" "$release_id" "$release_mode" "$dist_root/app-private.zip" "$dist_root/public.zip" "$sql_output_name" "$requires_db_migration"
 }
 
 find "$dist_root" -mindepth 1 -maxdepth 1 -exec rm -rf {} +

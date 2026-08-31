@@ -324,7 +324,7 @@ class MySqlCriticalTest extends TestCase
             'subtotal_original' => 280000,
             'subtotal_clp' => 280000,
         ]);
-        PayrollRecord::query()->create([
+        $payroll = PayrollRecord::query()->create([
             'company_id' => $this->company->id,
             'code' => 'REM-UAT-MYSQL',
             'person_id' => $person->id,
@@ -335,6 +335,7 @@ class MySqlCriticalTest extends TestCase
             'net_pay' => 500000,
             'status' => 'Pendiente',
         ]);
+        $payroll->timeEntries()->attach($timeEntry->id);
         PayrollAdjustment::query()->create([
             'company_id' => $this->company->id,
             'person_id' => $person->id,
@@ -407,10 +408,7 @@ class MySqlCriticalTest extends TestCase
         $this->artisan('uat:clear-data', ['--force' => true])->assertExitCode(0);
 
         foreach ([
-            'clients',
-            'projects',
-            'people',
-            'project_assignments',
+            'payroll_record_time_entries',
             'time_entries',
             'sales_document_time_entries',
             'payroll_records',
@@ -428,6 +426,10 @@ class MySqlCriticalTest extends TestCase
 
         $this->assertGreaterThan(0, Company::count());
         $this->assertGreaterThan(0, User::query()->count());
+        $this->assertTrue(Client::query()->whereKey($client->id)->exists());
+        $this->assertTrue(Project::query()->whereKey($project->id)->exists());
+        $this->assertTrue(Person::query()->whereKey($person->id)->exists());
+        $this->assertTrue(ProjectAssignment::query()->whereKey($assignment->id)->exists());
         $this->assertGreaterThan(0, Currency::count());
         $this->assertGreaterThan(0, LegalParameter::count());
         $this->assertGreaterThan(0, UfValue::count());

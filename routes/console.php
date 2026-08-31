@@ -1,10 +1,10 @@
 <?php
 
+use App\Services\Import\FinanceExcelImporter;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use App\Services\Import\FinanceExcelImporter;
 use Symfony\Component\Console\Command\Command;
 
 Artisan::command('inspire', function () {
@@ -44,18 +44,14 @@ Artisan::command('uat:clear-data {--force : Omite la confirmacion interactiva}',
     }
 
     $groups = [
-        'Clientes' => ['clients'],
-        'Proyectos' => ['projects'],
-        'Personal' => ['people'],
-        'Asignaciones/Horas' => ['project_assignments', 'time_entries', 'sales_document_time_entries'],
-        'Remuneraciones' => ['payroll_adjustments', 'payroll_records'],
+        'Horas' => ['time_entries', 'sales_document_time_entries'],
+        'Remuneraciones' => ['payroll_record_time_entries', 'payroll_adjustments', 'payroll_records'],
         'Ventas/Gastos/Movimientos' => ['cash_movements', 'sales_documents', 'expense_documents', 'legal_obligations'],
         'Cierres/Presupuestos/Auditoria' => ['monthly_closures', 'budgets', 'audit_logs'],
-        'Tesoreria' => ['cash_accounts'],
-        'Demo managers' => ['project_managers'],
     ];
 
     $order = [
+        'payroll_record_time_entries',
         'sales_document_time_entries',
         'payroll_adjustments',
         'cash_movements',
@@ -67,50 +63,29 @@ Artisan::command('uat:clear-data {--force : Omite la confirmacion interactiva}',
         'expense_documents',
         'payroll_records',
         'time_entries',
-        'project_assignments',
-        'projects',
-        'people',
-        'clients',
-        'cash_accounts',
-        'project_managers',
     ];
 
     $deleted = [];
     $total = 0;
 
-    $driver = DB::getDriverName();
-
-    try {
-        if ($driver === 'mysql') {
-            DB::statement('SET FOREIGN_KEY_CHECKS=0');
-        } elseif ($driver === 'sqlite') {
-            DB::statement('PRAGMA foreign_keys = OFF');
-        }
-
-        DB::transaction(function () use ($order, &$deleted, &$total): void {
-            foreach ($order as $table) {
-                if (! Schema::hasTable($table)) {
-                    continue;
-                }
-
-                $count = (int) DB::table($table)->count();
-                if ($count === 0) {
-                    $deleted[$table] = 0;
-                    continue;
-                }
-
-                DB::table($table)->delete();
-                $deleted[$table] = $count;
-                $total += $count;
+    DB::transaction(function () use ($order, &$deleted, &$total): void {
+        foreach ($order as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
             }
-        });
-    } finally {
-        if ($driver === 'mysql') {
-            DB::statement('SET FOREIGN_KEY_CHECKS=1');
-        } elseif ($driver === 'sqlite') {
-            DB::statement('PRAGMA foreign_keys = ON');
+
+            $count = (int) DB::table($table)->count();
+            if ($count === 0) {
+                $deleted[$table] = 0;
+
+                continue;
+            }
+
+            DB::table($table)->delete();
+            $deleted[$table] = $count;
+            $total += $count;
         }
-    }
+    });
 
     $this->info("Datos operacionales eliminados: {$total} registros");
 

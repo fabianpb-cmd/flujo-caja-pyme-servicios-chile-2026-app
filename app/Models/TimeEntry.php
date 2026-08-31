@@ -9,6 +9,7 @@ use App\Services\HourlyRateService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Str;
 
 class TimeEntry extends Model
 {
@@ -17,6 +18,15 @@ class TimeEntry extends Model
     use HasFunctionalCode;
 
     protected $guarded = ['company_id', 'code', 'client_id', 'assignment_id', 'hourly_value', 'calculated_amount'];
+
+    protected static function booted(): void
+    {
+        static::creating(function (TimeEntry $entry): void {
+            if (blank($entry->period_batch_id)) {
+                $entry->period_batch_id = (string) Str::uuid();
+            }
+        });
+    }
 
     protected function casts(): array
     {
