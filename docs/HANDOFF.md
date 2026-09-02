@@ -611,3 +611,59 @@ Después de cerrar UAT:
 - No repetir trabajo que ya pasó.
 - Diagnosticar con evidencia antes de modificar código.
 - Para Codex, recomendar siempre modelo + esfuerzo y priorizar menor gasto de créditos sin comprometer la tarea.
+- Para tareas acotadas, preferir GPT-5.4 Mini + Bajo/Medio; escalar solo ante investigación realmente compleja.
+
+## 20. Checkpoint ajuste build staging Windows
+
+Estado confirmado:
+- fix payroll integrado y pusheado en `origin/main`;
+- HEAD integrado antes del ajuste de build: `4622b71f5455b30a9cf75cc90c5eb8f338d1be9d`;
+- contiene documentación HANDOFF remota y el listener `payrollPeriodInput?.addEventListener('input', syncPayrollProjects);`;
+- tests dirigidos post-integración PASS:
+  - `PayrollTimeEntryTraceTest`: 10 tests / 88 assertions;
+  - `OperationalUiTest --filter=payroll_project_options_and_backend_require_assignment_for_period`: 1 test / 22 assertions.
+
+Diagnóstico del build staging en Windows/Git Bash:
+- `unzip -Z1 dist/cpanel-staging/app-private.zip`: PASS, ~1.6 s;
+- `unzip -Z1 dist/cpanel-staging/public.zip`: PASS, ~0.5 s;
+- `assert_zip_contains`: PASS, ~0.5 s por assert observado;
+- `assert_zip_not_contains`: PASS, ~0.7 s observado para `app-private.zip`;
+- causa del hang: `scan_zip_for_forbidden_strings()` abría `app-private.zip` una vez por cada archivo textual y hacía `unzip -p ... | grep ...`; con miles de archivos de `vendor/`, el scan completo no terminó dentro de 90 s (`timeout`, code 124);
+- medición de muestra previa: 200 archivos textuales tardaron ~13.2 s;
+- no se confirmó problema en `assert_zip_not_contains`.
+
+Ajuste de build:
+- archivo: `scripts/build-cpanel-release.sh`;
+- se mantiene el mismo objetivo de seguridad y los mismos patrones prohibidos:
+  - `/Users/`;
+  - `/Applications/`;
+  - `127.0.0.1:8000`;
+  - `/private/var/folders/`;
+  - `/var/folders/`;
+- se mantienen las extensiones textuales escaneadas:
+  - `.php`, `.blade.php`, `.json`, `.xml`, `.txt`, `.md`, `.css`, `.js`, `.html`, `.htaccess`, `.env`, `.sql`;
+- implementación nueva: PHP `ZipArchive` abre cada ZIP una sola vez, itera entradas textuales y busca los mismos strings prohibidos sin extraer al workspace permanente;
+- se conserva fallback `php -d extension=zip` cuando `ZipArchive` no está cargado por defecto en Windows/Git Bash.
+
+Medición después del ajuste:
+- `app-private.zip`: 7.519 entradas textuales escaneadas, PASS, ~1 s;
+- `public.zip`: 4 entradas textuales escaneadas, PASS, <1 s.
+
+Build staging completo con el ajuste:
+- resultado: PASS, exit code 0;
+- release generado observado: `cpanel-staging-20260901-222546`;
+- manifest observado antes de commitear el ajuste de build:
+  - `manifest.git_commit`: `4622b71f5455b30a9cf75cc90c5eb8f338d1be9d`;
+  - `requires_db_migration`: `true`;
+  - `bootstrap_sql`: `staging-bootstrap.sql`;
+- `app-private.zip`: PASS `unzip -t`;
+- `public.zip`: PASS `unzip -t`;
+- `checksums.txt`: PASS con `shasum -a 256 -c`;
+- secret scan: PASS dentro del build y verificado con la medición de la nueva implementación;
+- APP_ROOT en `public/index.php`: `/home/tdatcons/apps/flujo-caja-staging`.
+
+Importante:
+- después de commitear este ajuste de build y este HANDOFF, se debe ejecutar nuevamente el build completo para que `manifest.git_commit` apunte al SHA final del commit de build;
+- solo después de ese build final PASS y push confirmado corresponde crear tag `cpanel-staging-YYYYMMDD-HHMMSS`;
+- no desplegar automáticamente;
+- deploy posterior esperado para este fix funcional: subir `app-private.zip`, no subir `public.zip` salvo cambio inesperado en `public/`, no importar SQL/bootstrap, no limpiar BD, preservar `.env`, `storage/` y data QA.

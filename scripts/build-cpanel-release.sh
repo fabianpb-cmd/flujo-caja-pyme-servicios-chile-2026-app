@@ -201,18 +201,79 @@ assert_zip_not_contains() {
 scan_zip_for_forbidden_strings() {
   local zip_file="$1"
   local label="$2"
-  local patterns='(/Users/|/Applications/|127\.0\.0\.1:8000|/private/var/folders/|/var/folders/)'
+  local php_zip_args=()
 
-  while IFS= read -r entry; do
-    case "$entry" in
-      *.php|*.blade.php|*.json|*.xml|*.txt|*.md|*.css|*.js|*.html|*.htaccess|*.env|*.sql)
-        if unzip -p "$zip_file" "$entry" | LC_ALL=C grep -a -nE "$patterns" >/dev/null; then
-          echo "Ruta local bloqueante detectada en $label: $entry" >&2
-          exit 1
-        fi
-      ;;
-    esac
-  done < <(unzip -Z1 "$zip_file")
+  if ! php -r 'exit(class_exists("ZipArchive") ? 0 : 1);'; then
+    php_zip_args=(-d extension=zip)
+  fi
+
+  php "${php_zip_args[@]}" -r '
+    $zipFile = $argv[1];
+    $label = $argv[2];
+    $patterns = [
+        "/Users/",
+        "/Applications/",
+        "127.0.0.1:8000",
+        "/private/var/folders/",
+        "/var/folders/",
+    ];
+    $extensions = [
+        ".php",
+        ".blade.php",
+        ".json",
+        ".xml",
+        ".txt",
+        ".md",
+        ".css",
+        ".js",
+        ".html",
+        ".htaccess",
+        ".env",
+        ".sql",
+    ];
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipFile) !== true) {
+        fwrite(STDERR, "No se pudo abrir el ZIP para escaneo: ".$zipFile.PHP_EOL);
+        exit(1);
+    }
+
+    for ($index = 0; $index < $zip->numFiles; $index++) {
+        $entry = $zip->getNameIndex($index);
+        if (!is_string($entry) || str_ends_with($entry, "/")) {
+            continue;
+        }
+
+        $textual = false;
+        foreach ($extensions as $extension) {
+            if (str_ends_with($entry, $extension)) {
+                $textual = true;
+                break;
+            }
+        }
+
+        if (! $textual) {
+            continue;
+        }
+
+        $contents = $zip->getFromIndex($index);
+        if ($contents === false) {
+            fwrite(STDERR, "No se pudo leer entrada de ZIP para escaneo: ".$entry.PHP_EOL);
+            $zip->close();
+            exit(1);
+        }
+
+        foreach ($patterns as $pattern) {
+            if (str_contains($contents, $pattern)) {
+                fwrite(STDERR, "Ruta local bloqueante detectada en ".$label.": ".$entry.PHP_EOL);
+                $zip->close();
+                exit(1);
+            }
+        }
+    }
+
+    $zip->close();
+  ' "$zip_file" "$label"
 }
 
 validate_env_template() {
