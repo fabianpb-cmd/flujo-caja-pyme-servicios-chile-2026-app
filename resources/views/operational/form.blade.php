@@ -2081,6 +2081,7 @@
 
             personSelect?.addEventListener('change', syncPayrollUi);
             personSelect?.addEventListener('change', syncPayrollProjects);
+            payrollPeriodInput?.addEventListener('input', syncPayrollProjects);
             payrollPeriodInput?.addEventListener('change', syncPayrollProjects);
             syncPayrollUi();
             syncPayrollProjects();

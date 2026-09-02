@@ -3780,12 +3780,66 @@ class OperationalUiTest extends TestCase
             'end_date' => '2026-06-30',
         ]);
 
+        $hourlyPerson = Person::query()->create([
+            'company_id' => $company->id,
+            'code' => 'QA-A-PERSONA',
+            'first_names' => 'QA',
+            'paternal_surname' => 'Persona',
+            'name' => 'QA-A-PERSONA',
+            'modality' => 'Pago por hora',
+            'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
+            'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
+            'hourly_value' => 1000,
+        ]);
+
+        $hourlyProject = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $clientA->id,
+            'code' => 'QA-A-PROYECTO',
+            'name' => 'QA-A-PROYECTO',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+
+        ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $hourlyPerson->id,
+            'client_id' => $clientA->id,
+            'project_id' => $hourlyProject->id,
+            'code' => 'QA-A-ASIGNACION',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+            'start_date' => '2026-09-01',
+            'end_date' => '2026-09-30',
+        ]);
+
         $form = $this->actingAs($admin)->get(route('operational.create', 'payroll-records'));
         $form->assertOk();
         $form->assertSee('Seleccione una persona primero');
         $form->assertSee('Seleccione el período primero');
         $form->assertSee('No existen proyectos asignados para esta persona en el período.');
         $form->assertSee('data-assignment-ranges=', false);
+        $form->assertSee("payrollPeriodInput?.addEventListener('input', syncPayrollProjects);", false);
+
+        $html = $form->getContent();
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="utf-8" ?>'.$html);
+        libxml_clear_errors();
+        $xpath = new \DOMXPath($dom);
+
+        $periodInputs = $xpath->query('//input[@id="period_date"]');
+        $this->assertSame(1, $periodInputs->length);
+        $this->assertSame('text', $periodInputs->item(0)->getAttribute('type'));
+        $this->assertSame('', $periodInputs->item(0)->getAttribute('value'));
+
+        $projectOptions = $xpath->query('//select[@id="project_id"]/option[normalize-space(.)="QA-A-PROYECTO"]');
+        $this->assertSame(1, $projectOptions->length);
+
+        $assignmentRanges = json_decode($projectOptions->item(0)->getAttribute('data-assignment-ranges'), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertCount(1, $assignmentRanges);
+        $this->assertSame($hourlyPerson->id, $assignmentRanges[0]['person_id']);
+        $this->assertSame('2026-09-01', $assignmentRanges[0]['start_date']);
+        $this->assertSame('2026-09-30', $assignmentRanges[0]['end_date']);
 
         $valid = $this->actingAs($admin)->post(route('operational.store', 'payroll-records'), [
             'person_id' => $person->id,
