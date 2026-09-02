@@ -242,8 +242,10 @@ Síntoma:
 - Proyecto quedaba deshabilitado con “Seleccione el período primero”
 - guardar sin proyecto podía terminar en `500 Server Error`
 
-Causa raíz:
+Causa raíz inicial identificada:
 JS de remuneraciones asumía período `dd/mm/yyyy`, pero el input `period_date` es `date` y entrega `yyyy-mm-dd`.
+
+IMPORTANTE: después del fix de parsing ISO se comprobó en staging que el problema NO quedó completamente resuelto. Ver sección 17.
 
 ### 6.2 Responsable de Proyecto
 
@@ -269,7 +271,7 @@ el hook `data-time-entry-submit-label` estaba presente en formularios que no era
 
 ## 7. Commit de correcciones UAT
 
-Commit:
+Commit funcional:
 `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 
 Mensaje:
@@ -279,13 +281,15 @@ Correcciones:
 
 ### Remuneraciones
 - parsing compatible ISO/CL del período
-- habilitación correcta de Proyecto
+- habilitación pretendida de Proyecto
 - validación funcional de `project_id` cuando existen horas aprobadas por remunerar
 - evitar 500 por ese caso
 
 Test dirigido:
 `PayrollTimeEntryTraceTest`
 Resultado: PASS, 10 tests / 88 assertions.
+
+Estado posterior en browser staging: el parsing por sí solo NO resolvió el bloqueo del selector. Ver sección 17.
 
 ### Responsable Proyecto
 - `manager_id` confirmado persistente
@@ -325,7 +329,7 @@ No se ejecutó suite completa porque los tests dirigidos eran suficientes para l
 
 ## 8. Release staging actual
 
-HEAD del release funcional:
+HEAD del release funcional desplegado:
 `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 
 Build staging:
@@ -364,21 +368,25 @@ Tag staging:
 Tag apunta a:
 `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 
-Push confirmado:
-- `origin/main` -> `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
+Push funcional confirmado:
+- `origin/main` estuvo en `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 - tag remoto `cpanel-staging-20260901-210242` -> mismo SHA
+
+Después se agregaron commits SOLO de documentación HANDOFF en `main`; eso no cambia el código funcional desplegado.
 
 ## 9. Deploy staging de c2a3e97
 
-Deploy quedó PARCIALMENTE CONFIRMADO por UI.
+Deploy confirmado por comportamiento de UI.
 
 Evidencia de que el código nuevo está activo:
 - `Nuevo presupuesto` aparece en Gestión / Presupuesto
 - Responsable `Jaime Soriano` ahora aparece correctamente en proyectos
+- label Centros de costo corregido
+- labels Horas corregidos
 
 Para este update incremental NO era necesario volver a desplegar `public.zip`, porque entre `c24d3d3` y `c2a3e97` no cambió ningún archivo dentro de `public/`.
 
-El cambio funcional está en `app-private.zip`.
+El cambio funcional estaba en `app-private.zip`.
 
 Reglas mantenidas:
 - NO importar `staging-bootstrap.sql`
@@ -388,20 +396,12 @@ Reglas mantenidas:
 
 ## 10. Primera re-prueba después de deploy
 
-Codex reportó:
+Codex reportó inicialmente:
 
 Responsable proyecto: PASS
 - `QA-A-PROYECTO` y `QA-B-PROYECTO` muestran `Jaime Soriano` en listado y detalle.
 
-Inicialmente reportó FAIL/500 en:
-- `/operacion/budgets/create`
-- `/operacion/payroll-records/create`
-- `/operacion/cost-centers/create`
-- `/operacion/time-entries/create`
-
-También dejó Rentabilidad pendiente porque no pudo generar payroll.
-
-IMPORTANTE: estos 500 NO representan todavía una regresión funcional confirmada. El log de Laravel permitió identificar la causa exacta.
+Reportó 500 en URLs `/create`, pero luego se comprobó que esas URLs eran incorrectas y no representaban fallas funcionales reales.
 
 ## 11. Diagnóstico exacto del supuesto 500 común
 
@@ -441,102 +441,39 @@ Como existe una ruta posterior:
 Laravel interpreta literalmente `create` como `{record}` y llama `show(..., 'create')`. Como `show()` exige `int $record`, PHP produce TypeError y 500.
 
 Conclusión:
-- el supuesto bloqueo común de formularios NO está demostrado como bug funcional de `c2a3e97`;
-- la re-prueba de Codex usó rutas incorrectas (`/create` en vez de `/crear`);
-- se deben repetir SOLO esas re-pruebas usando navegación real de UI o `route('operational.create', ...)` / URL `/crear`.
+- los 500 de `/create` NO eran regresiones funcionales del release;
+- la re-prueba usó rutas incorrectas;
+- las pruebas reales se repitieron con `/crear` y navegación UI. Ver sección 17.
 
 Robustez pendiente opcional:
-sería razonable agregar una restricción numérica `whereNumber('record')` a las rutas show/edit/update/destroy para que una URL inválida como `/create` devuelva 404 y no 500. Esto es mejora de robustez, no necesariamente bloqueante para producción, porque la UI genera `/crear`.
+sería razonable agregar una restricción numérica `whereNumber('record')` a las rutas show/edit/update/destroy para que una URL inválida como `/create` devuelva 404 y no 500. Esto es hardening, no el blocker actual.
 
-## 12. Próximas re-pruebas EXACTAS
+## 12. Criterio de re-prueba después del diagnóstico de rutas
 
-NO repetir UAT completa.
+No repetir UAT completa.
 
-Reprobar únicamente con rutas correctas o clics reales de UI:
+Se definió reprobar únicamente:
+- Remuneración A
+- Remuneración B
+- Rentabilidad posterior
+- Presupuesto
+- Centros de costo label
+- Horas labels
 
-### A. Responsable Proyecto
-Estado actual: PASS.
-No repetir salvo dependencia inesperada.
-
-### B. Remuneración A
-Abrir desde UI Remuneraciones -> Nuevo o:
-`/operacion/payroll-records/crear`
-
-Usar:
-- `QA-A-PERSONA`
-- período de las horas existentes
-- `QA-A-PROYECTO`
-
-Validar:
-- formulario abre sin 500
-- Proyecto se habilita
-- proyecto correcto visible
-- guardar funciona
-- 10 h aprobadas consumidas
-- cálculo correcto
-- trazabilidad `payroll_record_time_entries`
-- sin 500
-
-### C. Remuneración B
-Abrir:
-`/operacion/payroll-records/crear`
-
-Usar:
-- `QA-B-PERSONA`
-- `QA-B-PROYECTO`
-- período correspondiente
-
-Validar:
-- 6 h aprobadas
-- `QA-B-AJUSTE` $10.000 incorporado
-- guardar sin 500
-- trazabilidad correcta
-
-### D. Rentabilidad
-Después de generar payroll A/B:
-- `QA-A-PROYECTO`
-- `QA-B-PROYECTO`
-
-deben incorporar costo laboral y dejar de mostrar costo laboral $0 por ausencia de payroll.
-Validar margen y porcentaje coherentes.
-
-### E. Presupuesto
-Desde `/gestion/presupuesto`, hacer clic en `Nuevo presupuesto`.
-La ruta correcta debe ser:
-`/operacion/budgets/crear`
-
-Crear UN presupuesto QA, guardar, verificar persistencia y navegación coherente.
-
-### F. Centros de costo
-Ruta correcta:
-`/operacion/cost-centers/crear`
-
-Confirmar botón `Guardar`, no `Registrar horas`.
-No crear otro registro si no es necesario.
-
-### G. Horas — regresión UI mínima
-Ruta correcta:
-`/operacion/time-entries/crear`
-
-Confirmar:
-- nueva carga -> `Registrar horas`
-- editar batch existente -> `Guardar carga`
-
-No crear nuevas horas si no es necesario.
+Responsable Proyecto quedó PASS y no se debía repetir.
 
 ## 13. Criterio de cierre UAT
 
-Si pasan:
+Para cerrar UAT deben pasar:
 - Remuneración A
 - Remuneración B
 - Rentabilidad con costo laboral
 - Presupuesto
 - Centro de costo label
 - Horas label/regresión
+- Responsable Proyecto se mantiene PASS
 
-y Responsable Proyecto se mantiene PASS,
-
-entonces:
+Si todo lo anterior pasa:
 - Escenario A end-to-end = PASS
 - Escenario B end-to-end = PASS
 - UAT COMPLETA FINAL = PASS
@@ -589,30 +526,169 @@ Cuando UAT quede PASS:
 - Para Codex, recomendar siempre modelo + esfuerzo y priorizar menor gasto de créditos sin comprometer la tarea.
 - Para tareas acotadas, preferir GPT-5.4 Mini + Bajo/Medio; escalar solo ante investigación realmente compleja.
 
-## 16. Estado actual resumido
+## 16. Commits de documentación HANDOFF
 
-CONFIRMADO:
-- `c2a3e97` pusheado a `origin/main`
-- tag remoto `cpanel-staging-20260901-210242` correcto
-- release build PASS
-- código nuevo visible parcialmente en staging
-- Responsable Proyecto PASS
-- `Nuevo presupuesto` visible
-- los 500 reportados sobre `/create` se deben a rutas incorrectas usadas en la re-prueba
+Primer checkpoint HANDOFF remoto:
+`1e2b740e4f7973f9d0aabc06b9693c34acfe1575`
 
-PENDIENTE:
-- repetir SOLO los create forms con `/crear` o desde la UI
-- Remuneración A
-- Remuneración B
-- Rentabilidad posterior
-- Presupuesto CRUD real
-- label Centros de costo
-- label Horas
-- decidir si se agrega `whereNumber('record')` como hardening para que rutas inválidas devuelvan 404
+Mensaje:
+`docs: add project handoff checkpoint`
 
-NO HACER AHORA:
-- UAT completa otra vez
-- limpiar BD
-- importar bootstrap
-- producción
-- cambios de código funcional sin antes repetir las re-pruebas con rutas correctas
+Ese commit agregó `docs/HANDOFF.md` y NO modifica código funcional del release staging.
+
+## 17. Segunda re-prueba puntual con rutas correctas — ESTADO ACTUAL
+
+Se repitieron las pruebas usando las rutas reales `/crear` y/o navegación UI.
+
+### 17.1 Responsable Proyecto
+
+Estado: PASS.
+
+`QA-A-PROYECTO` y `QA-B-PROYECTO` muestran `Jaime Soriano` en listado y detalle.
+
+No volver a repetir salvo dependencia nueva.
+
+### 17.2 Remuneración A — BLOCKER REAL
+
+Formulario:
+PASS.
+
+Ruta correcta:
+`/operacion/payroll-records/crear`
+
+Datos usados:
+- Persona: `QA-A-PERSONA`
+- Período: `2026-09-01`
+- Proyecto esperado: `QA-A-PROYECTO`
+
+Resultado:
+- `QA-A-PROYECTO` aparece en el `<select>` de Proyecto;
+- la opción sigue `hidden/disabled`;
+- el selector Proyecto completo permanece deshabilitado;
+- mensaje visible continúa en `Seleccione el período primero`;
+- no hay error visible ni 500;
+- NO se guardó un payroll inválido.
+
+Horas:
+no validables por bloqueo del selector.
+
+Resultado cálculo:
+no generado.
+
+Trazabilidad:
+no validable.
+
+Estado: FAIL.
+
+Conclusión importante:
+el fix de parsing ISO introducido en `c2a3e97` NO fue suficiente para habilitar correctamente proyectos en browser staging. El blocker de Remuneraciones es real y debe diagnosticarse en la lógica JS/estado del formulario, no en rutas.
+
+### 17.3 Remuneración B — BLOCKER REAL
+
+Formulario:
+PASS.
+
+Mismo comportamiento del selector de Proyecto que en A.
+
+Datos esperados:
+- `QA-B-PERSONA`
+- `QA-B-PROYECTO`
+- 6 h aprobadas
+- ajuste `QA-B-AJUSTE` $10.000
+
+No fue posible validar horas, ajuste, cálculo ni trazabilidad porque Proyecto no se habilita.
+
+Estado: FAIL.
+
+### 17.4 Rentabilidad
+
+Sigue pendiente por dependencia de Payroll.
+
+Valores observados:
+- QA-A costo laboral: `$0`
+- QA-A margen: `$900.000`, `90 %`
+- QA-B costo laboral: `$0`
+- QA-B margen: `$300.000`, `60 %`
+
+Estado: FAIL por dependencia de Remuneraciones.
+
+No interpretar estos márgenes como resultado final mientras no existan payroll A/B.
+
+### 17.5 Presupuesto
+
+Estado: PASS.
+
+Formulario: PASS.
+Creación: PASS.
+Persistencia: PASS.
+
+Se creó UN único presupuesto QA:
+- Proyecto: `QA-A-PROYECTO`
+- Escenario: Base
+- Período: `01/09/2026`
+- Ingreso presupuesto: `$1.000.000`
+- Personal presupuesto: `$400.000`
+- Otros directos: `$100.000`
+
+Aparece correctamente en Gestión -> Presupuesto.
+
+NO crear presupuestos QA adicionales salvo necesidad real.
+
+### 17.6 Centros de costo
+
+Estado: PASS.
+
+Label observado:
+`Guardar`
+
+La incidencia `Registrar horas` en mantenedor quedó resuelta.
+
+NO repetir.
+
+### 17.7 Horas — regresión UI
+
+Estado: PASS.
+
+Nueva carga:
+`Registrar horas`
+
+Editar carga:
+`Guardar carga`
+
+No se crearon horas adicionales solo para esta comprobación.
+
+NO repetir.
+
+### 17.8 UAT final actual
+
+UAT FINAL: FAIL.
+
+Apto para producción: NO.
+
+Único blocker funcional pendiente de la UAT original/correcciones:
+REMUNERACIONES — selector Proyecto permanece deshabilitado aunque Persona + Período correctos estén seleccionados y la opción de proyecto exista en el DOM.
+
+Rentabilidad queda pendiente exclusivamente como consecuencia de ese blocker.
+
+## 18. Próximo paso EXACTO
+
+NO repetir:
+- Responsable Proyecto
+- Presupuesto
+- Centros de costo
+- Horas labels
+- módulos completos ya PASS
+
+Siguiente trabajo:
+1. diagnosticar de forma dirigida el selector Proyecto de Remuneraciones;
+2. inspeccionar `resources/views/operational/form.blade.php` en la lógica `syncPayrollProjects`, `syncPayrollUi`, `projectAvailableForPayroll`, listeners de `period_date` y generación de `data-assignment-ranges`/datos del option;
+3. confirmar en browser/HTML cuál es exactamente el `value` real de `period_date` y qué contiene `data-assignment-ranges` para `QA-A-PROYECTO` y `QA-B-PROYECTO`;
+4. revisar si algún segundo bloque JS vuelve a deshabilitar Proyecto después del nuevo parser ISO;
+5. corregir SOLO la causa comprobada;
+6. agregar test dirigido que reproduzca el comportamiento real del formulario/JS en la medida posible y test backend de guardado/trazabilidad;
+7. hacer commit local, build/release staging nuevo, deploy incremental y repetir SOLO Remuneración A, Remuneración B y Rentabilidad.
+
+NO modificar Presupuesto/Responsable/Labels ya PASS.
+NO limpiar BD.
+NO importar bootstrap.
+NO producción hasta que payroll + rentabilidad pasen.
