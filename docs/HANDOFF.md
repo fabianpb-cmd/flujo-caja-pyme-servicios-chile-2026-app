@@ -271,7 +271,7 @@ el hook `data-time-entry-submit-label` estaba presente en formularios que no era
 
 ## 7. Commit de correcciones UAT
 
-Commit funcional:
+Commit funcional inicial:
 `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 
 Mensaje:
@@ -325,42 +325,13 @@ Archivos modificados por `c2a3e97`:
 - `tests/Feature/OperationalUiTest.php`
 - `tests/Feature/PayrollTimeEntryTraceTest.php`
 
-No se ejecutó suite completa porque los tests dirigidos eran suficientes para las correcciones acotadas.
+## 8. Release staging desplegado antes del fix final de payroll
 
-## 8. Release staging actual
-
-HEAD del release funcional desplegado:
+HEAD funcional desplegado:
 `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 
 Build staging:
 PASS, code 0.
-
-Directorio:
-`dist/cpanel-staging/`
-
-`manifest.git_commit`:
-`c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
-
-`requires_db_migration`:
-`true`
-
-`app-private.zip`:
-PASS, íntegro.
-
-`public.zip`:
-PASS, íntegro.
-
-Checksums:
-- app-private.zip OK
-- public.zip OK
-- staging-bootstrap.sql OK
-- manifest.json OK
-
-Secretos excluidos:
-PASS.
-
-APP_ROOT generado en `public/index.php`:
-`/home/tdatcons/apps/flujo-caja-staging`
 
 Tag staging:
 `cpanel-staging-20260901-210242`
@@ -368,118 +339,225 @@ Tag staging:
 Tag apunta a:
 `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 
-Push funcional confirmado:
-- `origin/main` estuvo en `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
-- tag remoto `cpanel-staging-20260901-210242` -> mismo SHA
-
-Después se agregaron commits SOLO de documentación HANDOFF en `main`; eso no cambia el código funcional desplegado.
-
-## 9. Deploy staging de c2a3e97
-
-Deploy confirmado por comportamiento de UI.
-
-Evidencia de que el código nuevo está activo:
-- `Nuevo presupuesto` aparece en Gestión / Presupuesto
-- Responsable `Jaime Soriano` ahora aparece correctamente en proyectos
+Deploy confirmado por comportamiento UI:
+- `Nuevo presupuesto` visible
+- Responsable `Jaime Soriano` visible correctamente
 - label Centros de costo corregido
 - labels Horas corregidos
 
-Para este update incremental NO era necesario volver a desplegar `public.zip`, porque entre `c24d3d3` y `c2a3e97` no cambió ningún archivo dentro de `public/`.
+No hubo cambios `public/` entre el release anterior y este commit, por lo que para ese update incremental bastó `app-private.zip`.
 
-El cambio funcional estaba en `app-private.zip`.
+## 9. Diagnóstico del 500 por URL incorrecta
 
-Reglas mantenidas:
-- NO importar `staging-bootstrap.sql`
-- NO limpiar BD
-- preservar `.env`
-- preservar `storage/`
+Las URLs `/operacion/{resource}/create` eran incorrectas. La ruta real es `/operacion/{resource}/crear`.
 
-## 10. Primera re-prueba después de deploy
-
-Codex reportó inicialmente:
-
-Responsable proyecto: PASS
-- `QA-A-PROYECTO` y `QA-B-PROYECTO` muestran `Jaime Soriano` en listado y detalle.
-
-Reportó 500 en URLs `/create`, pero luego se comprobó que esas URLs eran incorrectas y no representaban fallas funcionales reales.
-
-## 11. Diagnóstico exacto del supuesto 500 común
-
-Log staging, 2026-09-02 01:32:29:
-
-`OperationalCrudController::show(): Argument #3 ($record) must be of type int, string given`
-
-El dispatcher llamó:
-
-`OperationalCrudController->show(Request, 'cost-centers', 'create')`
-
-Esto demuestra que se navegó a una URL inválida en inglés:
-
-`/operacion/cost-centers/create`
-
-Pero la ruta real del proyecto es en español:
-
-`Route::get('/crear', 'create')->name('create');`
-
-El grupo operacional es:
-
-`/operacion/{resource}`
-
-Por lo tanto las URLs correctas son:
-
-- `/operacion/payroll-records/crear`
-- `/operacion/budgets/crear`
-- `/operacion/cost-centers/crear`
-- `/operacion/time-entries/crear`
-
-La URL `/operacion/{resource}/create` NO existe.
-
-Como existe una ruta posterior:
-
-`Route::get('/{record}', 'show')->name('show');`
-
-Laravel interpreta literalmente `create` como `{record}` y llama `show(..., 'create')`. Como `show()` exige `int $record`, PHP produce TypeError y 500.
+Como existe `Route::get('/{record}', 'show')`, Laravel interpretaba `create` como `{record}` y llamaba `show(..., 'create')`, produciendo TypeError porque `show()` exige `int $record`.
 
 Conclusión:
-- los 500 de `/create` NO eran regresiones funcionales del release;
-- la re-prueba usó rutas incorrectas;
-- las pruebas reales se repitieron con `/crear` y navegación UI. Ver sección 17.
+- esos 500 NO eran regresiones funcionales;
+- las re-pruebas correctas se hicieron con `/crear` / navegación UI.
 
-Robustez pendiente opcional:
-sería razonable agregar una restricción numérica `whereNumber('record')` a las rutas show/edit/update/destroy para que una URL inválida como `/create` devuelva 404 y no 500. Esto es hardening, no el blocker actual.
+Hardening opcional pendiente:
+agregar `whereNumber('record')` para que URLs inválidas devuelvan 404 en vez de 500. No es el blocker actual.
 
-## 12. Criterio de re-prueba después del diagnóstico de rutas
+## 10. Segunda re-prueba puntual con rutas correctas
 
-No repetir UAT completa.
+### Responsable Proyecto
+PASS. No repetir.
 
-Se definió reprobar únicamente:
-- Remuneración A
-- Remuneración B
-- Rentabilidad posterior
+### Remuneración A
+FAIL real:
+- formulario abre;
+- `QA-A-PROYECTO` existe en el select;
+- Proyecto permanece disabled;
+- placeholder sigue `Seleccione el período primero`;
+- no se guardó payroll inválido.
+
+### Remuneración B
+FAIL real por el mismo selector.
+
+### Rentabilidad
+Pendiente/fail por dependencia de payroll:
+- QA-A costo laboral `$0`, margen `$900.000`, `90 %`
+- QA-B costo laboral `$0`, margen `$300.000`, `60 %`
+
+### Presupuesto
+PASS.
+Presupuesto QA único creado:
+- `QA-A-PROYECTO`
+- Base
+- período `01/09/2026`
+- ingreso `$1.000.000`
+- personal `$400.000`
+- otros directos `$100.000`
+
+### Centros de costo
+PASS. Label `Guardar`.
+
+### Horas
+PASS.
+- nueva carga `Registrar horas`
+- edición `Guardar carga`
+
+UAT final en ese punto: FAIL.
+Apto producción: NO.
+
+## 11. Causa raíz definitiva del selector Proyecto en Remuneraciones
+
+`period_date` es realmente un `input type="text"`.
+
+El JS escuchaba únicamente `change` para ejecutar `syncPayrollProjects()`. Al ingresar/seleccionar la fecha, el valor podía quedar actualizado por `input` antes de que se produjera `change`, por lo que la sincronización seguía evaluando `payrollPeriodInput.value` como vacío.
+
+Observado:
+- `period_date type`: `text`
+- valor inicial: `""`
+- `2026-09-01` y `01/09/2026` son reconocidos por `parsePayrollPeriodDate()`
+- faltaba listener `input`
+- ya existía listener `change`
+- `assignment_ranges` de `QA-A-PROYECTO`: `person_id` correcto, `start_date: 2026-09-01`, `end_date: 2026-09-30`
+- condición que quedaba verdadera: `!payrollPeriodInput?.value`
+
+Fix mínimo:
+```js
+payrollPeriodInput?.addEventListener('input', syncPayrollProjects);
+```
+
+Se mantiene también el listener `change`.
+
+Archivos funcionales modificados por este fix:
+- `resources/views/operational/form.blade.php`
+- `tests/Feature/OperationalUiTest.php`
+
+Tests antes de integración:
+- payroll manual ISO + project: PASS 1 test / 10 assertions
+- OperationalUiTest dirigido: PASS 1 test / 22 assertions
+- PayrollTimeEntryTraceTest completo: PASS 10 tests / 88 assertions
+
+Commit local original antes de rebase:
+`832f8a369682806659a936d7779b73ee641bc7e0`
+
+## 12. Integración y push del fix definitivo
+
+Estado inicial local:
+`832f8a369682806659a936d7779b73ee641bc7e0`
+
+`origin/main` antes de integrar:
+`c2e7fc1c30d971b84d5507fe9dc138cbb5e89d0e`
+
+Estrategia:
+`git rebase origin/main`
+
+Conflictos:
+ninguno.
+
+HEAD final integrado:
+`4622b71f5455b30a9cf75cc90c5eb8f338d1be9d`
+
+Tests post-integración:
+- `PayrollTimeEntryTraceTest`: PASS, 10 tests / 88 assertions
+- `OperationalUiTest` dirigido: PASS, 1 test / 22 assertions
+
+Push:
+PASS.
+
+`origin/main` final confirmado:
+`4622b71f5455b30a9cf75cc90c5eb8f338d1be9d`
+
+HEAD local y `origin/main` coincidían exactamente en ese SHA al terminar la integración.
+
+## 13. Build staging del HEAD integrado — BLOQUEADO / NO CERTIFICABLE
+
+Se intentó build staging desde:
+`4622b71f5455b30a9cf75cc90c5eb8f338d1be9d`
+
+Primer intento:
+FAIL porque MySQL local no estaba activo.
+
+Se levantó MySQL en Laragon y se repitió.
+
+Segundo intento:
+- generó `app-private.zip` íntegro según `unzip -t`;
+- `app-private.zip` contiene el listener `input` del fix;
+- generó `public.zip` íntegro según `unzip -t`;
+- generó SQL;
+- APP_ROOT de `public.zip` confirmado como `/home/tdatcons/apps/flujo-caja-staging`;
+- el script quedó colgado durante validaciones posteriores, aparentemente alrededor de `unzip -Z1` / `grep`;
+- se interrumpió manualmente para no dejar proceso vivo.
+
+Resultado certificable:
+- exit code final: FAIL / `1`
+- `manifest.json`: NO generado
+- `checksums.txt`: NO generado
+- secret scan completo: NO confirmado
+- tag: NO creado
+- deploy: NO realizado
+
+IMPORTANTE:
+NO desplegar los artefactos de ese build interrumpido aunque los ZIP abran correctamente. Se exige build completo con exit code 0.
+
+## 14. Compare runtime del fix final
+
+Desde el release funcional desplegado `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6` hasta el HEAD integrado `4622b71f5455b30a9cf75cc90c5eb8f338d1be9d`:
+
+Cambio runtime funcional:
+- `resources/views/operational/form.blade.php`
+
+Cambio de test:
+- `tests/Feature/OperationalUiTest.php`
+
+Cambios docs no cuentan como runtime.
+
+Cambios en `public/`:
+ninguno.
+
+Por lo tanto, cuando el build quede PASS, el deploy esperado es:
+- subir `app-private.zip`;
+- NO re-subir `public.zip` salvo que un compare posterior contradiga lo anterior;
+- NO ejecutar SQL/migración nueva por este fix;
+- preservar `.env`;
+- preservar `storage/`;
+- preservar toda la data QA.
+
+## 15. Próximo paso EXACTO — diagnosticar solo el build colgado
+
+NO tocar de nuevo el fix de Remuneraciones mientras sus tests sigan PASS.
+NO repetir UAT.
+NO crear tag todavía.
+NO deploy.
+
+Siguiente trabajo:
+1. reproducir el build con MySQL local ya levantado;
+2. instrumentar o ejecutar por separado las validaciones posteriores a creación de ZIP para identificar exactamente cuál comando se queda colgado;
+3. revisar en particular `assert_zip_contains`, `assert_zip_not_contains`, `scan_zip_for_forbidden_strings`, `validate_sql_dump`, `generate_manifest` y checksums;
+4. medir cuál llamada a `unzip -Z1`, `unzip -p` o `grep` no termina en el entorno Windows/Git Bash;
+5. no desactivar controles de seguridad para “hacerlo pasar”;
+6. si el problema es solo una implementación ineficiente/no portable de una validación, corregir únicamente esa validación manteniendo el mismo control de seguridad;
+7. ejecutar build completo hasta exit code 0;
+8. verificar manifest.git_commit = HEAD integrado;
+9. verificar checksums, secret scan, ZIPs y APP_ROOT;
+10. crear tag staging únicamente después de build PASS;
+11. luego desplegar `app-private.zip` y reprobar SOLO Remuneración A, Remuneración B y Rentabilidad.
+
+## 16. Criterio de cierre UAT
+
+Si después del deploy del fix final:
+- Remuneración A PASS y consume 10 h aprobadas con trazabilidad;
+- Remuneración B PASS y consume 6 h aprobadas, incorpora `QA-B-AJUSTE` $10.000 y deja trazabilidad;
+- Rentabilidad deja costo laboral `$0` y refleja costos/márgenes coherentes;
+
+entonces:
+- Remuneraciones PASS
+- Rentabilidad PASS
+- Escenario A end-to-end PASS
+- Escenario B end-to-end PASS
+- UAT FINAL PASS
+- funcionalmente apto para producción: SI
+
+No repetir:
+- Responsable Proyecto
 - Presupuesto
-- Centros de costo label
+- Centros de costo
 - Horas labels
-
-Responsable Proyecto quedó PASS y no se debía repetir.
-
-## 13. Criterio de cierre UAT
-
-Para cerrar UAT deben pasar:
-- Remuneración A
-- Remuneración B
-- Rentabilidad con costo laboral
-- Presupuesto
-- Centro de costo label
-- Horas label/regresión
-- Responsable Proyecto se mantiene PASS
-
-Si todo lo anterior pasa:
-- Escenario A end-to-end = PASS
-- Escenario B end-to-end = PASS
-- UAT COMPLETA FINAL = PASS
-- Apto para producción = SI
-
-NO volver a probar módulos ya PASS:
 - Clientes
 - Personal
 - Asignaciones
@@ -495,7 +573,7 @@ NO volver a probar módulos ya PASS:
 - Escenarios
 - Flujo
 
-## 14. Producción — todavía pendiente
+## 17. Producción — todavía pendiente
 
 No hacer producción hasta cerrar UAT.
 
@@ -505,190 +583,31 @@ Cuando UAT quede PASS:
 - verificar plantilla/env production existente antes de asumir
 - backup antes del deploy
 - no importar bootstrap sobre una BD productiva existente con datos
-- usar migración incremental revisada en BD existente
+- usar migración incremental revisada si correspondiera
 - validar APP_ROOT real production
 - validar manifest/checksums/ZIP/secrets
-- smoke post-deploy mínimo:
-  - `/up`
-  - `/login`
-  - login
-  - 2FA
-  - dashboard
+- smoke post-deploy mínimo: `/up`, `/login`, login, 2FA, dashboard
 
-## 15. Reglas de continuidad y operación
+## 18. Pendiente técnico post-UAT — optimizar empaquetado staging
 
-- No repetir trabajo que ya pasó.
-- No ejecutar auditorías generales si el problema está acotado.
-- Diagnosticar con evidencia antes de modificar código.
-- Mantener `docs/HANDOFF.md` actualizado cada vez que perder el estado obligaría a repetir trabajo.
-- Registrar explícitamente CONFIRMADO / PARCIALMENTE CONFIRMADO / PENDIENTE.
+El build actual tarda porque reconstruye release completo: copia árbol privado, limpia temporales, ejecuta `composer install --no-dev --optimize-autoloader`, comprime `vendor/`, genera `public.zip`, regenera `staging-bootstrap.sql`, valida contenido, escanea ZIPs y calcula checksums.
+
+Decisión:
+NO optimizarlo durante el cierre del blocker actual, salvo que sea imprescindible corregir una validación que se queda colgada.
+
+Después de cerrar UAT:
+- diseñar modo rápido staging incremental, por ejemplo `CPANEL_FAST_BUILD=true`;
+- evitar regenerar bootstrap SQL cuando no hubo cambios de BD y el update no lo necesita;
+- evaluar reutilizar dependencias/artefactos seguros;
+- mantener build COMPLETO y todas las validaciones para release candidato final y producción;
+- medir tiempo antes/después.
+
+## 19. Reglas de continuidad y operación
+
+- `docs/HANDOFF.md` es la ÚNICA fuente de verdad entre cuentas.
+- Actualizarlo cada vez que perder el estado obligaría a repetir trabajo.
+- Registrar CONFIRMADO / PARCIALMENTE CONFIRMADO / PENDIENTE.
 - No guardar contraseñas, `.env`, APP_KEY, credenciales BD ni códigos 2FA.
+- No repetir trabajo que ya pasó.
+- Diagnosticar con evidencia antes de modificar código.
 - Para Codex, recomendar siempre modelo + esfuerzo y priorizar menor gasto de créditos sin comprometer la tarea.
-- Para tareas acotadas, preferir GPT-5.4 Mini + Bajo/Medio; escalar solo ante investigación realmente compleja.
-
-## 16. Commits de documentación HANDOFF
-
-Primer checkpoint HANDOFF remoto:
-`1e2b740e4f7973f9d0aabc06b9693c34acfe1575`
-
-Mensaje:
-`docs: add project handoff checkpoint`
-
-Ese commit agregó `docs/HANDOFF.md` y NO modifica código funcional del release staging.
-
-## 17. Segunda re-prueba puntual con rutas correctas — ESTADO ACTUAL
-
-Se repitieron las pruebas usando las rutas reales `/crear` y/o navegación UI.
-
-### 17.1 Responsable Proyecto
-
-Estado: PASS.
-
-`QA-A-PROYECTO` y `QA-B-PROYECTO` muestran `Jaime Soriano` en listado y detalle.
-
-No volver a repetir salvo dependencia nueva.
-
-### 17.2 Remuneración A — BLOCKER REAL
-
-Formulario:
-PASS.
-
-Ruta correcta:
-`/operacion/payroll-records/crear`
-
-Datos usados:
-- Persona: `QA-A-PERSONA`
-- Período: `2026-09-01`
-- Proyecto esperado: `QA-A-PROYECTO`
-
-Resultado:
-- `QA-A-PROYECTO` aparece en el `<select>` de Proyecto;
-- la opción sigue `hidden/disabled`;
-- el selector Proyecto completo permanece deshabilitado;
-- mensaje visible continúa en `Seleccione el período primero`;
-- no hay error visible ni 500;
-- NO se guardó un payroll inválido.
-
-Horas:
-no validables por bloqueo del selector.
-
-Resultado cálculo:
-no generado.
-
-Trazabilidad:
-no validable.
-
-Estado: FAIL.
-
-Conclusión importante:
-el fix de parsing ISO introducido en `c2a3e97` NO fue suficiente para habilitar correctamente proyectos en browser staging. El blocker de Remuneraciones es real y debe diagnosticarse en la lógica JS/estado del formulario, no en rutas.
-
-### 17.3 Remuneración B — BLOCKER REAL
-
-Formulario:
-PASS.
-
-Mismo comportamiento del selector de Proyecto que en A.
-
-Datos esperados:
-- `QA-B-PERSONA`
-- `QA-B-PROYECTO`
-- 6 h aprobadas
-- ajuste `QA-B-AJUSTE` $10.000
-
-No fue posible validar horas, ajuste, cálculo ni trazabilidad porque Proyecto no se habilita.
-
-Estado: FAIL.
-
-### 17.4 Rentabilidad
-
-Sigue pendiente por dependencia de Payroll.
-
-Valores observados:
-- QA-A costo laboral: `$0`
-- QA-A margen: `$900.000`, `90 %`
-- QA-B costo laboral: `$0`
-- QA-B margen: `$300.000`, `60 %`
-
-Estado: FAIL por dependencia de Remuneraciones.
-
-No interpretar estos márgenes como resultado final mientras no existan payroll A/B.
-
-### 17.5 Presupuesto
-
-Estado: PASS.
-
-Formulario: PASS.
-Creación: PASS.
-Persistencia: PASS.
-
-Se creó UN único presupuesto QA:
-- Proyecto: `QA-A-PROYECTO`
-- Escenario: Base
-- Período: `01/09/2026`
-- Ingreso presupuesto: `$1.000.000`
-- Personal presupuesto: `$400.000`
-- Otros directos: `$100.000`
-
-Aparece correctamente en Gestión -> Presupuesto.
-
-NO crear presupuestos QA adicionales salvo necesidad real.
-
-### 17.6 Centros de costo
-
-Estado: PASS.
-
-Label observado:
-`Guardar`
-
-La incidencia `Registrar horas` en mantenedor quedó resuelta.
-
-NO repetir.
-
-### 17.7 Horas — regresión UI
-
-Estado: PASS.
-
-Nueva carga:
-`Registrar horas`
-
-Editar carga:
-`Guardar carga`
-
-No se crearon horas adicionales solo para esta comprobación.
-
-NO repetir.
-
-### 17.8 UAT final actual
-
-UAT FINAL: FAIL.
-
-Apto para producción: NO.
-
-Único blocker funcional pendiente de la UAT original/correcciones:
-REMUNERACIONES — selector Proyecto permanece deshabilitado aunque Persona + Período correctos estén seleccionados y la opción de proyecto exista en el DOM.
-
-Rentabilidad queda pendiente exclusivamente como consecuencia de ese blocker.
-
-## 18. Próximo paso EXACTO
-
-NO repetir:
-- Responsable Proyecto
-- Presupuesto
-- Centros de costo
-- Horas labels
-- módulos completos ya PASS
-
-Siguiente trabajo:
-1. diagnosticar de forma dirigida el selector Proyecto de Remuneraciones;
-2. inspeccionar `resources/views/operational/form.blade.php` en la lógica `syncPayrollProjects`, `syncPayrollUi`, `projectAvailableForPayroll`, listeners de `period_date` y generación de `data-assignment-ranges`/datos del option;
-3. confirmar en browser/HTML cuál es exactamente el `value` real de `period_date` y qué contiene `data-assignment-ranges` para `QA-A-PROYECTO` y `QA-B-PROYECTO`;
-4. revisar si algún segundo bloque JS vuelve a deshabilitar Proyecto después del nuevo parser ISO;
-5. corregir SOLO la causa comprobada;
-6. agregar test dirigido que reproduzca el comportamiento real del formulario/JS en la medida posible y test backend de guardado/trazabilidad;
-7. hacer commit local, build/release staging nuevo, deploy incremental y repetir SOLO Remuneración A, Remuneración B y Rentabilidad.
-
-NO modificar Presupuesto/Responsable/Labels ya PASS.
-NO limpiar BD.
-NO importar bootstrap.
-NO producción hasta que payroll + rentabilidad pasen.
