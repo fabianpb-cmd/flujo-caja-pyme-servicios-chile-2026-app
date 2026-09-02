@@ -17,6 +17,7 @@ use App\Models\PayrollAdjustment;
 use App\Models\PayrollRecord;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
+use App\Models\ProjectManager;
 use App\Models\RecordStatus;
 use App\Models\SalesDocument;
 use App\Models\SalesDocumentTimeEntry;
@@ -4013,6 +4014,54 @@ class OperationalUiTest extends TestCase
         $invalid->assertOk();
         $invalid->assertSee('10/08/2026');
         $invalid->assertSee('31/08/2026');
+    }
+
+    public function test_project_manager_id_persists_and_renders_in_index_and_show(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+        [$client] = $this->clientProjectFixtures($company->id);
+        $manager = ProjectManager::query()->create([
+            'company_id' => $company->id,
+            'code' => 'PM-UAT',
+            'name' => 'Responsable UAT',
+            'active' => true,
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'projects'), [
+            'client_id' => $client->id,
+            'sales_currency_id' => $this->currency($company->id, 'CLP', 'Peso chileno')->id,
+            'name' => 'Proyecto Responsable UAT',
+            'manager_id' => $manager->id,
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+            'sale_net' => 100000,
+        ]);
+
+        $response->assertRedirect(route('operational.index', 'projects'));
+        $project = Project::query()->where('name', 'Proyecto Responsable UAT')->firstOrFail();
+        $this->assertSame($manager->id, $project->manager_id);
+
+        $this->actingAs($admin)
+            ->get(route('operational.index', 'projects'))
+            ->assertOk()
+            ->assertSee('Responsable UAT');
+
+        $this->actingAs($admin)
+            ->get(route('operational.show', ['projects', $project->id]))
+            ->assertOk()
+            ->assertSee('Responsable UAT');
+    }
+
+    public function test_generic_maintainer_form_does_not_use_time_entry_submit_label(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin();
+
+        $response = $this->actingAs($admin)->get(route('operational.create', 'cost-centers'));
+
+        $response->assertOk();
+        $this->assertMatchesRegularExpression('/<button[^>]*type="submit"[^>]*>\s*Guardar\s*<\/button>/', $response->getContent());
+        $this->assertDoesNotMatchRegularExpression('/<button[^>]*type="submit"[^>]*>\s*Registrar horas\s*<\/button>/', $response->getContent());
+        $this->assertDoesNotMatchRegularExpression('/<button[^>]*data-time-entry-submit-label[^>]*>/', $response->getContent());
     }
 
     public function test_operational_tables_render_actions_before_code_and_keep_them_sticky(): void

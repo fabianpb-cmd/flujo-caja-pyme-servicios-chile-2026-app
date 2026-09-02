@@ -226,6 +226,40 @@ class PayrollTimeEntryTraceTest extends TestCase
         $this->assertSame(12.0, (float) $record->hours_approved);
     }
 
+    public function test_manual_hourly_payroll_with_iso_period_and_project_consumes_approved_time_entries(): void
+    {
+        [$person, $project, $assignment] = $this->hourlyFixtures();
+        $first = $this->timeEntry($person, $project, $assignment, '2026-08-04', 4);
+        $second = $this->timeEntry($person, $project, $assignment, '2026-08-05', 6);
+
+        $missingProject = $this->actingAs($this->admin)
+            ->from(route('operational.create', 'payroll-records'))
+            ->post(route('operational.store', 'payroll-records'), [
+                'person_id' => $person->id,
+                'period_date' => '2026-08-01',
+            ]);
+
+        $missingProject->assertRedirect(route('operational.create', 'payroll-records'));
+        $missingProject->assertSessionHasErrors([
+            'project_id' => 'Seleccione un proyecto asignado para remunerar las horas aprobadas del período.',
+        ]);
+
+        $create = $this->actingAs($this->admin)->post(route('operational.store', 'payroll-records'), [
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'period_date' => '2026-08-01',
+            'amount_basis' => 'GROSS',
+        ]);
+
+        $create->assertRedirect(route('operational.index', 'payroll-records'));
+
+        $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
+        $this->assertSame($project->id, $record->project_id);
+        $this->assertSame(10.0, (float) $record->hours_approved);
+        $this->assertEqualsCanonicalizing([$first->id, $second->id], $record->timeEntries()->pluck('time_entries.id')->all());
+        $this->assertSame(2, PayrollRecordTimeEntry::query()->where('payroll_record_id', $record->id)->count());
+    }
+
     public function test_double_consumption_is_blocked_with_a_functional_message(): void
     {
         [$person, $project, $assignment] = $this->hourlyFixtures();

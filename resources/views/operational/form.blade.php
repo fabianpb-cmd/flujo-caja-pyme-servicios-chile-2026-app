@@ -1779,7 +1779,7 @@
 
     <div class="d-flex justify-content-end gap-2 mt-4">
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Cancelar</a>
-        <button type="submit" class="btn btn-primary" data-time-entry-submit-label>{{ $resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit) ? ($editing ? 'Guardar carga' : 'Registrar horas') : 'Guardar' }}</button>
+        <button type="submit" class="btn btn-primary" @if($resource === 'time-entries') data-time-entry-submit-label @endif>{{ $resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit) ? ($editing ? 'Guardar carga' : 'Registrar horas') : 'Guardar' }}</button>
     </div>
 </form>
 @endsection
@@ -1977,6 +1977,31 @@
             syncPayrollVisibility();
         };
 
+        const parsePayrollPeriodDate = (value) => {
+            const normalizedValue = String(value || '').trim();
+            if (normalizedValue === '') {
+                return null;
+            }
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) {
+                const date = new Date(`${normalizedValue}T00:00:00`);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+
+            const parts = normalizedValue.split(/[\/-]/);
+            if (parts.length !== 3) {
+                return null;
+            }
+
+            const [first, second, third] = parts;
+            const [day, month, year] = first.length === 4
+                ? [third, second, first]
+                : [first, second, third];
+            const date = new Date(`${year}-${month}-${day}T00:00:00`);
+
+            return Number.isNaN(date.getTime()) ? null : date;
+        };
+
         const projectAvailableForPayroll = (option) => {
             if (!payrollProjectSelect || !personSelect || !payrollPeriodInput) {
                 return true;
@@ -1991,12 +2016,10 @@
                 return false;
             }
 
-            const [day, month, year] = periodRaw.split('/');
-            if (!day || !month || !year) {
+            const periodDate = parsePayrollPeriodDate(periodRaw);
+            if (!periodDate) {
                 return false;
             }
-
-            const periodDate = new Date(`${year}-${month}-${day}T00:00:00`);
             const ranges = JSON.parse(option.dataset.assignmentRanges || '[]');
 
             return ranges.some((range) => {

@@ -173,6 +173,8 @@ class ManagementPagesTest extends TestCase
             ->assertOk()
             ->assertSee('Presupuesto')
             ->assertSee('real reconocido')
+            ->assertSee('Nuevo presupuesto')
+            ->assertSee(route('operational.create', 'budgets'), false)
             ->assertSee('Indirectos Ppto');
     }
 

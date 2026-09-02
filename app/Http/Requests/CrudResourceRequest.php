@@ -247,6 +247,10 @@ class CrudResourceRequest extends FormRequest
                 }
             }
 
+            if ($resource === 'payroll-records' && ! filled($this->input('project_id')) && filled($this->input('person_id')) && filled($this->input('period_date')) && $this->payrollProjectIsRequired()) {
+                $validator->errors()->add('project_id', 'Seleccione un proyecto asignado para remunerar las horas aprobadas del período.');
+            }
+
             if ($resource === 'time-entries') {
                 $this->validateTimeEntryPeriodIntegrity($validator);
             }
@@ -431,6 +435,29 @@ class CrudResourceRequest extends FormRequest
             })
             ->where(function ($query) use ($period) {
                 $query->whereNull('end_date')->orWhereDate('end_date', '>=', $period);
+            })
+            ->exists();
+    }
+
+    private function payrollProjectIsRequired(): bool
+    {
+        $period = UiFormatter::parseDateInput($this->input('period_date'));
+        if (! $period) {
+            return false;
+        }
+
+        return \App\Models\TimeEntry::query()
+            ->where('company_id', $this->user()->company_id)
+            ->where('person_id', $this->input('person_id'))
+            ->whereBetween('entry_date', [
+                $period->copy()->startOfMonth()->toDateString(),
+                $period->copy()->endOfMonth()->toDateString(),
+            ])
+            ->where('hours_approved', '>', 0)
+            ->whereDoesntHave('payrollRecords', function ($query): void {
+                if ($this->route('record')) {
+                    $query->whereKeyNot((int) $this->route('record'));
+                }
             })
             ->exists();
     }

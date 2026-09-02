@@ -6,11 +6,14 @@
         <h1 class="h3 mb-1">Presupuesto</h1>
         <div class="text-muted small">Comparación entre presupuesto y real reconocido. La caja se revisa por separado en Flujo de caja.</div>
     </div>
-    <form method="GET" class="d-flex gap-2">
-        <input class="form-control" type="month" name="period" value="{{ $period->format('Y-m') }}">
-        <input class="form-control" type="number" name="project_id" min="1" value="{{ $projectId }}" placeholder="Proyecto ID">
-        <button class="btn btn-outline-secondary" type="submit">Filtrar</button>
-    </form>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-primary" href="{{ route('operational.create', 'budgets') }}">Nuevo presupuesto</a>
+        <form method="GET" class="d-flex gap-2">
+            <input class="form-control" type="month" name="period" value="{{ $period->format('Y-m') }}">
+            <input class="form-control" type="number" name="project_id" min="1" value="{{ $projectId }}" placeholder="Proyecto ID">
+            <button class="btn btn-outline-secondary" type="submit">Filtrar</button>
+        </form>
+    </div>
 </div>
 
 <div class="row g-3 mb-4">

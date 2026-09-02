@@ -58,6 +58,11 @@ class Project extends Model
         return $this->belongsTo(ProjectManager::class);
     }
 
+    public function projectManager(): BelongsTo
+    {
+        return $this->belongsTo(ProjectManager::class, 'manager_id');
+    }
+
     public function contractType(): BelongsTo
     {
         return $this->belongsTo(ContractType::class);

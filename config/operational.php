@@ -97,7 +97,7 @@ return [
             'sales_currency_id' => ['label' => 'Moneda de venta', 'type' => 'relation', 'model' => Currency::class, 'display' => 'name', 'section' => 'Comercial'],
             'name' => ['label' => 'Proyecto/Servicio', 'type' => 'text'],
             'project_type_id' => ['label' => 'Tipo proyecto', 'type' => 'relation', 'model' => ProjectType::class, 'display' => 'name'],
-            'manager_id' => ['label' => 'Responsable', 'type' => 'relation', 'model' => ProjectManager::class, 'display' => 'name'],
+            'manager_id' => ['label' => 'Responsable', 'type' => 'relation', 'model' => ProjectManager::class, 'display' => 'name', 'relation_name' => 'projectManager'],
             'start_date' => ['label' => 'Fecha inicio', 'type' => 'date'],
             'end_date' => ['label' => 'Fecha termino', 'type' => 'date'],
             'contract_type_id' => ['label' => 'Tipo contrato', 'type' => 'relation', 'model' => ContractType::class, 'display' => 'name', 'where' => ['domain' => 'commercial']],
