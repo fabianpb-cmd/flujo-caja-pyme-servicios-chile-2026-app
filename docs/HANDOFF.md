@@ -154,15 +154,27 @@ Backups obligatorios antes de deploy:
 - PUBLIC_ROOT;
 - `.env`.
 
+### Inspección manual cPanel
+
+Captura del Administrador de archivos confirma:
+- home de la cuenta: `/home/tdatcons`;
+- carpeta `apps/` existe;
+- dentro de `apps/` se observa `flujo-caja-staging`;
+- NO se observa todavía una carpeta `flujo-caja-production`;
+- staging está en `/home/tdatcons/apps/flujo-caja-staging` y contiene `.env`;
+- no se abrió ni expuso el contenido del `.env`.
+
+Conclusión provisional:
+- APP_ROOT productivo aún NO existe/NO está confirmado en el filesystem mostrado;
+- sigue pendiente definir/crear el APP_ROOT productivo después de confirmar dominio y document root;
+- esto sigue siendo preparación, no deploy.
+
 ## 7. Próximo paso EXACTO — confirmación manual en cPanel, SIN CODEX
 
-Antes de cualquier build production, Miguel debe confirmar solo estos cuatro datos:
-1. APP_ROOT productivo real;
-2. PUBLIC_ROOT/document root productivo real;
-3. dominio HTTPS exacto de producción para `APP_URL`;
-4. estado de la BD productiva: inexistente/vacía o existente con datos que preservar.
-
-Adicional útil: confirmar si ya existe `.env` productivo en el APP_ROOT.
+Pendiente confirmar:
+1. PUBLIC_ROOT/document root productivo real y dominio HTTPS exacto;
+2. estado de la BD productiva: inexistente/vacía o existente con datos que preservar;
+3. si existe algún `.env` productivo en otra ubicación (no abrirlo ni mostrar contenido).
 
 NO build production todavía.
 NO generar SQL todavía.
