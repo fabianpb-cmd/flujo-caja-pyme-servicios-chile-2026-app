@@ -11,18 +11,26 @@ Repositorio:
 
 Aplicación: Laravel.
 
-Staging:
+Dominio objetivo de PRODUCCIÓN confirmado por Miguel:
 `https://licitaciones.tdatconsulting.cl`
 
-APP_ROOT staging:
+Ese mismo host fue usado como staging durante la UAT final y será promovido a producción; no se usará `tdatconsulting.cl` para esta aplicación.
+
+PUBLIC_ROOT confirmado por cPanel para ese host:
+`/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`
+
+APP_ROOT actual de staging:
 `/home/tdatcons/apps/flujo-caja-staging`
+
+APP_ROOT productivo todavía no existe/no está confirmado. Candidato:
+`/home/tdatcons/apps/flujo-caja-production`
 
 Hosting/deploy:
 - cPanel;
 - sin SSH/Composer/Artisan remoto como flujo normal;
 - app privada fuera del document root público;
 - preservar siempre `.env` y `storage/`;
-- `staging-bootstrap.sql` es bootstrap completo, NO migración incremental. Nunca importarlo sobre staging/productivo existente con datos que se deban conservar.
+- `staging-bootstrap.sql` es bootstrap completo, NO migración incremental. Nunca importarlo sobre una BD existente con datos que se deban conservar.
 
 Producción todavía NO desplegada.
 
@@ -34,63 +42,14 @@ Release funcional probado y desplegado en staging:
 - build: PASS, exit code 0;
 - `manifest.git_commit`: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
 - ZIPs, secret scan, SQL validation y checksums: PASS;
-- APP_ROOT: `/home/tdatcons/apps/flujo-caja-staging`;
 - deploy realizado solo con `app-private.zip`; sin `public.zip`, sin SQL, sin migración nueva.
 
 Main puede estar por delante del tag SOLO por commits documentales. No reconstruir release por eso.
 
-### Remuneración A — PASS
-
-Payroll: `REM-000013`
-Proyecto: `QA-A-PROYECTO / PRY-000009`
-Persona: `QA-A-PERSONA UAT QA`
-Período: septiembre 2026
-
-Validado:
-- 10 h aprobadas;
-- valor HH `$40.000`;
-- bruto `$400.000`;
-- líquido `$339.000`;
-- costo empresa `$400.000`;
-- cálculo y trazabilidad PASS;
-- sin 500.
-
-NO repetir ni duplicar `REM-000013`.
-
-### Remuneración B — PASS
-
-Payroll: `REM-000014`
-Proyecto: `QA-B-PROYECTO / PRY-000010`
-Persona: `QA-B-PERSONA`
-Período: septiembre 2026
-
-Validado:
-- 6 h aprobadas;
-- valor HH `$50.000`;
-- bruto `$300.000`;
-- `QA-B-AJUSTE` automático una sola vez como bono imponible `$10.000`;
-- líquido `$254.250`;
-- costo empresa mostrado `$300.000`;
-- cálculo y trazabilidad PASS;
-- sin 500.
-
-NO repetir ni duplicar `REM-000014`.
-
-### Rentabilidad — PASS
-
-QA-A:
-- ingresos `$1.000.000`;
-- costo laboral `$400.000`;
-- otros directos `$100.000`;
-- costo total `$500.000`;
-- margen `$500.000` / `50 %`.
-
-QA-B:
-- ingresos `$500.000`;
-- costo laboral `$300.000`;
-- otros directos `$200.000`;
-- costo total `$500.000`;
-- margen `$0` / `0 %`.
+Remuneración A: PASS, `REM-000013`, 10 h, costo empresa `$400.000`, cálculo/trazabilidad PASS.
+Remuneración B: PASS, `REM-000014`, 6 h, `QA-B-AJUSTE` `$10.000`, costo empresa `$300.000`, cálculo/trazabilidad PASS.
+Rentabilidad QA-A: ingresos `$1.000.000`, costo laboral `$400.000`, otros directos `$100.000`, margen `$500.000` / `50 %`.
+Rentabilidad QA-B: ingresos `$500.000`, costo laboral `$300.000`, otros directos `$200.000`, margen `$0` / `0 %`.
 
 Conclusión:
 - Remuneración A PASS;
@@ -101,10 +60,12 @@ Conclusión:
 - UAT FINAL PASS;
 - funcionalmente apto para preparar producción: SI.
 
+NO repetir ni duplicar `REM-000013` ni `REM-000014`.
+
 ## 3. Blockers resueltos — no reabrir sin evidencia nueva
 
 - Selector Proyecto en Remuneraciones: listener `input` agregado; staging PASS.
-- 500 payroll horario/honorarios: normalización de `bonuses`, `non_taxable_allowances`, `advances`, `other_deductions`; test dirigido PASS 10/92; staging PASS.
+- 500 payroll horario/honorarios: normalización de campos monetarios; test dirigido PASS 10/92; staging PASS.
 - Build cPanel Windows: secret scan con `ZipArchive`; build final PASS.
 - Responsable Proyecto, Presupuesto, labels y demás incidencias UAT: PASS/cerradas.
 
@@ -125,75 +86,58 @@ Reglas:
 - nunca desactivar FKs a ciegas;
 - preservar `.env` y `storage/`.
 
-## 6. Production readiness — 2026-09-03
-
-Inspección local reportada por Codex:
-- HEAD local: `2611d775125061aa5a58ba31feb4c9b5341c9e13`;
-- `origin/main`: `f81c0017a2a0887e15518c2e96cdff0a3d3d8c95` al momento de la inspección;
-- working tree limpio;
-- diferencia local/remoto: commits documentales en `docs/HANDOFF.md`.
-
-Plantilla productiva:
-- `.env.production.template`: EXISTE localmente;
-- untracked + ignored por `.gitignore`;
-- el build production podría usarla hoy localmente;
-- NO es reproducible desde clone remoto actual;
-- no exponer su contenido ni secretos.
-
 Backups obligatorios antes de deploy:
 - BD;
 - APP_ROOT;
 - PUBLIC_ROOT;
 - `.env`.
 
-### Inspección manual cPanel — filesystem
+## 6. Production readiness — 2026-09-03
 
-Captura del Administrador de archivos confirma:
-- home de la cuenta: `/home/tdatcons`;
-- carpeta `apps/` existe;
-- dentro de `apps/` se observa `flujo-caja-staging`;
-- NO se observa todavía una carpeta `flujo-caja-production`;
-- staging está en `/home/tdatcons/apps/flujo-caja-staging` y contiene `.env`;
-- no se abrió ni expuso el contenido del `.env`.
+Plantilla productiva local:
+- `.env.production.template`: EXISTE localmente;
+- untracked + ignored por `.gitignore`;
+- build production podría usarla localmente;
+- no es reproducible desde clone remoto actual;
+- no exponer su contenido ni secretos.
 
-### Inspección manual cPanel — dominios
+Inspección cPanel filesystem:
+- home: `/home/tdatcons`;
+- existe `apps/flujo-caja-staging`;
+- no se observa `apps/flujo-caja-production`;
+- staging contiene `.env`; no se abrió ni expuso.
 
-Captura de cPanel > Dominios confirma dos dominios visibles:
+Inspección cPanel dominios:
+- `licitaciones.tdatconsulting.cl` -> document root `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`; HTTPS redirect activado;
+- `tdatconsulting.cl` -> document root `/home/tdatcons/public_html`; NO será usado para esta aplicación.
 
-1. `licitaciones.tdatconsulting.cl`
-- document root mostrado: `/public_html/licitaciones.tdatconsulting.cl`;
-- ruta absoluta inferida desde home de cuenta: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
-- Force HTTPS Redirect: activado;
-- corresponde al staging ya validado.
+Decisión confirmada:
+- dominio/APP_URL objetivo de producción: `https://licitaciones.tdatconsulting.cl`;
+- PUBLIC_ROOT production: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
+- el mismo host actualmente usado para staging será promovido a producción;
+- por tanto hay que tratar el cambio como una promoción/cutover del entorno actual, no como creación de un dominio nuevo.
 
-2. `tdatconsulting.cl`
-- dominio principal de la cuenta;
-- document root mostrado: `/public_html`;
-- ruta absoluta inferida desde home de cuenta: `/home/tdatcons/public_html`;
-- Force HTTPS Redirect aparece desactivado en la captura.
-
-Conclusión provisional:
-- si `tdatconsulting.cl` será el dominio productivo de esta aplicación, su PUBLIC_ROOT sería `/home/tdatcons/public_html`;
-- esto todavía requiere confirmación explícita de Miguel antes de tratarlo como APP_URL/producción;
-- APP_ROOT productivo todavía no existe/no está confirmado; candidato sigue siendo `/home/tdatcons/apps/flujo-caja-production`;
-- no crear carpetas ni cambiar redirects todavía.
+Estado de BD production: AÚN NO CONFIRMADO.
+Tipo de transición de BD: AÚN NO DETERMINABLE.
 
 ## 7. Próximo paso EXACTO — manual, SIN CODEX
 
-1. Miguel debe confirmar si `https://tdatconsulting.cl` será efectivamente el dominio productivo de esta aplicación.
-2. Después revisar `Manage My Databases` para determinar si existe BD productiva y si está vacía o contiene datos.
-3. No abrir ni compartir passwords ni contenido de `.env`.
+Entrar a cPanel > `Manage My Databases` y confirmar únicamente:
+1. nombres de las bases existentes;
+2. si alguna corresponde al staging actual de `licitaciones.tdatconsulting.cl`;
+3. si existe una BD separada que se quiera usar como producción o si se pretende promover la BD actual;
+4. no mostrar passwords, usuarios con secretos ni contenido de `.env`.
 
 NO build production todavía.
 NO generar SQL todavía.
+NO cambiar APP_ENV todavía.
+NO mover Document Root todavía.
 NO deploy production todavía.
 
 ## 8. Política de ahorro de créditos
 
-- modelo económico + esfuerzo Bajo por defecto;
-- subir esfuerzo/modelo solo ante blocker real;
-- no recorridos amplios del repo si bastan archivos concretos;
+- sin Codex para inspecciones manuales de cPanel;
+- modelo económico + esfuerzo Bajo por defecto cuando Codex sea necesario;
 - no repetir UAT ni builds PASS;
-- respuestas Codex cortas y estructuradas;
 - agrupar tareas cuando sea seguro;
 - checkpoints compactos en este archivo.
