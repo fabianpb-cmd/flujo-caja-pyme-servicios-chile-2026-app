@@ -415,6 +415,10 @@ class PayrollService
         $data['hourly_value'] = $hourlyValue;
         $data['project_value'] = $projectValue;
         $data['health_additional'] = $healthAdditional;
+        $data['bonuses'] = round((float) ($data['bonuses'] ?? 0), 2);
+        $data['non_taxable_allowances'] = round((float) ($data['non_taxable_allowances'] ?? 0), 2);
+        $data['advances'] = round((float) ($data['advances'] ?? 0), 2);
+        $data['other_deductions'] = round((float) ($data['other_deductions'] ?? 0), 2);
         $calculationNotes = array_values(array_unique(array_filter($notes)));
         $calculationStatus = $requiresReview ? 'REQUIERE_REVISION' : 'OK';
 
@@ -443,6 +447,8 @@ class PayrollService
             'amount_basis' => $amountBasis,
             'base_salary' => $gross,
             'gross_amount' => $gross,
+            'bonuses' => $data['bonuses'],
+            'non_taxable_allowances' => $data['non_taxable_allowances'],
             'taxable_amount' => 0.0,
             'taxable_gross' => 0.0,
             'employee_retention' => $retention,
@@ -453,6 +459,8 @@ class PayrollService
             'vacation_provision_amount' => 0.0,
             'employer_cost' => round($gross, 2),
             'net_pay' => round($gross - $retention, 2),
+            'advances' => $data['advances'],
+            'other_deductions' => $data['other_deductions'],
             'legal_snapshot' => [
                 'period' => $period->toDateString(),
                 'mode' => $modeCode ?: $person->modality,

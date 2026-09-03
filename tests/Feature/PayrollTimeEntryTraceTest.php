@@ -249,6 +249,10 @@ class PayrollTimeEntryTraceTest extends TestCase
             'project_id' => $project->id,
             'period_date' => '2026-08-01',
             'amount_basis' => 'GROSS',
+            'bonuses' => '',
+            'non_taxable_allowances' => '',
+            'advances' => '',
+            'other_deductions' => '',
         ]);
 
         $create->assertRedirect(route('operational.index', 'payroll-records'));
@@ -256,6 +260,10 @@ class PayrollTimeEntryTraceTest extends TestCase
         $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
         $this->assertSame($project->id, $record->project_id);
         $this->assertSame(10.0, (float) $record->hours_approved);
+        $this->assertSame(0.0, (float) $record->bonuses);
+        $this->assertSame(0.0, (float) $record->non_taxable_allowances);
+        $this->assertSame(0.0, (float) $record->advances);
+        $this->assertSame(0.0, (float) $record->other_deductions);
         $this->assertEqualsCanonicalizing([$first->id, $second->id], $record->timeEntries()->pluck('time_entries.id')->all());
         $this->assertSame(2, PayrollRecordTimeEntry::query()->where('payroll_record_id', $record->id)->count());
     }
