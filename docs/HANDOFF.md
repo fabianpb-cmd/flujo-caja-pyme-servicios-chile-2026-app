@@ -85,9 +85,9 @@ Previsualización SQL realizada por Miguel confirmó que TODAS las filas actuale
 - `expense_documents`: `EGR-000002`, `EGR-000003`;
 - `payroll_records`: `REM-000013`, `REM-000014`;
 - `people`: `QA-A-PERSONA UAT QA`, `QA-B-PERSONA UAT QA`;
-- `positions`: `BI Consultor Senior`, `BI Consultor`, `BI Consultor Junior` (datos demo, no defaults del CatalogService);
+- `positions`: `BI Consultor Senior`, `BI Consultor`, `BI Consultor Junior`;
 - `project_assignments`: `ASI-000022`, `ASI-000023`;
-- `project_managers`: `Jaime Soriano` (derivado/no default);
+- `project_managers`: `Jaime Soriano`;
 - `projects`: `QA-A-PROYECTO`, `QA-B-PROYECTO`;
 - `sales_documents`: `ING-000003`, `ING-000004`;
 - `time_entries`: `HOR-000022` a `HOR-000028`;
@@ -96,20 +96,31 @@ Previsualización SQL realizada por Miguel confirmó que TODAS las filas actuale
 Además limpiar runtime/histórico QA: `audit_logs`, `cache`, `cache_locks`, `sessions`, `password_reset_tokens`, `jobs`, `job_batches`, `failed_jobs`.
 Tablas transaccionales actualmente vacías deben quedar vacías: `budgets`, `legal_obligations`, `monthly_closures`, `payroll_adjustments`, `sales_document_time_entries`.
 
-## 7. FKs relevantes revisadas
+## 7. FKs y rutina de limpieza revisadas
 
 - `payroll_record_time_entries.payroll_record_id` -> payroll_records: CASCADE;
 - `payroll_record_time_entries.time_entry_id` -> time_entries: RESTRICT; borrar pivot antes de time_entries;
 - `sales_document_time_entries` -> sales_documents/time_entries: CASCADE;
 - `payroll_adjustments.person_id` -> people: CASCADE;
-- project manager, position y cost center son FKs `NULL ON DELETE` desde projects/people/assignments/time_entries, pero se borrarán después de sus datos operacionales para mantener un orden claro;
-- cash movements referencian cash account/project/user con `NULL ON DELETE`; igualmente borrar movimientos antes de cuentas.
+- project manager, position y cost center usan `NULL ON DELETE` desde datos operacionales; borrar después de los datos que los referencian;
+- cash movements antes de cash accounts.
+
+`routes/console.php` contiene `uat:clear-data` con un orden child-to-parent útil como referencia, pero:
+- está explícitamente DESHABILITADO cuando `APP_ENV=production`;
+- no debe intentarse evadir esa protección;
+- además no cubre `clients`, `projects`, `people`, `project_assignments`, `cash_accounts`, catálogos demo por empresa (`positions`, `project_managers`, `cost_centers`) ni `QA-USER`;
+- por tanto NO se usará para este go-live.
+
+Demo/baseline confirmado por repo:
+- `DemoDataSeeder` solo corre en local/testing y crea responsables/cargos/cuenta/admin demo;
+- `administration-baseline.md` clasifica responsables y cargos como Demo;
+- catálogos legales/operacionales y escenarios BASE/CONSERVADOR/OPTIMISTA sí se preservan.
 
 No desactivar foreign keys.
 
 ## 8. Próximo paso EXACTO
 
-Ejecutar UNA limpieza SQL final, child-to-parent, conservando `companies.id=1`, `users.id=1` y todos los catálogos/paramétricos anteriores.
+Ejecutar UNA limpieza SQL final en phpMyAdmin, dentro de transacción y child-to-parent, conservando `companies.id=1`, `users.id=1` y todos los catálogos/paramétricos.
 Después validar conteos y login.
 
 Aún NO se ha ejecutado ningún DELETE.
