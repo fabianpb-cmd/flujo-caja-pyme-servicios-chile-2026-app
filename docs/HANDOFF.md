@@ -444,3 +444,87 @@ Solo después de UAT FINAL PASS:
 - usar migración incremental revisada si correspondiera;
 - validar manifest/checksums/ZIP/secrets;
 - smoke mínimo post-deploy: `/up`, `/login`, login, 2FA, dashboard.
+
+## 19. UAT Remuneración A post-fix — PASS 2026-09-03
+
+Release probado en staging:
+- tag `cpanel-staging-20260903-124424`;
+- commit funcional `ec1d51160b8899b7351950fc1202f157d72e42c4`.
+
+Precheck:
+- payroll QA-A previo para septiembre: NO.
+
+Resultado Remuneración A:
+- Proyecto habilitado: PASS;
+- Proyecto seleccionado: `QA-A-PROYECTO`;
+- horas reconocidas: 10 h;
+- guardado: PASS, sin 500;
+- URL final: `https://licitaciones.tdatconsulting.cl/operacion/payroll-records/13`;
+- ID/código: `REM-000013`;
+- cálculo: PASS;
+- bruto: `$ 400.000`;
+- valor HH: `$ 40.000`;
+- bonos: `$ 0`;
+- no imponibles: `$ 0`;
+- anticipos: `$ 0`;
+- otros descuentos: `$ 0`;
+- retención honorarios: `$ 61.000`;
+- líquido/neto: `$ 339.000`;
+- costo empresa: `$ 400.000`;
+- estado cálculo: `OK`.
+
+Trazabilidad: PASS.
+Modal `Ver cálculo` confirma:
+- `Horas aprobadas del período 10 h`;
+- `Horas aprobadas efectivas 10 h`;
+- `Horas proyecto 10 h`;
+- fuente `Módulo Horas`;
+- proyecto `PRY-000009`;
+- cliente `QA-A-CLIENTE`;
+- asignación `ASI-000022 · QA-A-PROYECTO`;
+- vigencia `01/09/2026 al 30/09/2026`.
+
+Errores: ninguno.
+
+Conclusión:
+- Remuneración A = PASS;
+- el 500 `bonuses = NULL` queda funcionalmente resuelto en staging para el escenario QA-A;
+- NO repetir Remuneración A;
+- preservar `REM-000013` y no crear duplicado.
+
+## 20. Próximo paso EXACTO — SOLO Remuneración B
+
+Ejecutar únicamente Remuneración B en staging.
+
+Datos esperados:
+- Persona: `QA-B-PERSONA`;
+- período: septiembre 2026 / `2026-09-01`;
+- Proyecto: `QA-B-PROYECTO`;
+- horas aprobadas esperadas: 6 h;
+- valor HH esperado: CLP 50.000;
+- ajuste esperado: `QA-B-AJUSTE`;
+- tipo: bono imponible;
+- monto: `$10.000`.
+
+Antes de crear, comprobar que no exista payroll QA-B previo para septiembre. No duplicar.
+
+Validar:
+1. Proyecto habilitado y seleccionable;
+2. 6 h reconocidas;
+3. `QA-B-AJUSTE` aplicado por `$10.000`;
+4. guardado sin 500;
+5. ID/código generado;
+6. cálculo coherente;
+7. trazabilidad de horas y novedad.
+
+Si B FAIL:
+- detenerse;
+- NO ejecutar Rentabilidad;
+- diagnosticar solo el fallo nuevo.
+
+Si B PASS:
+- checkpoint inmediato en `docs/HANDOFF.md`;
+- luego ejecutar únicamente Rentabilidad para QA-A y QA-B.
+
+UAT FINAL sigue PENDIENTE hasta Remuneración B PASS + Rentabilidad PASS.
+Producción sigue NO autorizada.
