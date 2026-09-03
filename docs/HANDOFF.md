@@ -11,53 +11,48 @@ Producción: `https://licitaciones.tdatconsulting.cl`
 PUBLIC_ROOT: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`
 APP_ROOT actual: `/home/tdatcons/apps/flujo-caja-staging`
 
-Promoción in-place: mismo dominio, misma BD, mismos archivos; no mover APP_ROOT salvo necesidad real. cPanel sin SSH/Composer/Artisan remoto como flujo normal.
+Promoción in-place: mismo dominio, misma BD y mismos archivos validados. cPanel sin SSH/Composer/Artisan remoto como flujo normal.
 
-`.env` ya productivo: `APP_ENV=production`, `APP_DEBUG=false`, APP_URL correcto, logging warning, sesiones/cookies seguras, queue sync. APP_KEY y credenciales BD se preservan. `bootstrap/cache` no tiene `config.php`.
+`.env` productivo: `APP_ENV=production`, `APP_DEBUG=false`, APP_URL correcto, sesiones/cookies seguras, queue sync. APP_KEY y credenciales BD se preservan. `bootstrap/cache` no tiene `config.php`.
 
 Backups pre-cutover COMPLETADOS: BD, APP_ROOT, PUBLIC_ROOT y `.env`.
 
-## 2. Release funcional validado
+## 2. Release / go-live
 
-UAT FINAL PASS sobre commit `ec1d51160b8899b7351950fc1202f157d72e42c4`, tag `cpanel-staging-20260903-124424`.
-Build/ZIP/secret scan/SQL/checksums PASS. Remuneración A/B, Rentabilidad y escenarios E2E PASS. No repetir UAT.
+Release funcional validado: commit `ec1d51160b8899b7351950fc1202f157d72e42c4`, tag `cpanel-staging-20260903-124424`.
+Build/ZIP/secret scan/SQL/checksums PASS. UAT FINAL PASS.
+
+Limpieza pre-go-live PASS: quedó `companies=1`, `users=1`, transaccionales QA en 0 y baseline paramétrico preservado.
+Smoke productivo manual reportado por Miguel: `/up`, `/login`, login, 2FA y dashboard PASS.
+GO-LIVE PRODUCTIVO: PASS.
 
 ## 3. Política BD
 
 Se conserva la BD actual; no crear BD productiva separada. Nunca importar bootstrap sobre esta BD. No desactivar FKs a ciegas. Backup BD disponible para rollback.
 
-## 4. Baseline que debe quedar
+Preservar `companies.id=1`, `users.id=1` y catálogos/parámetros (`activities`, AFP, bancos, monedas, geografía, legal_parameters, UF/UTM, exchange_rates, income_tax_brackets, scenarios, company_settings, migrations, etc.).
 
-Preservar:
-- `companies.id=1` (actualmente código `STAGING`, nombre `Empresa Staging`);
-- `users.id=1` Administrador inicial real;
-- catálogos/sistema/parámetros: `activities`, `afp_rates`, `afps`, `approval_statuses`, `bank_account_types`, `banks`, `cash_movement_types`, `client_types`, `communes`, `company_settings`, `contract_types`, `currencies`, `document_types`, `employment_modes`, `exchange_rates`, `expense_categories`, `expense_subcategories`, `expense_types`, `health_systems`, `income_tax_brackets`, `legal_organizations`, `legal_parameters`, `obligation_types`, `occupational_insurance_entities`, `payment_methods`, `payment_terms`, `project_types`, `record_statuses`, `regions`, `scenarios`, `tax_regimes`, `uf_values`, `utm_values`, `migrations`.
+## 4. Incidente Movimientos de caja — 2026-09-03
 
-Repo confirma que responsables/cargos demo no son baseline y que `DemoDataSeeder` solo corresponde a local/testing.
+Al intentar registrar un cobro para la factura interna `ING-000005`, la pantalla POST `/operacion/cash-movements` devolvió `404 Not Found`.
 
-## 5. Limpieza pre-go-live — EJECUTADA Y VALIDADA PASS 2026-09-03
+Causa raíz identificada en captura + código:
+- el formulario tenía `Tipo documento origen = Factura/Ingreso`;
+- en `Código documento` se ingresó `1`, que corresponde al número visible de factura, NO al código funcional interno;
+- `CashMovementService::validateAgainstDocument()` busca `sales_documents.code = source_document_code` y usa `firstOrFail()`;
+- como no existe `sales_documents.code='1'`, Laravel responde 404.
 
-Miguel ejecutó en phpMyAdmin el SQL final aprobado, dentro de transacción, child-to-parent, sin desactivar FKs.
+Corrección manual inmediata:
+- volver al formulario de nuevo movimiento;
+- usar `Código documento = ING-000005`;
+- ingreso = total cobrado (`388844` si pago total);
+- estado `posted` / Contabilizado;
+- guardar.
 
-Se limpiaron datos QA/UAT/demo y runtime de prueba. Validación post-delete con `COUNT(*)` dio PASS:
-- `companies` = 1;
-- `users` = 1;
-- `clients`, `projects`, `people`, `project_assignments`, `time_entries`, `payroll_records`, `payroll_record_time_entries`, `sales_documents`, `expense_documents`, `cash_accounts`, `cash_movements`, `cost_centers`, `positions`, `project_managers`, `audit_logs`, `sessions` = 0;
-- baseline principal preservado: `afps` = 7, `regions` = 16, `communes` = 346, `legal_parameters` = 31, `company_settings` = 20, `scenarios` = 3.
+Resultado esperado: `ReceivablesService` recalcula el documento; si cobros contabilizados igualan el total, estado pasa a `Pagado`; si son menores, `Parcial`.
 
-Conclusión: limpieza BD pre-go-live PASS. Quedó empresa/admin real + baseline paramétrico, sin datos QA/UAT visibles en las tablas verificadas.
+Mejora futura recomendada: reemplazar el campo libre `source_document_code` por selector/autocompletado dependiente de `source_document_type` para evitar errores humanos y 404; manejar documento inexistente con validación amigable en vez de `firstOrFail()`.
 
-## 6. Próximo paso EXACTO — smoke final de producción
+## 5. Política de ahorro
 
-Hacer SOLO smoke mínimo, sin repetir UAT:
-1. `https://licitaciones.tdatconsulting.cl/up` debe responder OK/200;
-2. `/login` debe cargar normal;
-3. iniciar sesión con el administrador real `users.id=1`;
-4. completar 2FA si corresponde;
-5. Dashboard debe cargar sin 500 y reflejar baseline vacío operacional.
-
-Si los cinco puntos PASS: registrar checkpoint final y declarar go-live productivo.
-
-## 7. Política de ahorro
-
-Sin Codex para cPanel/phpMyAdmin. No repetir UAT/builds PASS. Modelo económico + esfuerzo Bajo solo cuando Codex sea necesario. Checkpoints compactos en este archivo.
+No repetir UAT/builds PASS. Sin Codex para tareas manuales de cPanel/phpMyAdmin. Checkpoints compactos en este archivo.
