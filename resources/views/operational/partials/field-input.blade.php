@@ -33,10 +33,29 @@
         $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="number" step="0.01" min="0" inputmode="decimal" class="form-control'.e($fieldErrorClass).'" value="'.e($inputValue ?? '').'">';
     } elseif ($type === 'select') {
         $optionsHtml = '<option value="">Seleccione</option>';
-        foreach (($definition['options'] ?? []) as $key => $label) {
-            $optionsHtml .= '<option value="'.e($key).'"'.((string) $value === (string) $key ? ' selected' : '').'>'.e($label).'</option>';
+        foreach (($options[$field] ?? ($definition['options'] ?? [])) as $key => $option) {
+            $label = is_array($option) ? ($option['label'] ?? $key) : $option;
+            $optionAttributes = (string) $value === (string) $key ? ' selected' : '';
+
+            if (is_array($option)) {
+                foreach ($option as $attribute => $attributeValue) {
+                    if ($attribute === 'label' || $attributeValue === null || $attributeValue === '') {
+                        continue;
+                    }
+
+                    $dataAttribute = str_replace('_', '-', \Illuminate\Support\Str::kebab($attribute));
+                    $optionAttributes .= ' data-'.e($dataAttribute).'="'.e($attributeValue).'"';
+                }
+            }
+
+            $optionsHtml .= '<option value="'.e($key).'"'.$optionAttributes.'>'.e($label).'</option>';
         }
-        $renderedFieldInput = '<select id="'.e($field).'" name="'.e($field).'" class="form-select'.e($fieldErrorClass).'">'.$optionsHtml.'</select>';
+        $selectAttributes = '';
+        if (($definition['source_document_selector'] ?? false) === true) {
+            $selectAttributes = ' data-source-document-select="true" data-parent-field="'.e($definition['depends_on'] ?? 'source_document_type').'" data-placeholder-parent="Seleccione un tipo de documento primero" data-placeholder-empty="No hay documentos pendientes para este tipo" data-placeholder-default="Seleccione"';
+        }
+
+        $renderedFieldInput = '<select id="'.e($field).'" name="'.e($field).'" class="form-select'.e($fieldErrorClass).'"'.$selectAttributes.'>'.$optionsHtml.'</select>';
     } elseif ($type === 'relation') {
         $relationAttributes = '';
         if (isset($definition['depends_on'])) {

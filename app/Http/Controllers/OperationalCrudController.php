@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CrudResourceRequest;
 use App\Models\ExpenseDocument;
 use App\Models\Currency;
+use App\Models\LegalObligation;
 use App\Models\PayrollAdjustment;
 use App\Models\Person;
 use App\Models\PayrollRecord;
@@ -18,6 +19,7 @@ use App\Services\CashMovementService;
 use App\Services\CatalogService;
 use App\Services\HourlyRateService;
 use App\Services\HourlyCostService;
+use App\Services\LegalObligationService;
 use App\Services\OperationalDependencyService;
 use App\Services\PayablesService;
 use App\Services\PayrollService;
@@ -48,6 +50,7 @@ class OperationalCrudController extends Controller
         private readonly ReceivablesService $receivables,
         private readonly PayablesService $payables,
         private readonly PayrollService $payroll,
+        private readonly LegalObligationService $obligations,
         private readonly ProjectCommitmentService $commitments,
         private readonly SalesPrefacturationService $salesPrefacturation,
         private readonly HourlyRateService $hourlyRates,
@@ -172,7 +175,11 @@ class OperationalCrudController extends Controller
         }
 
         if ($resource === 'cash-movements') {
-            $this->cashMovements->create($data, $request->user());
+            try {
+                $this->cashMovements->create($data, $request->user());
+            } catch (DomainException $exception) {
+                return back()->withInput()->withErrors(['cash_movement' => $exception->getMessage()]);
+            }
         } else {
             try {
                 $model = DB::transaction(function () use ($config, $data) {
@@ -1147,7 +1154,162 @@ class OperationalCrudController extends Controller
             })->all();
         }
 
+        if ($resource === 'cash-movements') {
+            $options['source_document_code'] = $this->cashMovementSourceDocumentOptions($request->user()->company_id, $item);
+        }
+
         return $options;
+    }
+
+    private function cashMovementSourceDocumentOptions(int $companyId, ?Model $item = null): array
+    {
+        $options = [];
+        $currentSourceType = (string) ($item?->source_document_type ?? '');
+        $currentSourceCode = (string) ($item?->source_document_code ?? '');
+
+        $salesDocuments = SalesDocument::query()
+            ->forCompany($companyId)
+            ->where('is_voided', false)
+            ->whereNotIn('status', ['Borrador', 'Anulado'])
+            ->orderBy('due_date')
+            ->orderBy('code')
+            ->get();
+        $clientNames = \App\Models\Client::query()
+            ->whereIn('id', $salesDocuments->pluck('client_id')->filter()->unique())
+            ->pluck('legal_name', 'id');
+        $projectNames = Project::query()
+            ->whereIn('id', $salesDocuments->pluck('project_id')->filter()->unique())
+            ->pluck('name', 'id');
+
+        foreach ($salesDocuments as $document) {
+            $balance = $this->receivables->balance($document);
+            if ($balance <= 0.00001 && ! $this->isCurrentCashMovementSourceDocument($currentSourceType, $currentSourceCode, 'sales_document', $document->code)) {
+                continue;
+            }
+
+            $counterparty = (string) ($clientNames[$document->client_id] ?? 'Sin contraparte');
+            $project = (string) ($document->project_id ? ($projectNames[$document->project_id] ?? 'Sin proyecto') : 'Sin proyecto');
+            $options[$document->code] = $this->cashMovementSourceDocumentOption(
+                'sales_document',
+                $document->code,
+                [$document->code, $counterparty, $project, UiFormatter::formatMoney($balance), $document->status],
+                $counterparty,
+                $document->project_id,
+                $balance,
+                0
+            );
+        }
+
+        $expenseDocuments = ExpenseDocument::query()
+            ->forCompany($companyId)
+            ->whereNotIn('payment_status', ['Borrador', 'Anulado'])
+            ->orderBy('due_date')
+            ->orderBy('code')
+            ->get();
+        $expenseProjectNames = Project::query()
+            ->whereIn('id', $expenseDocuments->pluck('project_id')->filter()->unique())
+            ->pluck('name', 'id');
+
+        foreach ($expenseDocuments as $document) {
+            $balance = $this->payables->balance($document);
+            if ($balance <= 0.00001 && ! $this->isCurrentCashMovementSourceDocument($currentSourceType, $currentSourceCode, 'expense_document', $document->code)) {
+                continue;
+            }
+
+            $counterparty = (string) ($document->vendor_name ?: 'Sin contraparte');
+            $project = (string) ($document->project_id ? ($expenseProjectNames[$document->project_id] ?? 'Sin proyecto') : 'Sin proyecto');
+            $options[$document->code] = $this->cashMovementSourceDocumentOption(
+                'expense_document',
+                $document->code,
+                [$document->code, $counterparty, $project, UiFormatter::formatMoney($balance), $document->payment_status],
+                $counterparty,
+                $document->project_id,
+                0,
+                $balance
+            );
+        }
+
+        $payrollRecords = PayrollRecord::query()
+            ->forCompany($companyId)
+            ->whereNotIn('status', ['Borrador', 'Anulado'])
+            ->orderBy('period_date')
+            ->orderBy('code')
+            ->get();
+        $personNames = Person::query()
+            ->whereIn('id', $payrollRecords->pluck('person_id')->filter()->unique())
+            ->pluck('name', 'id');
+
+        foreach ($payrollRecords as $record) {
+            $balance = $this->payroll->balance($record);
+            if ($balance <= 0.00001 && ! $this->isCurrentCashMovementSourceDocument($currentSourceType, $currentSourceCode, 'payroll_record', $record->code)) {
+                continue;
+            }
+
+            $counterparty = (string) ($personNames[$record->person_id] ?? 'Sin persona');
+            $period = $record->period_date ? UiFormatter::formatDate($record->period_date) : 'Sin periodo';
+            $options[$record->code] = $this->cashMovementSourceDocumentOption(
+                'payroll_record',
+                $record->code,
+                [$record->code, $counterparty, $period, UiFormatter::formatMoney($balance), $record->status],
+                $counterparty,
+                $record->project_id,
+                0,
+                $balance
+            );
+        }
+
+        $obligations = LegalObligation::query()
+            ->forCompany($companyId)
+            ->whereNotIn('status', ['Borrador', 'Anulado'])
+            ->orderBy('due_date')
+            ->orderBy('code')
+            ->get();
+
+        foreach ($obligations as $obligation) {
+            $balance = $this->obligations->balance($obligation);
+            if ($balance <= 0.00001 && ! $this->isCurrentCashMovementSourceDocument($currentSourceType, $currentSourceCode, 'legal_obligation', $obligation->code)) {
+                continue;
+            }
+
+            $period = $obligation->period_date ? UiFormatter::formatDate($obligation->period_date) : 'Sin periodo';
+            $dueDate = $obligation->due_date ? UiFormatter::formatDate($obligation->due_date) : 'Sin vencimiento';
+            $options[$obligation->code] = $this->cashMovementSourceDocumentOption(
+                'legal_obligation',
+                $obligation->code,
+                [$obligation->code, $obligation->obligation_type, $period.' / '.$dueDate, UiFormatter::formatMoney($balance), $obligation->status],
+                $obligation->obligation_type,
+                null,
+                0,
+                $balance
+            );
+        }
+
+        return $options;
+    }
+
+    private function isCurrentCashMovementSourceDocument(string $currentType, string $currentCode, string $sourceType, string $code): bool
+    {
+        return $currentType === $sourceType && $currentCode === $code;
+    }
+
+    private function cashMovementSourceDocumentOption(
+        string $sourceType,
+        string $code,
+        array $labelParts,
+        string $counterparty,
+        mixed $projectId,
+        float $income,
+        float $expense
+    ): array {
+        return [
+            'label' => implode(' - ', array_filter($labelParts, fn ($part): bool => filled($part))),
+            'source_document_type' => $sourceType,
+            'source_document_code' => $code,
+            'counterparty_name' => $counterparty,
+            'project_id' => $projectId,
+            'suggested_income' => $income > 0 ? number_format($income, 2, '.', '') : null,
+            'suggested_expense' => $expense > 0 ? number_format($expense, 2, '.', '') : null,
+        ];
     }
 
     private function codeMeta(string $modelClass): array

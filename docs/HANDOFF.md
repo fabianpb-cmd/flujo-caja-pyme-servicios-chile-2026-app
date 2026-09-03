@@ -51,7 +51,31 @@ Corrección manual inmediata:
 
 Resultado esperado: `ReceivablesService` recalcula el documento; si cobros contabilizados igualan el total, estado pasa a `Pagado`; si son menores, `Parcial`.
 
-Mejora futura recomendada: reemplazar el campo libre `source_document_code` por selector/autocompletado dependiente de `source_document_type` para evitar errores humanos y 404; manejar documento inexistente con validación amigable en vez de `firstOrFail()`.
+Mejora implementada localmente:
+- `source_document_code` dejó de ser texto libre en `Movimientos de caja` y ahora se renderiza como selector dependiente de `source_document_type`.
+- Las opciones se construyen por empresa y solo incluyen documentos vigentes con saldo pendiente: facturas/ingresos, gastos/egresos, remuneraciones y obligaciones.
+- El `value` enviado sigue siendo el código funcional persistido (`ING-*`, `EGR-*`, `REM-*`, `OBL-*`).
+- La etiqueta visible incluye código, contraparte/persona/tipo, proyecto o período/vencimiento, saldo y estado.
+- Al seleccionar documento se sugieren contraparte, proyecto e ingreso/egreso por el saldo pendiente; el monto queda editable para pagos parciales.
+- Al cambiar `Tipo documento origen` se limpia el documento y campos derivados para no mezclar tipos.
+- `CashMovementService::validateAgainstDocument()` ya no usa `firstOrFail()` como UX final: documento inexistente, de otra empresa, anulado o sin saldo genera validación amigable.
+
+Archivos modificados:
+- `config/operational.php`
+- `app/Http/Controllers/OperationalCrudController.php`
+- `app/Services/CashMovementService.php`
+- `resources/views/operational/form.blade.php`
+- `resources/views/operational/partials/field-input.blade.php`
+- `tests/Feature/CashMovementSourceDocumentSelectorTest.php`
+- `docs/HANDOFF.md`
+
+Tests dirigidos PASS:
+- `php artisan test tests\Feature\CashMovementSourceDocumentSelectorTest.php` — 2 tests / 40 assertions PASS.
+- `php artisan test tests\Feature\FinancialCoreTest.php --filter="partial_payments_update_invoice_balance_and_status|overpayment_is_rejected_inside_cash_transaction|expense_payments_update_balance_and_reject_overpayment"` — 3 tests / 12 assertions PASS.
+
+BD/migraciones: NO requiere migración, SQL ni cambios de estructura en `cash_movements`.
+
+Próximo paso: deploy incremental pendiente de aprobación; no ejecutar build/deploy sin autorización.
 
 ## 5. Política de ahorro
 

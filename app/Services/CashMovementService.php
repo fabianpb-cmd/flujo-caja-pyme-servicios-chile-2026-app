@@ -78,13 +78,22 @@ class CashMovementService
                 ->where('company_id', $data['company_id'])
                 ->where('code', $data['source_document_code'])
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->first();
+
+            if (! $document || $document->is_voided || in_array($document->status, ['Borrador', 'Anulado'], true)) {
+                throw new DomainException('Seleccione una factura/ingreso vigente con saldo pendiente.');
+            }
 
             if ((float) $data['income'] <= 0) {
                 throw new DomainException('El cobro de una factura debe registrarse como ingreso.');
             }
 
-            if ((float) $data['income'] > $this->receivables->balance($document) + 0.00001) {
+            $balance = $this->receivables->balance($document);
+            if ($balance <= 0.00001) {
+                throw new DomainException('La factura seleccionada no tiene saldo pendiente.');
+            }
+
+            if ((float) $data['income'] > $balance + 0.00001) {
                 throw new DomainException('El cobro excede el saldo pendiente de la factura.');
             }
         }
@@ -94,13 +103,22 @@ class CashMovementService
                 ->where('company_id', $data['company_id'])
                 ->where('code', $data['source_document_code'])
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->first();
+
+            if (! $document || in_array($document->payment_status, ['Borrador', 'Anulado'], true)) {
+                throw new DomainException('Seleccione un gasto/egreso vigente con saldo pendiente.');
+            }
 
             if ((float) $data['expense'] <= 0) {
                 throw new DomainException('El pago de un gasto debe registrarse como egreso.');
             }
 
-            if ((float) $data['expense'] > $this->payables->balance($document) + 0.00001) {
+            $balance = $this->payables->balance($document);
+            if ($balance <= 0.00001) {
+                throw new DomainException('El gasto seleccionado no tiene saldo pendiente.');
+            }
+
+            if ((float) $data['expense'] > $balance + 0.00001) {
                 throw new DomainException('El pago excede el saldo pendiente del gasto.');
             }
         }
@@ -110,13 +128,22 @@ class CashMovementService
                 ->where('company_id', $data['company_id'])
                 ->where('code', $data['source_document_code'])
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->first();
+
+            if (! $record || in_array($record->status, ['Borrador', 'Anulado'], true)) {
+                throw new DomainException('Seleccione una remuneracion vigente con saldo pendiente.');
+            }
 
             if ((float) $data['expense'] <= 0) {
                 throw new DomainException('El pago de remuneracion debe registrarse como egreso.');
             }
 
-            if ((float) $data['expense'] > $this->payroll->balance($record) + 0.00001) {
+            $balance = $this->payroll->balance($record);
+            if ($balance <= 0.00001) {
+                throw new DomainException('La remuneracion seleccionada no tiene saldo pendiente.');
+            }
+
+            if ((float) $data['expense'] > $balance + 0.00001) {
                 throw new DomainException('El pago excede el saldo pendiente de la remuneracion.');
             }
         }
@@ -126,13 +153,22 @@ class CashMovementService
                 ->where('company_id', $data['company_id'])
                 ->where('code', $data['source_document_code'])
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->first();
+
+            if (! $obligation || in_array($obligation->status, ['Borrador', 'Anulado'], true)) {
+                throw new DomainException('Seleccione una obligacion vigente con saldo pendiente.');
+            }
 
             if ((float) $data['expense'] <= 0) {
                 throw new DomainException('El pago de obligacion debe registrarse como egreso.');
             }
 
-            if ((float) $data['expense'] > $this->obligations->balance($obligation) + 0.00001) {
+            $balance = $this->obligations->balance($obligation);
+            if ($balance <= 0.00001) {
+                throw new DomainException('La obligacion seleccionada no tiene saldo pendiente.');
+            }
+
+            if ((float) $data['expense'] > $balance + 0.00001) {
                 throw new DomainException('El pago excede el saldo pendiente de la obligacion.');
             }
         }

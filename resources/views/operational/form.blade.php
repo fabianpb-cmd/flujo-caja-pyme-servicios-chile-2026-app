@@ -1880,6 +1880,101 @@
             return;
         }
 
+        const cashSourceTypeSelect = form.querySelector('#source_document_type');
+        const cashSourceDocumentSelect = form.querySelector('[data-source-document-select="true"]');
+        const counterpartyInput = form.querySelector('#counterparty_name');
+        const cashProjectSelect = form.querySelector('#project_id');
+        const incomeInput = form.querySelector('#income');
+        const expenseInput = form.querySelector('#expense');
+
+        if (cashSourceTypeSelect && cashSourceDocumentSelect) {
+            const resetCashSourceDerivedFields = () => {
+                if (counterpartyInput) {
+                    counterpartyInput.value = '';
+                }
+                if (cashProjectSelect) {
+                    cashProjectSelect.value = '';
+                    cashProjectSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                if (incomeInput) {
+                    incomeInput.value = '';
+                }
+                if (expenseInput) {
+                    expenseInput.value = '';
+                }
+            };
+
+            const syncCashSourceDocuments = (clearSelection = false) => {
+                const sourceType = cashSourceTypeSelect.value || '';
+                const placeholder = cashSourceDocumentSelect.options[0];
+                let visibleOptions = 0;
+                let hasSelectedVisible = false;
+
+                Array.from(cashSourceDocumentSelect.options).forEach((option, index) => {
+                    if (index === 0) {
+                        option.hidden = false;
+                        option.disabled = false;
+                        return;
+                    }
+
+                    const visible = sourceType !== '' && option.dataset.sourceDocumentType === sourceType;
+                    option.hidden = !visible;
+                    option.disabled = !visible;
+
+                    if (visible) {
+                        visibleOptions++;
+                    }
+                    if (visible && option.selected) {
+                        hasSelectedVisible = true;
+                    }
+                });
+
+                if (clearSelection || !hasSelectedVisible) {
+                    cashSourceDocumentSelect.value = '';
+                }
+
+                if (sourceType === '' || sourceType === 'other') {
+                    cashSourceDocumentSelect.disabled = true;
+                    placeholder.textContent = sourceType === 'other' ? 'No aplica' : cashSourceDocumentSelect.dataset.placeholderParent;
+                } else if (visibleOptions === 0) {
+                    cashSourceDocumentSelect.disabled = true;
+                    placeholder.textContent = cashSourceDocumentSelect.dataset.placeholderEmpty;
+                } else {
+                    cashSourceDocumentSelect.disabled = false;
+                    placeholder.textContent = cashSourceDocumentSelect.dataset.placeholderDefault;
+                }
+            };
+
+            const applyCashSourceDocumentSelection = () => {
+                const option = cashSourceDocumentSelect.options[cashSourceDocumentSelect.selectedIndex];
+                if (!option || !option.value) {
+                    return;
+                }
+
+                if (counterpartyInput && option.dataset.counterpartyName) {
+                    counterpartyInput.value = option.dataset.counterpartyName;
+                }
+                if (cashProjectSelect && option.dataset.projectId) {
+                    cashProjectSelect.value = option.dataset.projectId;
+                    cashProjectSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                if (incomeInput) {
+                    incomeInput.value = option.dataset.suggestedIncome || '';
+                }
+                if (expenseInput) {
+                    expenseInput.value = option.dataset.suggestedExpense || '';
+                }
+            };
+
+            cashSourceTypeSelect.addEventListener('change', () => {
+                syncCashSourceDocuments(true);
+                resetCashSourceDerivedFields();
+            });
+
+            cashSourceDocumentSelect.addEventListener('change', applyCashSourceDocumentSelection);
+            syncCashSourceDocuments(false);
+        }
+
         if (isPayroll) {
             const personSelect = form.querySelector('#person_id');
             const payrollProjectSelect = form.querySelector('#project_id');

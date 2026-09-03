@@ -405,7 +405,7 @@ return [
             'code' => ['label' => 'Codigo', 'type' => 'text'],
             'movement_type_id' => ['label' => 'Tipo movimiento', 'type' => 'relation', 'model' => CashMovementType::class, 'display' => 'name', 'relation_name' => 'movementType'],
             'source_document_type' => ['label' => 'Tipo documento origen', 'type' => 'select', 'options' => ['sales_document' => 'Factura/Ingreso', 'expense_document' => 'Gasto/Egreso', 'payroll_record' => 'Remuneracion', 'legal_obligation' => 'Obligacion', 'other' => 'Otro']],
-            'source_document_code' => ['label' => 'Codigo documento', 'type' => 'text'],
+            'source_document_code' => ['label' => 'Codigo documento', 'type' => 'select', 'options' => [], 'depends_on' => 'source_document_type', 'source_document_selector' => true],
             'counterparty_name' => ['label' => 'Contraparte', 'type' => 'text'],
             'project_id' => ['label' => 'Proyecto', 'type' => 'relation', 'model' => Project::class, 'display' => 'name'],
             'movement_date' => ['label' => 'Fecha', 'type' => 'date'],
