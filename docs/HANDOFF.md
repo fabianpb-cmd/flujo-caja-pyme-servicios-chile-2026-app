@@ -42,7 +42,6 @@ Main puede estar por delante del tag SOLO por commits documentales. No reconstru
 ### Remuneración A — PASS
 
 Payroll: `REM-000013`
-URL: `/operacion/payroll-records/13`
 Proyecto: `QA-A-PROYECTO / PRY-000009`
 Persona: `QA-A-PERSONA UAT QA`
 Período: septiembre 2026
@@ -51,13 +50,9 @@ Validado:
 - 10 h aprobadas;
 - valor HH `$40.000`;
 - bruto `$400.000`;
-- bonos `$0`;
-- no imponibles `$0`;
-- retención honorarios `$61.000`;
 - líquido `$339.000`;
 - costo empresa `$400.000`;
-- cálculo OK;
-- trazabilidad PASS a `ASI-000022 · QA-A-PROYECTO`, vigencia `01/09/2026 al 30/09/2026`;
+- cálculo y trazabilidad PASS;
 - sin 500.
 
 NO repetir ni duplicar `REM-000013`.
@@ -65,7 +60,6 @@ NO repetir ni duplicar `REM-000013`.
 ### Remuneración B — PASS
 
 Payroll: `REM-000014`
-URL: `/operacion/payroll-records/14`
 Proyecto: `QA-B-PROYECTO / PRY-000010`
 Persona: `QA-B-PERSONA`
 Período: septiembre 2026
@@ -74,131 +68,51 @@ Validado:
 - 6 h aprobadas;
 - valor HH `$50.000`;
 - bruto `$300.000`;
-- `QA-B-AJUSTE` aplicado automáticamente una sola vez como bono imponible `$10.000` desde Novedades remuneración;
-- no imponibles `$0`;
-- retención honorarios `$45.750` (15,25 %);
+- `QA-B-AJUSTE` automático una sola vez como bono imponible `$10.000`;
 - líquido `$254.250`;
 - costo empresa mostrado `$300.000`;
-- cálculo OK;
-- trazabilidad PASS a `ASI-000023 · QA-B-PROYECTO`, vigencia `01/09/2026 al 30/09/2026`;
+- cálculo y trazabilidad PASS;
 - sin 500.
 
 NO repetir ni duplicar `REM-000014`.
 
 ### Rentabilidad — PASS
 
-QA-A-PROYECTO:
+QA-A:
 - ingresos `$1.000.000`;
 - costo laboral `$400.000`;
-- otros costos directos `$100.000`;
+- otros directos `$100.000`;
 - costo total `$500.000`;
-- margen `$500.000`;
-- margen `50 %`;
-- detalle: 10 h, costo HH promedio `$40.000`;
-- coherente con `REM-000013`.
+- margen `$500.000` / `50 %`.
 
-QA-B-PROYECTO:
+QA-B:
 - ingresos `$500.000`;
 - costo laboral `$300.000`;
-- otros costos directos `$200.000`;
+- otros directos `$200.000`;
 - costo total `$500.000`;
-- margen `$0`;
-- margen `0 %`;
-- detalle: 6 h, costo HH promedio `$50.000`;
-- coherente con `REM-000014`;
-- el bono `QA-B-AJUSTE` no aplica al costo laboral según la definición visible de Rentabilidad.
+- margen `$0` / `0 %`.
 
-Conclusión formal:
-- Remuneración A: PASS;
-- Remuneración B: PASS;
-- Rentabilidad: PASS;
-- Escenario A E2E: PASS;
-- Escenario B E2E: PASS;
-- UAT FINAL: PASS;
+Conclusión:
+- Remuneración A PASS;
+- Remuneración B PASS;
+- Rentabilidad PASS;
+- Escenario A E2E PASS;
+- Escenario B E2E PASS;
+- UAT FINAL PASS;
 - funcionalmente apto para preparar producción: SI.
 
 ## 3. Blockers resueltos — no reabrir sin evidencia nueva
 
-### Selector Proyecto en Remuneraciones
+- Selector Proyecto en Remuneraciones: listener `input` agregado; staging PASS.
+- 500 payroll horario/honorarios: normalización de `bonuses`, `non_taxable_allowances`, `advances`, `other_deductions`; test dirigido PASS 10/92; staging PASS.
+- Build cPanel Windows: secret scan con `ZipArchive`; build final PASS.
+- Responsable Proyecto, Presupuesto, labels y demás incidencias UAT: PASS/cerradas.
 
-Causa: `period_date` es input de texto y faltaba escuchar evento `input` además de `change`.
-Fix:
-`payrollPeriodInput?.addEventListener('input', syncPayrollProjects);`
-Staging PASS.
+## 4. Módulos ya PASS — NO repetir salvo smoke mínimo de producción
 
-### 500 al guardar payroll horario/honorarios
+Clientes, Proyectos, Personal, Asignaciones, Horas, Remuneraciones, Novedades remuneración, Facturas, CxC, Egresos, CxP, Cuentas/Movimientos, Obligaciones, Flujo, Escenarios, Dashboard, Presupuesto, Rentabilidad, Usuarios admin, seguridad 403 y mantenedores smoke.
 
-Causa comprobada en log:
-`SQLSTATE[23000]: Column 'bonuses' cannot be null` durante `MassAssignment::create(PayrollRecord)`, antes de `syncHourlyTimeEntryTrace()`.
-
-Fix funcional en `app/Services/PayrollService.php`:
-normalizar `bonuses`, `non_taxable_allowances`, `advances` y `other_deductions` a valores numéricos también para modalidad honorarios/pago por hora.
-
-Test dirigido:
-`php artisan test tests\Feature\PayrollTimeEntryTraceTest.php`
-PASS: 10 tests / 92 assertions.
-
-### Build cPanel Windows
-
-El secret scan antiguo abría el ZIP una vez por archivo y se quedaba colgado. Se cambió a PHP `ZipArchive`, abriendo cada ZIP una vez y conservando los mismos patrones de seguridad. Build final PASS. No deshacer.
-
-### Otros issues UAT ya resueltos
-
-PASS y cerrados:
-- Responsable Proyecto;
-- Presupuesto / botón Nuevo presupuesto;
-- labels Centros de costo / Horas;
-- rutas correctas `/crear` (el antiguo `/create` era URL inválida, no blocker funcional).
-
-## 4. Módulos ya PASS — NO repetir en producción salvo smoke mínimo
-
-Ya validados en staging:
-- Clientes;
-- Proyectos;
-- Personal;
-- Asignaciones;
-- Horas;
-- Remuneraciones;
-- Novedades remuneración;
-- Facturas;
-- CxC;
-- Egresos;
-- CxP;
-- Cuentas / Movimientos;
-- Obligaciones;
-- Flujo de caja;
-- Escenarios;
-- Dashboard;
-- Presupuesto;
-- Rentabilidad;
-- Usuarios admin;
-- seguridad usuario normal / 403 Administración;
-- catálogos/mantenedores smoke.
-
-No repetir UAT completa para preparar producción.
-
-## 5. Data QA a preservar mientras se prepare producción
-
-QA-A:
-`QA-A-CLIENTE`, `QA-A-PROYECTO`, `QA-A-PERSONA`, `QA-A-CUENTA`, `REM-000013`.
-
-QA-B:
-`QA-B-CLIENTE`, `QA-B-PROYECTO`, `QA-B-PERSONA`, `QA-B-AJUSTE`, `REM-000014`.
-
-Otros:
-`QA-USER`, `QA-CENTRO-COSTO`.
-
-Presupuesto QA único:
-- proyecto `QA-A-PROYECTO`;
-- escenario Base;
-- período `01/09/2026`;
-- ingreso `$1.000.000`;
-- personal `$400.000`;
-- otros directos `$100.000`.
-
-No limpiar ni duplicar datos QA sin una razón explícita.
-
-## 6. Seguridad BD / deploy
+## 5. Seguridad BD / deploy
 
 Migraciones relevantes existentes:
 - `database/migrations/2026_08_28_000100_create_payroll_record_time_entries_table.php`;
@@ -209,39 +123,57 @@ Reglas:
 - nunca bootstrap sobre BD existente;
 - nunca cambiar `APP_ENV` para saltar salvaguardas;
 - nunca desactivar FKs a ciegas;
-- nunca inventar backfills;
 - preservar `.env` y `storage/`.
 
-## 7. Próximo paso exacto — preparar producción, NO desplegar todavía
+## 6. Production readiness — 2026-09-03
 
-Hacer una sola pasada de production readiness, sin repetir QA funcional:
-1. verificar APP_ROOT/document root REAL de producción; el valor tentativo `/home/tdatcons/apps/flujo-caja-production` NO debe asumirse sin evidencia;
-2. revisar plantilla/configuración production existente y diferencias necesarias respecto de staging;
-3. determinar si producción ya tiene BD y qué migraciones incrementales requeriría;
-4. definir backup previo;
-5. comparar release funcional `ec1d511...` con lo que deba incluir producción;
-6. decidir si hace falta algún cambio mínimo específico de producción;
-7. solo después generar UN build production final;
-8. validar manifest, checksums, ZIPs, secret scan, APP_ROOT y migraciones;
-9. crear tag production únicamente después de build PASS;
-10. DETENERSE antes del deploy para revisión/confirmación manual.
+Inspección local reportada por Codex:
+- HEAD local: `2611d775125061aa5a58ba31feb4c9b5341c9e13`;
+- `origin/main`: `f81c0017a2a0887e15518c2e96cdff0a3d3d8c95` al momento de la inspección;
+- working tree limpio;
+- diferencia local/remoto: commits documentales en `docs/HANDOFF.md`.
 
-Después del futuro deploy production, smoke mínimo solamente:
-`/up`, `/login`, login, 2FA, dashboard.
+Plantilla productiva:
+- `.env.production.template`: EXISTE localmente;
+- untracked + ignored por `.gitignore`;
+- el build production podría usarla hoy localmente;
+- NO es reproducible desde clone remoto actual;
+- no exponer su contenido ni secretos.
 
-## 8. Política de ahorro de créditos para Codex
+Datos de producción aún no confirmados:
+- APP_ROOT candidato `/home/tdatcons/apps/flujo-caja-production`: TENTATIVO, inferido del default del script;
+- PUBLIC_ROOT: NO DEFINIDO;
+- dominio/APP_URL production: NO DEFINIDO;
+- existencia/estado de BD production: NO CONFIRMADO;
+- tipo de deploy: NO CONFIRMADO;
+- uso de bootstrap vs migración incremental: NO DETERMINABLE hasta conocer BD.
 
-Desde 2026-09-03, priorizar costo:
-- modelo por defecto para tareas acotadas: `GPT-5.6 Luna`;
-- usar `GPT-5.6 Terra` solo cuando Luna no sea suficiente para razonamiento/cambios cruzados;
-- reservar modelos más caros para blockers complejos realmente justificados;
-- esfuerzo Bajo por defecto; Medio solo cuando haga falta;
-- no pedir lectura amplia del repo si basta con archivos concretos;
-- no ejecutar suite completa si existe test dirigido;
-- no repetir builds ni UAT ya PASS;
-- agrupar inspección + cambio + test + checkpoint en una sola tarea Codex cuando sea seguro;
-- pedir salida corta y estructurada, sin explicaciones extensas;
-- actualizar este HANDOFF con checkpoints compactos, no narrativas largas;
-- antes de tareas largas, registrar checkpoint; después, registrar solo delta y resultado.
+Backups obligatorios antes de deploy:
+- BD;
+- APP_ROOT;
+- PUBLIC_ROOT;
+- `.env`.
 
-Nota de modelos: GPT-5.4 y GPT-5.4 mini fueron retirados de Codex para sesiones con cuenta ChatGPT el 31-08-2026. Sus reemplazos son GPT-5.6 Terra y GPT-5.6 Luna respectivamente.
+## 7. Próximo paso EXACTO — confirmación manual en cPanel, SIN CODEX
+
+Antes de cualquier build production, Miguel debe confirmar solo estos cuatro datos:
+1. APP_ROOT productivo real;
+2. PUBLIC_ROOT/document root productivo real;
+3. dominio HTTPS exacto de producción para `APP_URL`;
+4. estado de la BD productiva: inexistente/vacía o existente con datos que preservar.
+
+Adicional útil: confirmar si ya existe `.env` productivo en el APP_ROOT.
+
+NO build production todavía.
+NO generar SQL todavía.
+NO deploy production todavía.
+
+## 8. Política de ahorro de créditos
+
+- modelo económico + esfuerzo Bajo por defecto;
+- subir esfuerzo/modelo solo ante blocker real;
+- no recorridos amplios del repo si bastan archivos concretos;
+- no repetir UAT ni builds PASS;
+- respuestas Codex cortas y estructuradas;
+- agrupar tareas cuando sea seguro;
+- checkpoints compactos en este archivo.
