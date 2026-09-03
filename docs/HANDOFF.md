@@ -667,3 +667,47 @@ Importante:
 - solo después de ese build final PASS y push confirmado corresponde crear tag `cpanel-staging-YYYYMMDD-HHMMSS`;
 - no desplegar automáticamente;
 - deploy posterior esperado para este fix funcional: subir `app-private.zip`, no subir `public.zip` salvo cambio inesperado en `public/`, no importar SQL/bootstrap, no limpiar BD, preservar `.env`, `storage/` y data QA.
+
+## 21. Release staging final generado y taggeado
+
+Release final confirmado:
+- commit: `3efcf37f69b2dbebbbacdbba14d7220c943376f4`;
+- mensaje: `Fix cpanel release secret scan on Windows`;
+- build final: PASS, exit code 0;
+- `manifest.git_commit`: `3efcf37f69b2dbebbbacdbba14d7220c943376f4`;
+- `app-private.zip`: PASS `unzip -t`;
+- `public.zip`: PASS `unzip -t`;
+- secret scan: PASS;
+- SQL validation: PASS;
+- checksums: PASS;
+- APP_ROOT: `/home/tdatcons/apps/flujo-caja-staging`;
+- tag: `cpanel-staging-20260903-091246`;
+- tag apunta a `3efcf37f69b2dbebbbacdbba14d7220c943376f4`.
+
+Deploy definido para este release:
+- solo `app-private.zip`;
+- sin `public.zip`;
+- sin SQL/migración nueva;
+- preservar `.env`, `storage/` y data QA.
+
+## 22. Deploy staging del release final — COMPLETADO 2026-09-03
+
+El usuario confirmó manualmente: `deploy listo`.
+
+Estado externo confirmado:
+- se desplegó el release staging final preparado para `3efcf37f69b2dbebbbacdbba14d7220c943376f4` / tag `cpanel-staging-20260903-091246`;
+- el deploy previsto era solo `app-private.zip` sobre `/home/tdatcons/apps/flujo-caja-staging`;
+- NO corresponde repetir deploy ni build antes de UAT, salvo evidencia concreta de que el archivo equivocado fue usado;
+- NO ejecutar SQL/migraciones;
+- preservar `.env`, `storage/` y data QA.
+
+Próximo paso EXACTO:
+reprobar SOLO:
+1. Remuneración A: `QA-A-PERSONA` + período septiembre 2026 + `QA-A-PROYECTO`; verificar que Proyecto se habilite, 10 h aprobadas, cálculo y trazabilidad;
+2. Remuneración B: `QA-B-PERSONA` + período septiembre 2026 + `QA-B-PROYECTO`; verificar 6 h aprobadas, `QA-B-AJUSTE` $10.000, cálculo y trazabilidad;
+3. Rentabilidad: verificar costo laboral y margen de `QA-A-PROYECTO` y `QA-B-PROYECTO` después de crear ambos payrolls.
+
+NO repetir Presupuesto, Responsable Proyecto, Centros de costo, Horas labels ni otros módulos ya PASS.
+
+UAT FINAL sigue PENDIENTE hasta completar esas tres comprobaciones.
+Producción sigue NO autorizada hasta UAT FINAL PASS.
