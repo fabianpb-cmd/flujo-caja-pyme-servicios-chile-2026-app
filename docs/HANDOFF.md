@@ -54,15 +54,20 @@ Mensaje: `Fix staging UAT issues`
 Fix definitivo del selector Proyecto, integrado y pusheado posteriormente:
 `4622b71f5455b30a9cf75cc90c5eb8f338d1be9d`
 
-Ajuste del build cPanel Windows + release funcional desplegado actual:
+Ajuste del build cPanel Windows + release funcional desplegado anterior:
 `3efcf37f69b2dbebbbacdbba14d7220c943376f4`
 Mensaje: `Fix cpanel release secret scan on Windows`
-Tag staging actual desplegado:
+Tag staging anterior:
 `cpanel-staging-20260903-091246`
 
-Build del release `3efcf37...`:
+Release funcional actual desplegado desde 2026-09-03:
+`ec1d51160b8899b7351950fc1202f157d72e42c4`
+Tag staging actual desplegado:
+`cpanel-staging-20260903-124424`
+
+Build del release actual:
 - PASS, exit code 0;
-- `manifest.git_commit = 3efcf37f69b2dbebbbacdbba14d7220c943376f4`;
+- `manifest.git_commit = ec1d51160b8899b7351950fc1202f157d72e42c4`;
 - `app-private.zip`: PASS `unzip -t`;
 - `public.zip`: PASS `unzip -t`;
 - secret scan: PASS;
@@ -70,17 +75,7 @@ Build del release `3efcf37...`:
 - checksums: PASS;
 - APP_ROOT: `/home/tdatcons/apps/flujo-caja-staging`.
 
-Deploy del release actual confirmado manualmente por el usuario el 2026-09-03:
-- deploy completado;
-- se esperaba/realizó update de `app-private.zip`;
-- sin SQL nuevo;
-- preservar `.env`, `storage/` y data QA.
-
 Main remoto contiene además commits SOLO documentales posteriores al release funcional desplegado. No confundir `origin/main` con el SHA funcional actualmente instalado en staging.
-
-Checkpoint documental remoto previo al diagnóstico actual:
-`bf0230a481d9f0b8ee358ea54f59012b300bffeb`
-Mensaje: `docs: checkpoint payroll save UAT failure`
 
 ## 4. Migraciones / seguridad de BD
 
@@ -98,7 +93,7 @@ Reglas críticas:
 - nunca desactivar FKs a ciegas;
 - no inventar backfills.
 
-Para el blocker actual NO se ha confirmado necesidad de cambio de BD. El error comprobado es de código/normalización de datos antes del INSERT.
+Para el blocker actual NO se confirmó necesidad de cambio de BD. El error comprobado era de código/normalización de datos antes del INSERT.
 
 ## 5. Limpieza y data QA que debe conservarse
 
@@ -196,7 +191,7 @@ Hook especial de horas aparecía en mantenedores genéricos. Se limitó a `time-
 
 ### 7.4 500 por ruta `/create` — NO era regresión funcional
 
-Las rutas reales usan `/crear`. `/create` caía en `/{record}` y producía TypeError. No confundir ese incidente antiguo con el 500 actual del POST válido.
+Las rutas reales usan `/crear`. `/create` caía en `/{record}` y producía TypeError. No confundir ese incidente antiguo con el 500 del POST válido ya diagnosticado.
 
 Hardening opcional futuro: `whereNumber('record')`; no es blocker actual.
 
@@ -218,7 +213,7 @@ Tests post-integración del fix:
 - `PayrollTimeEntryTraceTest`: PASS, 10 tests / 88 assertions;
 - `OperationalUiTest --filter=payroll_project_options_and_backend_require_assignment_for_period`: PASS, 1 test / 22 assertions.
 
-En staging, luego del deploy `3efcf37...`, el usuario confirmó:
+En staging, luego del deploy anterior, el usuario confirmó:
 - Proyecto habilitado: PASS;
 - `QA-A-PROYECTO` seleccionable: PASS.
 
@@ -242,7 +237,7 @@ No deshacer esta optimización.
 
 Pendiente post-UAT: diseñar modo rápido staging incremental (`CPANEL_FAST_BUILD=true` o equivalente) para evitar regenerar bootstrap/dependencias cuando no se necesitan. Mantener build completo y validaciones completas para candidato final/producción.
 
-## 10. UAT post-deploy 2026-09-03 — selector PASS, guardado FAIL
+## 10. UAT post-deploy anterior — selector PASS, guardado FAIL
 
 Remuneración A usada:
 - URL formulario: `https://licitaciones.tdatconsulting.cl/operacion/payroll-records/crear`;
@@ -252,7 +247,7 @@ Remuneración A usada:
 - base: `Bruto`;
 - fecha pago: `2026-09-30`.
 
-Resultado:
+Resultado histórico:
 - Proyecto habilitado: PASS;
 - Proyecto seleccionado: PASS;
 - panel previo mostraba `0 h`;
@@ -290,41 +285,40 @@ Operación exacta que falla:
 Conclusiones comprobadas:
 - el backend SÍ encontró las 10 h aprobadas de QA-A al preparar el payroll;
 - `project_id = 9` correspondía al proyecto QA-A seleccionado en el POST/log;
-- el `0 h` visible antes del POST es problema de preview/UI y NO significa que el backend de guardado ignore las horas;
-- la falla sucede antes de escribir la trazabilidad pivote;
-- no hay evidencia que obligue a modificar esquema/BD para este error.
-
-Esquema staging no verificado directamente desde la sesión de diagnóstico:
-- existencia de `payroll_record_time_entries`: NO VERIFICADA;
-- row de migration: NO VERIFICADA;
-- `SHOW CREATE TABLE`: NO DISPONIBLE.
-
-Esto deja esas verificaciones como posibles controles posteriores, pero NO son la causa del 500 actual ya demostrado por el log.
+- el `0 h` visible antes del POST era problema de preview/UI y NO significa que el backend de guardado ignore las horas;
+- la falla sucedía antes de escribir la trazabilidad pivote;
+- no había evidencia que obligara a modificar esquema/BD para este error.
 
 ## 12. Causa raíz funcional del 500 — CONFIRMADA
 
 El formulario manual envía campos monetarios vacíos. Laravel los normaliza a `NULL`.
 
-Para modalidad honorarios/pago por hora, `PayrollService::calculate()` no devolvía algunos campos NOT NULL — específicamente el caso observado `bonuses`, y también se identificó el mismo riesgo para `non_taxable_allowances`.
+Para modalidad honorarios/pago por hora, `PayrollService::calculate()` no devolvía algunos campos NOT NULL — específicamente `bonuses`, con el mismo riesgo para `non_taxable_allowances`, `advances` y `other_deductions`.
 
-Esos `NULL` quedaban explícitos en los datos usados por `MassAssignment::create()`, por lo que MySQL no aplicaba defaults y rechazaba el INSERT por `payroll_records.bonuses NOT NULL`.
+Esos `NULL` quedaban explícitos en los datos usados por `MassAssignment::create()`, por lo que MySQL rechazaba el INSERT por `payroll_records.bonuses NOT NULL`.
 
-Causa raíz única comprobada:
+Causa raíz comprobada:
 normalización incompleta de campos monetarios nullable/vacíos en el cálculo manual de payroll horario/honorarios antes del INSERT.
 
-Corrección requerida:
+Corrección requerida y aplicada en el release actual:
 - Código: SI.
-- BD: NO para este error.
-- No proponer/importar SQL ni bootstrap por este blocker.
+- BD: NO.
 
-## 13. Fix local del 500 — HECHO, TESTEADO, AÚN NO REMOTO
+## 13. Fix integrado del 500
 
-Codex reportó cambio local en:
-- `app/Services/PayrollService.php`;
-- `tests/Feature/PayrollTimeEntryTraceTest.php`;
-- `docs/HANDOFF.md`.
+Commit funcional original local:
+`2b11a09000c54441d087403b4182a805967792df`
 
-Test ejecutado:
+Después de `git rebase origin/main`, HEAD funcional final:
+`ec1d51160b8899b7351950fc1202f157d72e42c4`
+
+Cambio funcional:
+- `app/Services/PayrollService.php`: normaliza `bonuses`, `non_taxable_allowances`, `advances` y `other_deductions` a valores numéricos en `calculate()` y los devuelve también para modalidad honorarios/pago por hora.
+
+Test de regresión:
+- `tests/Feature/PayrollTimeEntryTraceTest.php` envía esos campos vacíos, verifica persistencia en `0.0`, 10 h aprobadas y trazabilidad.
+
+Test dirigido:
 `php artisan test tests\Feature\PayrollTimeEntryTraceTest.php`
 
 Resultado:
@@ -332,80 +326,92 @@ Resultado:
 - 10 tests;
 - 92 assertions.
 
-Commit LOCAL reportado:
-`2b11a09000c54441d087403b4182a805967792df`
+## 14. Integración, build y tag del fix `bonuses = NULL`
 
-Verificación GitHub realizada desde ChatGPT después del reporte:
-- `GitHub.fetch_commit(2b11a090...)` -> `No commit found for SHA` / 422.
+Integración:
+- `origin/main` inicial: `5f25be96fb0b15f32308f36f4bd2dc77f88ceeaf`;
+- estrategia: `git rebase origin/main`;
+- conflicto: solo `docs/HANDOFF.md`;
+- `docs/HANDOFF-LATEST.md`: eliminado y no debe reaparecer;
+- HEAD funcional final: `ec1d51160b8899b7351950fc1202f157d72e42c4`.
 
-Por tanto:
-- el fix `2b11a090...` está LOCAL;
-- NO está en `origin/main` todavía;
-- NO está desplegado;
-- NO decir que está pusheado hasta verificarlo después de la integración.
+Compare contra `3efcf37...`:
+- runtime: `app/Services/PayrollService.php`;
+- tests: `tests/Feature/PayrollTimeEntryTraceTest.php`;
+- docs: `docs/HANDOFF.md`, eliminación de `docs/HANDOFF-LATEST.md`;
+- tooling: ninguno;
+- `public/`: sin cambios.
 
-## 14. Estado esperado después del POST fallido
+Build staging completo:
+- PASS, exit code 0;
+- `manifest.git_commit`: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
+- `app-private.zip`: PASS `unzip -t`;
+- `public.zip`: PASS `unzip -t`;
+- secret scan: PASS;
+- SQL validation: PASS;
+- checksums: PASS;
+- APP_ROOT: `/home/tdatcons/apps/flujo-caja-staging`.
 
-No se verificó directamente en BD staging si quedó un payroll QA-A, pero el INSERT falló en `MassAssignment::create()` dentro de una transacción antes de `syncHourlyTimeEntryTrace()`, por lo que no debería existir payroll persistido por ese intento. Aun así, antes de repetir UAT tras el próximo deploy conviene comprobar visualmente/listado o por consulta disponible que no exista duplicado QA-A para septiembre.
+Tag:
+`cpanel-staging-20260903-124424`
 
-No se verificaron pivot rows porque el error ocurrió antes de la sincronización.
+Tag SHA:
+`ec1d51160b8899b7351950fc1202f157d72e42c4`
 
-No borrar ni limpiar data a ciegas.
+Main avanzó después solo por checkpoint documental; eso NO invalida el release ni requiere rebuild.
 
-## 15. Próximo paso EXACTO — integrar el fix local, push, build staging UNA vez
+## 15. Deploy staging del fix `bonuses = NULL` — COMPLETADO 2026-09-03
 
-El fix local `2b11a090...` debe integrarse sobre el `origin/main` actual, que contiene checkpoints documentales posteriores.
+El usuario confirmó manualmente `deploy listo` después de subir/extractar el `app-private.zip` del release:
+- tag `cpanel-staging-20260903-124424`;
+- commit funcional `ec1d51160b8899b7351950fc1202f157d72e42c4`;
+- APP_ROOT `/home/tdatcons/apps/flujo-caja-staging`.
 
-Secuencia segura:
-1. en Codex/local: `git status`, `git fetch origin`, revisar `git rev-parse HEAD` y `git rev-parse origin/main`;
-2. preservar el commit funcional local `2b11a090...`;
-3. integrar `origin/main` sin force push, preferentemente rebase/cherry-pick seguro;
-4. resolver cualquier conflicto de `docs/HANDOFF.md` conservando TODO el estado remoto actual y el detalle del fix local;
-5. confirmar que `docs/HANDOFF-LATEST.md` NO existe después de integrar;
-6. si el rebase solo toca docs y no hay conflicto de código, no repetir suites amplias; si hay conflicto en código, correr únicamente `PayrollTimeEntryTraceTest.php`;
-7. push normal a `origin/main`, sin `--force`;
-8. verificar en GitHub que el nuevo HEAD remoto contiene el cambio en `PayrollService.php`, test y este HANDOFF;
-9. comparar contra `3efcf37...` para determinar archivos runtime modificados y confirmar si `public/` sigue sin cambios;
-10. generar UN solo build staging desde el HEAD remoto integrado final;
-11. validar exit code 0, manifest.git_commit = SHA final, ZIPs, secret scan, SQL validation, checksums y APP_ROOT;
-12. crear nuevo tag `cpanel-staging-YYYYMMDD-HHMMSS` solo después del build PASS;
-13. NO desplegar automáticamente desde Codex: dejar artefacto listo para despliegue manual del usuario;
-14. para este fix se espera deploy de `app-private.zip`; no subir `public.zip` si compare confirma que `public/` no cambió;
-15. NO importar SQL/bootstrap, NO limpiar BD, preservar `.env`, `storage/` y data QA.
+Reglas del deploy confirmado:
+- solo `app-private.zip`;
+- `public.zip` NO requerido;
+- SQL NO requerido;
+- migración nueva NO requerida;
+- preservar `.env`;
+- preservar `storage/`;
+- preservar data QA.
 
-Modelo recomendado para esta integración/build acotado:
-GPT-5.4 Mini + Bajo. Subir a Medio solo si aparecen conflictos reales o una validación falla de forma no obvia.
+No repetir build ni deploy antes de la UAT puntual salvo evidencia de artefacto incorrecto.
 
-## 16. UAT que debe repetirse después del próximo deploy
+## 16. Próximo paso EXACTO — SOLO Remuneración A
 
-Primero SOLO Remuneración A:
-- `QA-A-PERSONA UAT QA`;
-- período `2026-09-01`;
-- `QA-A-PROYECTO`;
-- base `Bruto`;
-- fecha pago `2026-09-30`.
+Ejecutar únicamente esta re-prueba en staging:
+- Persona: `QA-A-PERSONA UAT QA`;
+- período: `2026-09-01`;
+- proyecto: `QA-A-PROYECTO`;
+- base: `Bruto`;
+- fecha pago: `2026-09-30`.
 
 Validar:
-- Proyecto habilitado;
-- 10 h backend/calculadas;
-- guardado sin 500;
-- ID/código generado;
-- cálculo;
-- trazabilidad de horas.
+1. Proyecto habilitado;
+2. 10 h reconocidas por backend/calculo;
+3. guardado sin 500;
+4. ID/código generado;
+5. cálculo generado;
+6. trazabilidad hacia las horas aprobadas.
 
-Si A FAIL: detenerse y diagnosticar; NO ejecutar B ni Rentabilidad.
+Antes de crear, comprobar que no exista ya un payroll QA-A para septiembre generado por un intento previo exitoso; no duplicar registros.
+
+Si A FAIL:
+- detenerse inmediatamente;
+- no ejecutar B;
+- no ejecutar Rentabilidad;
+- obtener error exacto/evidencia y diagnosticar solo ese punto.
 
 Si A PASS:
-- ejecutar Remuneración B con `QA-B-PERSONA`, septiembre 2026, `QA-B-PROYECTO`;
-- confirmar 6 h;
-- confirmar `QA-B-AJUSTE` bono imponible 10.000;
-- confirmar cálculo y trazabilidad.
-
-Solo si A y B PASS:
-- ejecutar Rentabilidad para QA-A y QA-B;
-- verificar costo laboral y márgenes coherentes.
+- checkpoint inmediato en `docs/HANDOFF.md`;
+- luego recién ejecutar Remuneración B;
+- solo si B PASS, ejecutar Rentabilidad.
 
 NO repetir Presupuesto, Responsable Proyecto, Centros de costo, Horas labels ni otros módulos ya PASS.
+
+UAT FINAL sigue PENDIENTE hasta cerrar A, B y Rentabilidad.
+Producción sigue NO autorizada hasta UAT FINAL PASS.
 
 ## 17. Criterio de cierre UAT
 
@@ -423,7 +429,7 @@ Entonces:
 - funcionalmente apto para producción: SI.
 
 Hasta entonces:
-UAT FINAL = FAIL.
+UAT FINAL = FAIL/PENDIENTE.
 Producción = NO autorizada.
 
 ## 18. Producción — pendiente
@@ -438,77 +444,3 @@ Solo después de UAT FINAL PASS:
 - usar migración incremental revisada si correspondiera;
 - validar manifest/checksums/ZIP/secrets;
 - smoke mínimo post-deploy: `/up`, `/login`, login, 2FA, dashboard.
-
-## 19. Integración, build staging y tag del fix `bonuses = NULL`
-
-Fecha: 2026-09-03.
-
-Integración:
-- `origin/main` inicial confirmado: `5f25be96fb0b15f32308f36f4bd2dc77f88ceeaf`;
-- commit funcional local original: `2b11a09000c54441d087403b4182a805967792df`;
-- estrategia usada: `git rebase origin/main`;
-- conflicto: solo `docs/HANDOFF.md`;
-- resolución del conflicto: se preservó el HANDOFF remoto como fuente principal, que ya contenía el diagnóstico del `NULL`, y se reaplicó solo el fix funcional;
-- `docs/HANDOFF-LATEST.md`: no existe en HEAD integrado;
-- HEAD funcional final integrado: `ec1d51160b8899b7351950fc1202f157d72e42c4`.
-
-Fix funcional integrado:
-- `app/Services/PayrollService.php`: normaliza `bonuses`, `non_taxable_allowances`, `advances` y `other_deductions` a valores numéricos en `calculate()` y los devuelve también para modalidad honorarios/pago por hora;
-- `tests/Feature/PayrollTimeEntryTraceTest.php`: el test manual horario envía esos campos como strings vacíos, verifica persistencia en `0.0`, 10 h aprobadas y trazabilidad.
-
-Test dirigido:
-- comando: `php artisan test tests\Feature\PayrollTimeEntryTraceTest.php`;
-- resultado: PASS;
-- tests: 10;
-- assertions: 92.
-
-Push:
-- `git push origin main`: PASS;
-- `HEAD` y `origin/main` verificados en `ec1d51160b8899b7351950fc1202f157d72e42c4`.
-
-Compare contra release desplegado actual `3efcf37f69b2dbebbbacdbba14d7220c943376f4`:
-- runtime: `app/Services/PayrollService.php`;
-- tests: `tests/Feature/PayrollTimeEntryTraceTest.php`;
-- docs: `docs/HANDOFF.md` y eliminación de `docs/HANDOFF-LATEST.md`;
-- tooling: ninguno;
-- `public/`: sin cambios.
-
-Build staging completo:
-- comando: `scripts/build-cpanel-release.sh` con `CPANEL_RELEASE_MODE=staging` y MySQL Laragon activo;
-- resultado: PASS, exit code 0;
-- `manifest.git_commit`: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
-- release id generado: `cpanel-staging-20260903-124325`;
-- `app-private.zip`: PASS `unzip -t`;
-- `public.zip`: PASS `unzip -t`;
-- secret scan: PASS dentro del build;
-- SQL validation: PASS dentro del build;
-- checksums: PASS con `shasum -a 256 -c checksums.txt`;
-- APP_ROOT: `/home/tdatcons/apps/flujo-caja-staging`.
-
-Tag staging:
-- nombre: `cpanel-staging-20260903-124424`;
-- SHA: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
-- push tag: PASS;
-- verificación: `git rev-list -n 1 cpanel-staging-20260903-124424` devuelve `ec1d51160b8899b7351950fc1202f157d72e42c4`.
-
-Deploy requerido, NO ejecutado:
-- subir solo `app-private.zip`;
-- NO subir `public.zip`;
-- NO importar `staging-bootstrap.sql`;
-- NO ejecutar SQL;
-- NO ejecutar migración nueva;
-- preservar `.env`;
-- preservar `storage/`;
-- preservar data QA staging.
-
-Estado importante:
-- TAG `cpanel-staging-20260903-124424` = release funcional desplegable;
-- main HEAD posterior puede avanzar solo por este checkpoint documental;
-- si main queda por delante del tag por documentación, NO reconstruir release por eso.
-
-Próximo paso exacto:
-1. deploy manual de `app-private.zip` del release `cpanel-staging-20260903-124424`;
-2. después del deploy, repetir SOLO Remuneración A con `QA-A-PERSONA UAT QA`, período `2026-09-01`, `QA-A-PROYECTO`, base `Bruto`, fecha pago `2026-09-30`;
-3. validar Proyecto habilitado, 10 h, guardado sin 500, ID/código, cálculo y trazabilidad;
-4. si A falla, detenerse;
-5. solo si A pasa, continuar B y Rentabilidad.
