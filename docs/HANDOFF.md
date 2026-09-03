@@ -14,8 +14,6 @@ Aplicación: Laravel.
 Dominio objetivo de PRODUCCIÓN confirmado por Miguel:
 `https://licitaciones.tdatconsulting.cl`
 
-Ese mismo host fue usado como staging durante la UAT final y será promovido a producción; no se usará `tdatconsulting.cl` para esta aplicación.
-
 PUBLIC_ROOT confirmado por cPanel:
 `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`
 
@@ -43,14 +41,7 @@ Remuneración A/B, Rentabilidad, escenarios E2E y UAT FINAL: PASS.
 Funcionalmente apto para promoción a producción: SI.
 No repetir UAT.
 
-## 3. Blockers resueltos — no reabrir sin evidencia nueva
-
-- selector Proyecto Remuneraciones: PASS;
-- 500 payroll horario/honorarios: PASS, test dirigido 10/92;
-- build cPanel Windows/secret scan: PASS;
-- demás incidencias UAT: cerradas.
-
-## 4. Seguridad BD / deploy
+## 3. Seguridad BD / deploy
 
 BD actual se PROMUEVE y se conserva.
 NO crear BD productiva separada.
@@ -68,7 +59,7 @@ Backups previos al cutover — TODOS COMPLETADOS por Miguel el 2026-09-03:
 - PUBLIC_ROOT;
 - `.env` actual.
 
-## 5. Production readiness — hechos confirmados
+## 4. Production readiness — hechos confirmados
 
 cPanel:
 - host: `licitaciones.tdatconsulting.cl`;
@@ -84,46 +75,48 @@ Decisiones:
 - no bootstrap SQL;
 - no migración de datos a otra BD.
 
-Plantilla local `.env.production.template`: existe localmente, ignored; no exponer contenido ni secretos.
+`bootstrap/cache` NO contiene `config.php`; la configuración no está cacheada con `config:cache`.
 
-## 6. Inspección bootstrap/cache — 2026-09-03
+## 5. .env actual — YA PRODUCTIVO, no cambiar por ahora
 
-Captura cPanel de `/home/tdatcons/apps/flujo-caja-staging/bootstrap/cache` confirma solamente:
-- `.gitignore`;
-- `packages.php`;
-- `services.php`.
+Miguel verificó manualmente los valores no secretos del `.env` actual. Estado confirmado:
+- `APP_ENV=production`;
+- `APP_DEBUG=false`;
+- `APP_URL=https://licitaciones.tdatconsulting.cl`;
+- `LOG_LEVEL=warning`;
+- `SESSION_DRIVER=database`;
+- `SESSION_LIFETIME=30`;
+- `SESSION_ABSOLUTE_LIFETIME=480`;
+- `SESSION_EXPIRE_ON_CLOSE=true`;
+- `SESSION_SECURE_COOKIE=true`;
+- `SESSION_HTTP_ONLY=true`;
+- `SESSION_SAME_SITE=lax`;
+- `CACHE_STORE=database`;
+- `QUEUE_CONNECTION=sync`;
+- `FILESYSTEM_DISK=local`;
+- `BROADCAST_CONNECTION=log`;
+- `MAIL_MAILER=log`.
 
-NO existe `config.php`.
-Conclusión: configuración Laravel NO está cacheada mediante `config:cache`; cambios del `.env` deberían aplicarse en la siguiente petición sin necesitar Artisan para limpiar config cache.
+APP_KEY está presente; NO registrar su valor y NO cambiarla.
+Credenciales BD se mantienen y NO se registran.
 
-Revisión repo:
-- `config/app.php` usa `APP_ENV`, `APP_DEBUG`, `APP_URL` y `APP_KEY` de `.env`;
-- `config/session.php` hace cookie segura por defecto para `staging`/`production`, pero `SESSION_SECURE_COOKIE` puede sobrescribirla;
-- `.env.staging.example` ya recomienda `APP_ENV=production`, `APP_DEBUG=false`, HTTPS, `LOG_LEVEL=warning`, `SESSION_SECURE_COOKIE=true`, `SESSION_HTTP_ONLY=true`, `SESSION_SAME_SITE=lax`, `QUEUE_CONNECTION=sync`.
+Conclusión: el `.env` actual ya cumple la configuración productiva relevante revisada. NO hace falta editarlo para la promoción.
 
-Importante: NO asumir que el `.env` actual necesita cambiar `APP_ENV`; primero verificar valores NO secretos existentes porque el template de staging ya usaba `APP_ENV=production`.
+## 6. Próximo paso EXACTO — decidir datos QA antes de declarar go-live
 
-## 7. Próximo paso EXACTO — inspección manual de valores NO secretos del .env
+No hay cambio técnico de `.env` pendiente.
+Antes de declarar formalmente el go-live, decidir explícitamente si los datos QA/UAT que hoy viven en la misma BD se mantienen en producción o se eliminan de forma controlada.
 
-Abrir `.env` en cPanel y revisar SOLO estas variables, sin compartir APP_KEY ni credenciales DB:
-- `APP_ENV`
-- `APP_DEBUG`
-- `APP_URL`
-- `LOG_LEVEL`
-- `SESSION_SECURE_COOKIE`
-- `SESSION_HTTP_ONLY`
-- `SESSION_SAME_SITE`
-- `QUEUE_CONNECTION`
+Datos QA conocidos a considerar incluyen `QA-A-*`, `QA-B-*`, `QA-USER`, `QA-CENTRO-COSTO`, `REM-000013` y `REM-000014`.
 
-Miguel debe reportar únicamente esos valores no secretos. No modificar todavía.
-
-NO build production.
-NO generar SQL.
-NO importar bootstrap.
-NO tocar BD.
+NO borrar nada sin decisión explícita.
+NO build production por ahora.
+NO generar/importar SQL.
 NO mover APP_ROOT.
 
-## 8. Política de ahorro de créditos
+Después de esa decisión: smoke mínimo de producción (`/up`, `/login`, login, 2FA, dashboard) y checkpoint final.
+
+## 7. Política de ahorro de créditos
 
 - sin Codex para inspecciones manuales de cPanel;
 - no repetir UAT/builds PASS;
