@@ -16,129 +16,116 @@ Dominio objetivo de PRODUCCIÓN confirmado por Miguel:
 
 Ese mismo host fue usado como staging durante la UAT final y será promovido a producción; no se usará `tdatconsulting.cl` para esta aplicación.
 
-PUBLIC_ROOT confirmado por cPanel para ese host:
+PUBLIC_ROOT confirmado por cPanel:
 `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`
 
 APP_ROOT actual:
 `/home/tdatcons/apps/flujo-caja-staging`
 
-APP_ROOT productivo separado todavía no existe. Candidato si se decide separar código más adelante:
-`/home/tdatcons/apps/flujo-caja-production`
+Se hará promoción in-place. Evitar mover APP_ROOT si no aporta beneficio claro.
 
 Hosting/deploy:
 - cPanel;
 - sin SSH/Composer/Artisan remoto como flujo normal;
 - app privada fuera del document root público;
 - preservar siempre `.env` y `storage/`;
-- `staging-bootstrap.sql` es bootstrap completo, NO migración incremental. Nunca importarlo sobre la BD actual.
+- nunca importar bootstrap SQL sobre la BD actual.
 
-Producción todavía NO formalizada; se hará promoción in-place del entorno validado.
+## 2. Estado funcional — UAT FINAL PASS
 
-## 2. Estado funcional actual — UAT FINAL PASS
-
-Release funcional probado y desplegado:
+Release funcional probado:
 - commit: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
 - tag: `cpanel-staging-20260903-124424`;
-- build: PASS, exit code 0;
-- `manifest.git_commit`: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
-- ZIPs, secret scan, SQL validation y checksums: PASS.
+- build PASS;
+- ZIPs, secret scan, SQL validation y checksums PASS.
 
-Main puede estar por delante del tag SOLO por commits documentales. No reconstruir release por eso.
-
-Remuneración A: PASS, `REM-000013`, 10 h, costo empresa `$400.000`, cálculo/trazabilidad PASS.
-Remuneración B: PASS, `REM-000014`, 6 h, `QA-B-AJUSTE` `$10.000`, costo empresa `$300.000`, cálculo/trazabilidad PASS.
-Rentabilidad QA-A: ingresos `$1.000.000`, costo laboral `$400.000`, otros directos `$100.000`, margen `$500.000` / `50 %`.
-Rentabilidad QA-B: ingresos `$500.000`, costo laboral `$300.000`, otros directos `$200.000`, margen `$0` / `0 %`.
-
-Conclusión:
-- Remuneración A PASS;
-- Remuneración B PASS;
-- Rentabilidad PASS;
-- Escenario A E2E PASS;
-- Escenario B E2E PASS;
-- UAT FINAL PASS;
-- funcionalmente apto para promoción a producción: SI.
-
-NO repetir ni duplicar `REM-000013` ni `REM-000014`.
+Remuneración A/B, Rentabilidad, escenarios E2E y UAT FINAL: PASS.
+Funcionalmente apto para promoción a producción: SI.
+No repetir UAT.
 
 ## 3. Blockers resueltos — no reabrir sin evidencia nueva
 
-- Selector Proyecto en Remuneraciones: listener `input` agregado; PASS.
-- 500 payroll horario/honorarios: normalización de campos monetarios; test dirigido PASS 10/92; PASS en servidor.
-- Build cPanel Windows: secret scan con `ZipArchive`; build final PASS.
-- Responsable Proyecto, Presupuesto, labels y demás incidencias UAT: PASS/cerradas.
+- selector Proyecto Remuneraciones: PASS;
+- 500 payroll horario/honorarios: PASS, test dirigido 10/92;
+- build cPanel Windows/secret scan: PASS;
+- demás incidencias UAT: cerradas.
 
-## 4. Módulos ya PASS — NO repetir salvo smoke mínimo de producción
+## 4. Seguridad BD / deploy
 
-Clientes, Proyectos, Personal, Asignaciones, Horas, Remuneraciones, Novedades remuneración, Facturas, CxC, Egresos, CxP, Cuentas/Movimientos, Obligaciones, Flujo, Escenarios, Dashboard, Presupuesto, Rentabilidad, Usuarios admin, seguridad 403 y mantenedores smoke.
-
-## 5. Seguridad BD / deploy
+BD actual se PROMUEVE y se conserva.
+NO crear BD productiva separada.
+NO importar `production-bootstrap.sql` ni `staging-bootstrap.sql`.
+No ejecutar migraciones salvo cambio posterior que realmente las requiera.
+Preservar APP_KEY y credenciales BD actuales.
 
 Migraciones relevantes existentes:
 - `database/migrations/2026_08_28_000100_create_payroll_record_time_entries_table.php`;
 - `database/migrations/2026_08_31_000100_make_period_batch_id_not_nullable_on_time_entries.php`.
 
-Reglas:
-- la BD actual se PROMUEVE y se conserva;
-- NO crear una BD nueva para producción;
-- NO importar `production-bootstrap.sql` ni `staging-bootstrap.sql` sobre la BD actual;
-- no ejecutar migraciones salvo que un cambio posterior al release validado realmente las requiera;
-- nunca cambiar `APP_ENV` para saltar salvaguardas;
-- nunca desactivar FKs a ciegas;
-- preservar `.env` y `storage/`.
+Backups previos al cutover — TODOS COMPLETADOS por Miguel el 2026-09-03:
+- BD actual;
+- APP_ROOT;
+- PUBLIC_ROOT;
+- `.env` actual.
 
-Backups obligatorios antes del cutover:
-- BD actual completa: COMPLETADO por Miguel el 2026-09-03;
-- APP_ROOT actual: COMPLETADO por Miguel el 2026-09-03;
-- PUBLIC_ROOT: COMPLETADO por Miguel el 2026-09-03;
-- `.env` actual: COMPLETADO por Miguel el 2026-09-03.
-
-## 6. Production readiness — decisiones confirmadas 2026-09-03
-
-Plantilla productiva local:
-- `.env.production.template`: existe localmente, ignored;
-- no exponer contenido ni secretos.
+## 5. Production readiness — hechos confirmados
 
 cPanel:
-- home: `/home/tdatcons`;
-- app actual: `/home/tdatcons/apps/flujo-caja-staging`;
 - host: `licitaciones.tdatconsulting.cl`;
 - PUBLIC_ROOT: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
-- HTTPS redirect activado.
+- HTTPS redirect activado;
+- APP_ROOT actual: `/home/tdatcons/apps/flujo-caja-staging`.
 
-Decisiones de Miguel:
-- dominio productivo será `https://licitaciones.tdatconsulting.cl`;
-- se mantendrá la BASE DE DATOS ACTUAL;
-- no se creará BD productiva separada;
-- la transición es una PROMOCIÓN IN-PLACE del entorno ya validado, preservando datos actuales.
-
-Consecuencias:
+Decisiones:
+- mismo dominio;
+- misma BD;
+- mismos datos;
+- promoción in-place;
 - no bootstrap SQL;
-- no migración de datos a otra BD;
-- mantener credenciales BD actuales en `.env`;
-- todos los backups previos obligatorios están COMPLETADOS;
-- evitar mover APP_ROOT si no aporta beneficio claro.
+- no migración de datos a otra BD.
 
-## 7. Próximo paso EXACTO — revisar configuración productiva, todavía SIN CAMBIARLA
+Plantilla local `.env.production.template`: existe localmente, ignored; no exponer contenido ni secretos.
 
-Todos los backups previos al cutover están COMPLETADOS.
+## 6. Inspección bootstrap/cache — 2026-09-03
 
-Antes de editar `.env`:
-1. revisar en el repo si `APP_ENV=production` activa/desactiva lógica especial;
-2. identificar solo las variables no secretas que deban ajustarse para producción;
-3. preservar APP_KEY y credenciales BD actuales;
-4. no cambiar valores hasta tener la lista exacta;
-5. después hacer un cambio mínimo y smoke inmediato.
+Captura cPanel de `/home/tdatcons/apps/flujo-caja-staging/bootstrap/cache` confirma solamente:
+- `.gitignore`;
+- `packages.php`;
+- `services.php`.
 
-NO build production todavía.
+NO existe `config.php`.
+Conclusión: configuración Laravel NO está cacheada mediante `config:cache`; cambios del `.env` deberían aplicarse en la siguiente petición sin necesitar Artisan para limpiar config cache.
+
+Revisión repo:
+- `config/app.php` usa `APP_ENV`, `APP_DEBUG`, `APP_URL` y `APP_KEY` de `.env`;
+- `config/session.php` hace cookie segura por defecto para `staging`/`production`, pero `SESSION_SECURE_COOKIE` puede sobrescribirla;
+- `.env.staging.example` ya recomienda `APP_ENV=production`, `APP_DEBUG=false`, HTTPS, `LOG_LEVEL=warning`, `SESSION_SECURE_COOKIE=true`, `SESSION_HTTP_ONLY=true`, `SESSION_SAME_SITE=lax`, `QUEUE_CONNECTION=sync`.
+
+Importante: NO asumir que el `.env` actual necesita cambiar `APP_ENV`; primero verificar valores NO secretos existentes porque el template de staging ya usaba `APP_ENV=production`.
+
+## 7. Próximo paso EXACTO — inspección manual de valores NO secretos del .env
+
+Abrir `.env` en cPanel y revisar SOLO estas variables, sin compartir APP_KEY ni credenciales DB:
+- `APP_ENV`
+- `APP_DEBUG`
+- `APP_URL`
+- `LOG_LEVEL`
+- `SESSION_SECURE_COOKIE`
+- `SESSION_HTTP_ONLY`
+- `SESSION_SAME_SITE`
+- `QUEUE_CONNECTION`
+
+Miguel debe reportar únicamente esos valores no secretos. No modificar todavía.
+
+NO build production.
 NO generar SQL.
 NO importar bootstrap.
 NO tocar BD.
+NO mover APP_ROOT.
 
 ## 8. Política de ahorro de créditos
 
-- sin Codex para inspecciones/manuales de cPanel;
-- modelo económico + esfuerzo Bajo por defecto cuando sea necesario;
-- no repetir UAT ni builds PASS;
-- agrupar tareas cuando sea seguro;
+- sin Codex para inspecciones manuales de cPanel;
+- no repetir UAT/builds PASS;
+- modelo económico + esfuerzo Bajo cuando Codex sea necesario;
 - checkpoints compactos en este archivo.
