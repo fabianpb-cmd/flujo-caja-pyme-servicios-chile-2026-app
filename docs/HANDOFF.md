@@ -91,7 +91,7 @@ Backups obligatorios antes del cutover:
 - BD actual completa: COMPLETADO por Miguel el 2026-09-03;
 - APP_ROOT actual: COMPLETADO por Miguel el 2026-09-03;
 - PUBLIC_ROOT: COMPLETADO por Miguel el 2026-09-03;
-- `.env` actual: PENDIENTE.
+- `.env` actual: COMPLETADO por Miguel el 2026-09-03.
 
 ## 6. Production readiness — decisiones confirmadas 2026-09-03
 
@@ -116,23 +116,24 @@ Consecuencias:
 - no bootstrap SQL;
 - no migración de datos a otra BD;
 - mantener credenciales BD actuales en `.env`;
-- realizar backups antes de cualquier cambio;
+- todos los backups previos obligatorios están COMPLETADOS;
 - evitar mover APP_ROOT si no aporta beneficio claro.
 
-## 7. Próximo paso EXACTO — completar backups, todavía SIN DEPLOY
+## 7. Próximo paso EXACTO — revisar configuración productiva, todavía SIN CAMBIARLA
 
-Estado actual:
-1. backup completo BD actual: COMPLETADO;
-2. backup de `/home/tdatcons/apps/flujo-caja-staging`: COMPLETADO;
-3. backup de `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`: COMPLETADO;
-4. siguiente: backup privado del `.env` actual;
-5. recién después revisar/cambiar configuración mínima productiva (`APP_ENV=production`, `APP_DEBUG=false`, APP_URL/seguridad), preservando APP_KEY y credenciales actuales.
+Todos los backups previos al cutover están COMPLETADOS.
+
+Antes de editar `.env`:
+1. revisar en el repo si `APP_ENV=production` activa/desactiva lógica especial;
+2. identificar solo las variables no secretas que deban ajustarse para producción;
+3. preservar APP_KEY y credenciales BD actuales;
+4. no cambiar valores hasta tener la lista exacta;
+5. después hacer un cambio mínimo y smoke inmediato.
 
 NO build production todavía.
 NO generar SQL.
 NO importar bootstrap.
 NO tocar BD.
-NO cambiar `.env` hasta completar backups.
 
 ## 8. Política de ahorro de créditos
 
