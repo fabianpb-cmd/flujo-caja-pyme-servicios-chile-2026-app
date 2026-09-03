@@ -340,12 +340,20 @@ Tag apunta a:
 `c2a3e97b6fdbc5d5a745e023ca040a5cf16222f6`
 
 Deploy confirmado por comportamiento UI:
-- `Nuevo presupuesto` visible
-- Responsable `Jaime Soriano` visible correctamente
+- `Nuevo presupuesto` aparece en Gestión / Presupuesto
+- Responsable `Jaime Soriano` ahora aparece correctamente en proyectos
 - label Centros de costo corregido
 - labels Horas corregidos
 
-No hubo cambios `public/` entre el release anterior y este commit, por lo que para ese update incremental bastó `app-private.zip`.
+Para este update incremental NO era necesario volver a desplegar `public.zip`, porque entre `c24d3d3` y `c2a3e97` no cambió ningún archivo dentro de `public/`.
+
+El cambio funcional estaba en `app-private.zip`.
+
+Reglas mantenidas:
+- NO importar `staging-bootstrap.sql`
+- NO limpiar BD
+- preservar `.env`
+- preservar `storage/`
 
 ## 9. Diagnóstico del 500 por URL incorrecta
 
@@ -711,3 +719,79 @@ NO repetir Presupuesto, Responsable Proyecto, Centros de costo, Horas labels ni 
 
 UAT FINAL sigue PENDIENTE hasta completar esas tres comprobaciones.
 Producción sigue NO autorizada hasta UAT FINAL PASS.
+
+## 23. UAT post-deploy — selector PASS, nuevo blocker 500 al guardar payroll
+
+Fecha: 2026-09-03.
+
+Release desplegado sigue siendo:
+- tag `cpanel-staging-20260903-091246`;
+- commit funcional `3efcf37f69b2dbebbbacdbba14d7220c943376f4`.
+
+### Remuneración A
+
+Resultado observado en staging:
+- Proyecto habilitado: PASS;
+- Proyecto seleccionado: `QA-A-PROYECTO`;
+- Persona usada: `QA-A-PERSONA UAT QA`;
+- período: `2026-09-01`;
+- base: `Bruto`;
+- fecha pago: `2026-09-30`;
+- URL formulario: `https://licitaciones.tdatconsulting.cl/operacion/payroll-records/crear`;
+- al presionar `Guardar`, el POST a `https://licitaciones.tdatconsulting.cl/operacion/payroll-records` termina en `500 Server Error`;
+- el selector Proyecto SÍ se habilitó y permitió seleccionar `QA-A-PROYECTO`, por lo que el blocker JS anterior queda confirmado como RESUELTO en staging;
+- panel de horas visible antes del fallo seguía mostrando `0 h`; no se alcanzó a validar si backend detectaba las 10 h aprobadas;
+- no se generó/mostró ID de payroll;
+- cálculo: FAIL/no generado;
+- trazabilidad: FAIL/no validable.
+
+Resultado Remuneración A: FAIL por 500 al guardar.
+
+### Remuneración B
+
+NO ejecutada. Se detuvo la UAT al fallar Remuneración A.
+
+### Rentabilidad
+
+NO ejecutada. Depende de que A/B puedan guardarse.
+
+### Cierre actual
+
+- Remuneraciones: FAIL;
+- Rentabilidad: pendiente/FAIL por dependencia;
+- UAT FINAL: FAIL;
+- apto para producción: NO.
+
+### Evidencia técnica del código actual — NO es aún causa raíz
+
+`OperationalCrudController::store()` prepara datos y luego, dentro de una transacción, crea el `PayrollRecord` y ejecuta `PayrollService::syncHourlyTimeEntryTrace()`. Solo captura explícitamente `DomainException` en ese tramo; una excepción SQL/query/type distinta puede producir 500.
+
+`PayrollService::syncHourlyTimeEntryTrace()` obtiene las horas aprobadas y sincroniza la relación pivote `payroll_record_time_entries`.
+
+El repositorio contiene la migración:
+`database/migrations/2026_08_28_000100_create_payroll_record_time_entries_table.php`.
+
+El test dirigido local `test_manual_hourly_payroll_with_iso_period_and_project_consumes_approved_time_entries` crea un payroll manual con proyecto/período ISO, espera 10 h aprobadas y trazabilidad; ese suite estaba PASS localmente.
+
+Por tanto NO asumir todavía que el problema sea código. Puede ser esquema/datos de staging o cualquier otra excepción no capturada. Se requiere evidencia del log y de la BD real.
+
+### Próximo paso EXACTO
+
+NO repetir build/deploy ni UAT completa.
+NO ejecutar Remuneración B ni Rentabilidad todavía.
+NO modificar código hasta conocer la excepción exacta.
+NO importar `staging-bootstrap.sql`.
+NO limpiar BD ni data QA.
+
+Diagnóstico dirigido:
+1. obtener la excepción/stack trace exactos del último 500 desde `storage/logs/laravel.log` de staging, sin exponer secretos;
+2. identificar la línea/SQL exactos que fallan;
+3. inspeccionar en staging, de forma inicialmente solo lectura, si existe `payroll_record_time_entries` y si la migración `2026_08_28_000100_create_payroll_record_time_entries_table` figura aplicada;
+4. si existe la tabla, revisar `SHOW CREATE TABLE` y compatibilidad de columnas/FKs/índices;
+5. verificar si el POST fallido dejó o no un `payroll_records` de QA-A; si la excepción ocurrió dentro de la transacción debería haber rollback, pero confirmar antes de reintentar para evitar duplicados;
+6. verificar que las 10 h QA-A siguen presentes, aprobadas, asociadas a `QA-A-PROYECTO` y aún no consumidas en la pivote;
+7. solo después de confirmar causa raíz decidir si corresponde una corrección de código o una corrección incremental de esquema staging;
+8. si falta tabla/migración, NO aplicar bootstrap ni inventar SQL: generar primero SQL incremental revisado contra el esquema real y ejecutarlo por phpMyAdmin solo tras revisión;
+9. después del fix, reprobar primero SOLO Remuneración A. Si A pasa, continuar B y luego Rentabilidad.
+
+Producción permanece bloqueada.
