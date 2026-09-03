@@ -88,10 +88,10 @@ Reglas:
 - preservar `.env` y `storage/`.
 
 Backups obligatorios antes del cutover:
-- BD actual completa;
-- APP_ROOT actual;
-- PUBLIC_ROOT;
-- `.env` actual.
+- BD actual completa: COMPLETADO por Miguel el 2026-09-03;
+- APP_ROOT actual: PENDIENTE;
+- PUBLIC_ROOT: PENDIENTE;
+- `.env` actual: PENDIENTE.
 
 ## 6. Production readiness — decisiones confirmadas 2026-09-03
 
@@ -116,24 +116,23 @@ Consecuencias:
 - no bootstrap SQL;
 - no migración de datos a otra BD;
 - mantener credenciales BD actuales en `.env`;
-- realizar backup antes de cualquier cambio;
-- decidir todavía si se mantiene el APP_ROOT actual `flujo-caja-staging` o se renombra/reorganiza a `flujo-caja-production`; no hacerlo todavía porque mover rutas puede introducir riesgo innecesario.
+- realizar backups antes de cualquier cambio;
+- evitar mover APP_ROOT si no aporta beneficio claro.
 
-## 7. Próximo paso EXACTO — preparar cutover, todavía SIN DEPLOY
+## 7. Próximo paso EXACTO — completar backups, todavía SIN DEPLOY
 
-Antes de tocar configuración:
-1. hacer/confirmar backup completo de la BD actual;
-2. backup de `/home/tdatcons/apps/flujo-caja-staging`;
-3. backup de `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
-4. backup privado del `.env` actual;
-5. después decidir el cambio mínimo de configuración para formalizar producción (`APP_ENV=production`, `APP_DEBUG=false` y revisar APP_URL/seguridad), preservando APP_KEY y credenciales existentes para no invalidar datos/cifrado/sesiones innecesariamente;
-6. evitar mover APP_ROOT si no aporta beneficio claro.
+Estado actual:
+1. backup completo BD actual: COMPLETADO;
+2. siguiente: backup de `/home/tdatcons/apps/flujo-caja-staging`;
+3. luego backup de `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
+4. luego backup privado del `.env` actual;
+5. recién después revisar/cambiar configuración mínima productiva (`APP_ENV=production`, `APP_DEBUG=false`, APP_URL/seguridad), preservando APP_KEY y credenciales actuales.
 
 NO build production todavía.
 NO generar SQL.
 NO importar bootstrap.
 NO tocar BD.
-NO cambiar `.env` hasta tener backups.
+NO cambiar `.env` hasta completar backups.
 
 ## 8. Política de ahorro de créditos
 
