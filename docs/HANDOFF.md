@@ -19,10 +19,10 @@ Ese mismo host fue usado como staging durante la UAT final y será promovido a p
 PUBLIC_ROOT confirmado por cPanel para ese host:
 `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`
 
-APP_ROOT actual de staging:
+APP_ROOT actual:
 `/home/tdatcons/apps/flujo-caja-staging`
 
-APP_ROOT productivo todavía no existe/no está confirmado. Candidato:
+APP_ROOT productivo separado todavía no existe. Candidato si se decide separar código más adelante:
 `/home/tdatcons/apps/flujo-caja-production`
 
 Hosting/deploy:
@@ -30,19 +30,18 @@ Hosting/deploy:
 - sin SSH/Composer/Artisan remoto como flujo normal;
 - app privada fuera del document root público;
 - preservar siempre `.env` y `storage/`;
-- `staging-bootstrap.sql` es bootstrap completo, NO migración incremental. Nunca importarlo sobre una BD existente con datos que se deban conservar.
+- `staging-bootstrap.sql` es bootstrap completo, NO migración incremental. Nunca importarlo sobre la BD actual.
 
-Producción todavía NO desplegada.
+Producción todavía NO formalizada; se hará promoción in-place del entorno validado.
 
 ## 2. Estado funcional actual — UAT FINAL PASS
 
-Release funcional probado y desplegado en staging:
+Release funcional probado y desplegado:
 - commit: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
 - tag: `cpanel-staging-20260903-124424`;
 - build: PASS, exit code 0;
 - `manifest.git_commit`: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
-- ZIPs, secret scan, SQL validation y checksums: PASS;
-- deploy realizado solo con `app-private.zip`; sin `public.zip`, sin SQL, sin migración nueva.
+- ZIPs, secret scan, SQL validation y checksums: PASS.
 
 Main puede estar por delante del tag SOLO por commits documentales. No reconstruir release por eso.
 
@@ -58,14 +57,14 @@ Conclusión:
 - Escenario A E2E PASS;
 - Escenario B E2E PASS;
 - UAT FINAL PASS;
-- funcionalmente apto para preparar producción: SI.
+- funcionalmente apto para promoción a producción: SI.
 
 NO repetir ni duplicar `REM-000013` ni `REM-000014`.
 
 ## 3. Blockers resueltos — no reabrir sin evidencia nueva
 
-- Selector Proyecto en Remuneraciones: listener `input` agregado; staging PASS.
-- 500 payroll horario/honorarios: normalización de campos monetarios; test dirigido PASS 10/92; staging PASS.
+- Selector Proyecto en Remuneraciones: listener `input` agregado; PASS.
+- 500 payroll horario/honorarios: normalización de campos monetarios; test dirigido PASS 10/92; PASS en servidor.
 - Build cPanel Windows: secret scan con `ZipArchive`; build final PASS.
 - Responsable Proyecto, Presupuesto, labels y demás incidencias UAT: PASS/cerradas.
 
@@ -80,64 +79,66 @@ Migraciones relevantes existentes:
 - `database/migrations/2026_08_31_000100_make_period_batch_id_not_nullable_on_time_entries.php`.
 
 Reglas:
-- producción existente: backup + migración incremental revisada;
-- nunca bootstrap sobre BD existente;
+- la BD actual se PROMUEVE y se conserva;
+- NO crear una BD nueva para producción;
+- NO importar `production-bootstrap.sql` ni `staging-bootstrap.sql` sobre la BD actual;
+- no ejecutar migraciones salvo que un cambio posterior al release validado realmente las requiera;
 - nunca cambiar `APP_ENV` para saltar salvaguardas;
 - nunca desactivar FKs a ciegas;
 - preservar `.env` y `storage/`.
 
-Backups obligatorios antes de deploy:
-- BD;
-- APP_ROOT;
+Backups obligatorios antes del cutover:
+- BD actual completa;
+- APP_ROOT actual;
 - PUBLIC_ROOT;
-- `.env`.
+- `.env` actual.
 
-## 6. Production readiness — 2026-09-03
+## 6. Production readiness — decisiones confirmadas 2026-09-03
 
 Plantilla productiva local:
-- `.env.production.template`: EXISTE localmente;
-- untracked + ignored por `.gitignore`;
-- build production podría usarla localmente;
-- no es reproducible desde clone remoto actual;
-- no exponer su contenido ni secretos.
+- `.env.production.template`: existe localmente, ignored;
+- no exponer contenido ni secretos.
 
-Inspección cPanel filesystem:
+cPanel:
 - home: `/home/tdatcons`;
-- existe `apps/flujo-caja-staging`;
-- no se observa `apps/flujo-caja-production`;
-- staging contiene `.env`; no se abrió ni expuso.
+- app actual: `/home/tdatcons/apps/flujo-caja-staging`;
+- host: `licitaciones.tdatconsulting.cl`;
+- PUBLIC_ROOT: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
+- HTTPS redirect activado.
 
-Inspección cPanel dominios:
-- `licitaciones.tdatconsulting.cl` -> document root `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`; HTTPS redirect activado;
-- `tdatconsulting.cl` -> document root `/home/tdatcons/public_html`; NO será usado para esta aplicación.
+Decisiones de Miguel:
+- dominio productivo será `https://licitaciones.tdatconsulting.cl`;
+- se mantendrá la BASE DE DATOS ACTUAL;
+- no se creará BD productiva separada;
+- la transición es una PROMOCIÓN IN-PLACE del entorno ya validado, preservando datos actuales.
 
-Decisión confirmada:
-- dominio/APP_URL objetivo de producción: `https://licitaciones.tdatconsulting.cl`;
-- PUBLIC_ROOT production: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
-- el mismo host actualmente usado para staging será promovido a producción;
-- por tanto hay que tratar el cambio como una promoción/cutover del entorno actual, no como creación de un dominio nuevo.
+Consecuencias:
+- no bootstrap SQL;
+- no migración de datos a otra BD;
+- mantener credenciales BD actuales en `.env`;
+- realizar backup antes de cualquier cambio;
+- decidir todavía si se mantiene el APP_ROOT actual `flujo-caja-staging` o se renombra/reorganiza a `flujo-caja-production`; no hacerlo todavía porque mover rutas puede introducir riesgo innecesario.
 
-Estado de BD production: AÚN NO CONFIRMADO.
-Tipo de transición de BD: AÚN NO DETERMINABLE.
+## 7. Próximo paso EXACTO — preparar cutover, todavía SIN DEPLOY
 
-## 7. Próximo paso EXACTO — manual, SIN CODEX
-
-Entrar a cPanel > `Manage My Databases` y confirmar únicamente:
-1. nombres de las bases existentes;
-2. si alguna corresponde al staging actual de `licitaciones.tdatconsulting.cl`;
-3. si existe una BD separada que se quiera usar como producción o si se pretende promover la BD actual;
-4. no mostrar passwords, usuarios con secretos ni contenido de `.env`.
+Antes de tocar configuración:
+1. hacer/confirmar backup completo de la BD actual;
+2. backup de `/home/tdatcons/apps/flujo-caja-staging`;
+3. backup de `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
+4. backup privado del `.env` actual;
+5. después decidir el cambio mínimo de configuración para formalizar producción (`APP_ENV=production`, `APP_DEBUG=false` y revisar APP_URL/seguridad), preservando APP_KEY y credenciales existentes para no invalidar datos/cifrado/sesiones innecesariamente;
+6. evitar mover APP_ROOT si no aporta beneficio claro.
 
 NO build production todavía.
-NO generar SQL todavía.
-NO cambiar APP_ENV todavía.
-NO mover Document Root todavía.
-NO deploy production todavía.
+NO generar SQL.
+NO importar bootstrap.
+NO tocar BD.
+NO cambiar `.env` hasta tener backups.
 
 ## 8. Política de ahorro de créditos
 
-- sin Codex para inspecciones manuales de cPanel;
-- modelo económico + esfuerzo Bajo por defecto cuando Codex sea necesario;
+- sin Codex para inspecciones/manuales de cPanel;
+- modelo económico + esfuerzo Bajo por defecto cuando sea necesario;
 - no repetir UAT ni builds PASS;
 - agrupar tareas cuando sea seguro;
 - checkpoints compactos en este archivo.
