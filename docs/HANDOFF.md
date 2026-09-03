@@ -2,135 +2,64 @@
 
 Última actualización: 2026-09-03.
 
-ÚNICA fuente de continuidad entre cuentas de ChatGPT/Codex. Leer este archivo al retomar el proyecto y continuar desde el estado actual. NO repetir tareas ya cerradas. No guardar secretos.
+ÚNICA fuente de continuidad entre cuentas de ChatGPT/Codex. Leer este archivo al retomar y NO repetir tareas cerradas. No guardar secretos.
 
-## 1. Repositorio y entorno
+## 1. Entorno / producción
 
-Repositorio: `fabianpb-cmd/flujo-caja-pyme-servicios-chile-2026-app`
-Aplicación: Laravel.
-Dominio PRODUCCIÓN: `https://licitaciones.tdatconsulting.cl`
+Repo: `fabianpb-cmd/flujo-caja-pyme-servicios-chile-2026-app` — Laravel.
+Producción: `https://licitaciones.tdatconsulting.cl`
 PUBLIC_ROOT: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`
 APP_ROOT actual: `/home/tdatcons/apps/flujo-caja-staging`
 
-Promoción in-place. Evitar mover APP_ROOT si no aporta beneficio claro.
-Hosting cPanel, sin SSH/Composer/Artisan remoto como flujo normal. Preservar `.env` y `storage/`.
+Promoción in-place: mismo dominio, misma BD, mismos archivos; no mover APP_ROOT salvo necesidad real. cPanel sin SSH/Composer/Artisan remoto como flujo normal.
 
-## 2. Estado funcional — UAT FINAL PASS
+`.env` ya productivo: `APP_ENV=production`, `APP_DEBUG=false`, APP_URL correcto, logging warning, sesiones/cookies seguras, queue sync. APP_KEY y credenciales BD se preservan. `bootstrap/cache` no tiene `config.php`.
 
-Release funcional probado:
-- commit `ec1d51160b8899b7351950fc1202f157d72e42c4`;
-- tag `cpanel-staging-20260903-124424`;
-- build, ZIPs, secret scan, SQL validation y checksums: PASS;
-- Remuneración A/B, Rentabilidad, escenarios E2E y UAT FINAL: PASS.
+Backups pre-cutover COMPLETADOS: BD, APP_ROOT, PUBLIC_ROOT y `.env`.
 
-Funcionalmente apto para producción: SI. No repetir UAT.
+## 2. Release funcional validado
 
-## 3. Seguridad BD / deploy
+UAT FINAL PASS sobre commit `ec1d51160b8899b7351950fc1202f157d72e42c4`, tag `cpanel-staging-20260903-124424`.
+Build/ZIP/secret scan/SQL/checksums PASS. Remuneración A/B, Rentabilidad y escenarios E2E PASS. No repetir UAT.
 
-BD actual se PROMUEVE y se conserva.
-NO crear BD productiva separada.
-NO importar bootstrap SQL sobre la BD actual.
-No desactivar FKs a ciegas.
-Preservar APP_KEY y credenciales BD actuales.
+## 3. Política BD
 
-Backups previos al cutover — TODOS COMPLETADOS por Miguel el 2026-09-03:
-- BD actual;
-- APP_ROOT;
-- PUBLIC_ROOT;
-- `.env` actual.
+Se conserva la BD actual; no crear BD productiva separada. Nunca importar bootstrap sobre esta BD. No desactivar FKs a ciegas. Backup BD disponible para rollback.
 
-## 4. Production readiness
+## 4. Baseline que debe quedar
 
-cPanel confirmado:
-- host `licitaciones.tdatconsulting.cl`;
-- HTTPS redirect activo;
-- `bootstrap/cache` no contiene `config.php`.
+Preservar:
+- `companies.id=1` (actualmente código `STAGING`, nombre `Empresa Staging`);
+- `users.id=1` Administrador inicial real;
+- catálogos/sistema/parámetros: `activities`, `afp_rates`, `afps`, `approval_statuses`, `bank_account_types`, `banks`, `cash_movement_types`, `client_types`, `communes`, `company_settings`, `contract_types`, `currencies`, `document_types`, `employment_modes`, `exchange_rates`, `expense_categories`, `expense_subcategories`, `expense_types`, `health_systems`, `income_tax_brackets`, `legal_organizations`, `legal_parameters`, `obligation_types`, `occupational_insurance_entities`, `payment_methods`, `payment_terms`, `project_types`, `record_statuses`, `regions`, `scenarios`, `tax_regimes`, `uf_values`, `utm_values`, `migrations`.
 
-`.env` actual ya productivo:
-- `APP_ENV=production`;
-- `APP_DEBUG=false`;
-- `APP_URL=https://licitaciones.tdatconsulting.cl`;
-- `LOG_LEVEL=warning`;
-- sesiones/cookies seguras;
-- `QUEUE_CONNECTION=sync`;
-- APP_KEY presente y se preserva.
+Repo confirma que responsables/cargos demo no son baseline y que `DemoDataSeeder` solo corresponde a local/testing.
 
-No hace falta editar `.env` para la promoción.
+## 5. Limpieza pre-go-live — EJECUTADA 2026-09-03
 
-## 5. Decisión de limpieza pre-go-live
+Miguel ejecutó en phpMyAdmin el SQL final aprobado, dentro de transacción, child-to-parent, sin desactivar FKs.
 
-Miguel decidió: ELIMINAR antes del go-live todos los datos QA/UAT/demo y dejar solo baseline paramétrico/productivo.
+Se ordenó limpiar todas las filas de:
+- `payroll_record_time_entries`, `sales_document_time_entries`, `payroll_adjustments`;
+- `cash_movements`, `monthly_closures`, `budgets`, `legal_obligations`, `sales_documents`, `expense_documents`, `payroll_records`, `time_entries`;
+- `project_assignments`, `cash_accounts`, `projects`, `clients`, `people`;
+- `cost_centers`, `positions`, `project_managers`;
+- `users WHERE id <> 1`;
+- runtime/histórico QA: `audit_logs`, `cache`, `cache_locks`, `sessions`, `password_reset_tokens`, `jobs`, `job_batches`, `failed_jobs`.
 
-PRESERVAR:
-- catálogos de sistema;
-- parámetros legales/tributarios/previsionales;
-- geografía Chile;
-- tablas de impuesto a la renta;
-- catálogos operacionales/configuraciones por empresa necesarios;
-- empresa `id=1`;
-- administrador real `user_id=1`.
+Candidatos previamente previsualizados eran exclusivamente QA/UAT/demo: QA-A/QA-B, `REM-000013`, `REM-000014`, `QA-USER`, `QA-CENTRO-COSTO`, BI positions, Jaime Soriano, etc.
 
-No renombrar empresa durante limpieza; puede hacerse después.
+IMPORTANTE: la ejecución está reportada como completada por Miguel, pero todavía falta validación post-delete con `COUNT(*)`. No declarar go-live final hasta verificar.
 
-## 6. Inventario y candidatos confirmados
+## 6. Próximo paso EXACTO
 
-Baseline paramétrico a preservar:
-`activities`, `afp_rates`, `afps`, `approval_statuses`, `bank_account_types`, `banks`, `cash_movement_types`, `client_types`, `communes`, `company_settings`, `contract_types`, `currencies`, `document_types`, `employment_modes`, `exchange_rates`, `expense_categories`, `expense_subcategories`, `expense_types`, `health_systems`, `income_tax_brackets`, `legal_organizations`, `legal_parameters`, `obligation_types`, `occupational_insurance_entities`, `payment_methods`, `payment_terms`, `project_types`, `record_statuses`, `regions`, `scenarios`, `tax_regimes`, `uf_values`, `utm_values`, `migrations`, `companies`, y `users.id=1`.
+Ejecutar una consulta post-limpieza de solo lectura con `COUNT(*)` para confirmar:
+- tablas transaccionales/runtime = 0;
+- `companies` = 1 y `users` = 1;
+- baseline paramétrico principal sigue presente.
 
-Previsualización SQL realizada por Miguel confirmó que TODAS las filas actuales de las siguientes tablas son QA/UAT/demo y pueden eliminarse:
-- `cash_accounts`: `CTA-000005 | QA-A-CUENTA`;
-- `cash_movements`: `MOV-000004` a `MOV-000007`;
-- `clients`: `QA-A-CLIENTE`, `QA-B-CLIENTE`;
-- `cost_centers`: `QA-CENTRO-COSTO`;
-- `expense_documents`: `EGR-000002`, `EGR-000003`;
-- `payroll_records`: `REM-000013`, `REM-000014`;
-- `people`: `QA-A-PERSONA UAT QA`, `QA-B-PERSONA UAT QA`;
-- `positions`: `BI Consultor Senior`, `BI Consultor`, `BI Consultor Junior`;
-- `project_assignments`: `ASI-000022`, `ASI-000023`;
-- `project_managers`: `Jaime Soriano`;
-- `projects`: `QA-A-PROYECTO`, `QA-B-PROYECTO`;
-- `sales_documents`: `ING-000003`, `ING-000004`;
-- `time_entries`: `HOR-000022` a `HOR-000028`;
-- `users`: `id=5`, `QA-USER`.
+Si PASS: smoke mínimo `/up`, `/login`, login, 2FA, dashboard. Después checkpoint final y declarar go-live.
 
-Además limpiar runtime/histórico QA: `audit_logs`, `cache`, `cache_locks`, `sessions`, `password_reset_tokens`, `jobs`, `job_batches`, `failed_jobs`.
-Tablas transaccionales actualmente vacías deben quedar vacías: `budgets`, `legal_obligations`, `monthly_closures`, `payroll_adjustments`, `sales_document_time_entries`.
+## 7. Política de ahorro
 
-## 7. FKs y rutina de limpieza revisadas
-
-- `payroll_record_time_entries.payroll_record_id` -> payroll_records: CASCADE;
-- `payroll_record_time_entries.time_entry_id` -> time_entries: RESTRICT; borrar pivot antes de time_entries;
-- `sales_document_time_entries` -> sales_documents/time_entries: CASCADE;
-- `payroll_adjustments.person_id` -> people: CASCADE;
-- project manager, position y cost center usan `NULL ON DELETE` desde datos operacionales; borrar después de los datos que los referencian;
-- cash movements antes de cash accounts.
-
-`routes/console.php` contiene `uat:clear-data` con un orden child-to-parent útil como referencia, pero:
-- está explícitamente DESHABILITADO cuando `APP_ENV=production`;
-- no debe intentarse evadir esa protección;
-- además no cubre `clients`, `projects`, `people`, `project_assignments`, `cash_accounts`, catálogos demo por empresa (`positions`, `project_managers`, `cost_centers`) ni `QA-USER`;
-- por tanto NO se usará para este go-live.
-
-Demo/baseline confirmado por repo:
-- `DemoDataSeeder` solo corre en local/testing y crea responsables/cargos/cuenta/admin demo;
-- `administration-baseline.md` clasifica responsables y cargos como Demo;
-- catálogos legales/operacionales y escenarios BASE/CONSERVADOR/OPTIMISTA sí se preservan.
-
-No desactivar foreign keys.
-
-## 8. Próximo paso EXACTO
-
-Ejecutar UNA limpieza SQL final en phpMyAdmin, dentro de transacción y child-to-parent, conservando `companies.id=1`, `users.id=1` y todos los catálogos/paramétricos.
-Después validar conteos y login.
-
-Aún NO se ha ejecutado ningún DELETE.
-Backup BD disponible para rollback.
-
-Después de limpieza: smoke mínimo `/up`, `/login`, login, 2FA, dashboard.
-
-## 9. Política de ahorro de créditos
-
-- sin Codex para inspecciones manuales cPanel/phpMyAdmin;
-- no repetir UAT/builds PASS;
-- modelo económico + esfuerzo Bajo cuando Codex sea necesario;
-- checkpoints compactos en este archivo.
+Sin Codex para cPanel/phpMyAdmin. No repetir UAT/builds PASS. Modelo económico + esfuerzo Bajo solo cuando Codex sea necesario. Checkpoints compactos en este archivo.
