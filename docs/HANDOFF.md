@@ -35,30 +35,28 @@ Preservar:
 
 Repo confirma que responsables/cargos demo no son baseline y que `DemoDataSeeder` solo corresponde a local/testing.
 
-## 5. Limpieza pre-go-live — EJECUTADA 2026-09-03
+## 5. Limpieza pre-go-live — EJECUTADA Y VALIDADA PASS 2026-09-03
 
 Miguel ejecutó en phpMyAdmin el SQL final aprobado, dentro de transacción, child-to-parent, sin desactivar FKs.
 
-Se ordenó limpiar todas las filas de:
-- `payroll_record_time_entries`, `sales_document_time_entries`, `payroll_adjustments`;
-- `cash_movements`, `monthly_closures`, `budgets`, `legal_obligations`, `sales_documents`, `expense_documents`, `payroll_records`, `time_entries`;
-- `project_assignments`, `cash_accounts`, `projects`, `clients`, `people`;
-- `cost_centers`, `positions`, `project_managers`;
-- `users WHERE id <> 1`;
-- runtime/histórico QA: `audit_logs`, `cache`, `cache_locks`, `sessions`, `password_reset_tokens`, `jobs`, `job_batches`, `failed_jobs`.
+Se limpiaron datos QA/UAT/demo y runtime de prueba. Validación post-delete con `COUNT(*)` dio PASS:
+- `companies` = 1;
+- `users` = 1;
+- `clients`, `projects`, `people`, `project_assignments`, `time_entries`, `payroll_records`, `payroll_record_time_entries`, `sales_documents`, `expense_documents`, `cash_accounts`, `cash_movements`, `cost_centers`, `positions`, `project_managers`, `audit_logs`, `sessions` = 0;
+- baseline principal preservado: `afps` = 7, `regions` = 16, `communes` = 346, `legal_parameters` = 31, `company_settings` = 20, `scenarios` = 3.
 
-Candidatos previamente previsualizados eran exclusivamente QA/UAT/demo: QA-A/QA-B, `REM-000013`, `REM-000014`, `QA-USER`, `QA-CENTRO-COSTO`, BI positions, Jaime Soriano, etc.
+Conclusión: limpieza BD pre-go-live PASS. Quedó empresa/admin real + baseline paramétrico, sin datos QA/UAT visibles en las tablas verificadas.
 
-IMPORTANTE: la ejecución está reportada como completada por Miguel, pero todavía falta validación post-delete con `COUNT(*)`. No declarar go-live final hasta verificar.
+## 6. Próximo paso EXACTO — smoke final de producción
 
-## 6. Próximo paso EXACTO
+Hacer SOLO smoke mínimo, sin repetir UAT:
+1. `https://licitaciones.tdatconsulting.cl/up` debe responder OK/200;
+2. `/login` debe cargar normal;
+3. iniciar sesión con el administrador real `users.id=1`;
+4. completar 2FA si corresponde;
+5. Dashboard debe cargar sin 500 y reflejar baseline vacío operacional.
 
-Ejecutar una consulta post-limpieza de solo lectura con `COUNT(*)` para confirmar:
-- tablas transaccionales/runtime = 0;
-- `companies` = 1 y `users` = 1;
-- baseline paramétrico principal sigue presente.
-
-Si PASS: smoke mínimo `/up`, `/login`, login, 2FA, dashboard. Después checkpoint final y declarar go-live.
+Si los cinco puntos PASS: registrar checkpoint final y declarar go-live productivo.
 
 ## 7. Política de ahorro
 
