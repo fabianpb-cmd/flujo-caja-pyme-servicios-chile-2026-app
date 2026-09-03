@@ -528,3 +528,73 @@ Si B PASS:
 
 UAT FINAL sigue PENDIENTE hasta Remuneración B PASS + Rentabilidad PASS.
 Producción sigue NO autorizada.
+
+## 21. UAT Remuneración B post-fix — PASS 2026-09-03
+
+Precheck:
+- payroll QA-B previo para septiembre: NO.
+
+Resultado Remuneración B:
+- Proyecto habilitado: PASS;
+- Proyecto seleccionado: `QA-B-PROYECTO`;
+- horas reconocidas: 6 h;
+- guardado: PASS, sin 500;
+- URL final: `https://licitaciones.tdatconsulting.cl/operacion/payroll-records/14`;
+- ID/código: `REM-000014`;
+- valor HH: `$ 50.000`;
+- bruto: `$ 300.000`;
+- bono imponible: `$ 10.000`;
+- ajuste: `QA-B-AJUSTE`, detectado automáticamente desde Novedades remuneración y aplicado una sola vez;
+- no imponibles: `$ 0`;
+- retención honorarios: `$ 45.750` (15,25 %);
+- anticipos: `$ 0`;
+- otros descuentos: `$ 0`;
+- líquido/neto: `$ 254.250`;
+- costo empresa mostrado: `$ 300.000`;
+- estado cálculo: `OK`.
+
+Trazabilidad: PASS.
+Modal `Ver cálculo` confirma:
+- `Horas aprobadas del período 6 h`;
+- `Horas aprobadas efectivas 6 h`;
+- `Horas proyecto 6 h`;
+- fuente `Módulo Horas`;
+- proyecto `QA-B-PROYECTO / PRY-000010`;
+- cliente `QA-B-CLIENTE`;
+- asignación `ASI-000023 · QA-B-PROYECTO`;
+- vigencia `01/09/2026 al 30/09/2026`;
+- tarifa efectiva `$ 50.000 / HH`;
+- bonos automáticos `$ 10.000 · Novedades remuneración`;
+- bonos aplicados `$ 10.000`;
+- horas internas `0 h`;
+- costo no asignado `$ 0`.
+
+Errores: ninguno.
+
+Conclusión:
+- Remuneración B = PASS;
+- Remuneraciones A y B = PASS;
+- preservar `REM-000013` y `REM-000014`; no crear duplicados.
+
+## 22. Próximo paso EXACTO — SOLO Rentabilidad
+
+Ejecutar únicamente Rentabilidad en staging para:
+- `QA-A-PROYECTO`;
+- `QA-B-PROYECTO`.
+
+No modificar payrolls A/B. No repetir Remuneraciones ni otros módulos.
+
+Objetivo:
+- confirmar que el costo laboral ya no sea `$0` en ambos proyectos;
+- capturar valores exactos mostrados por la aplicación para costo laboral, margen y margen %;
+- validar coherencia con `REM-000013` y `REM-000014` sin imponer cifras calculadas manualmente si la aplicación incorpora otros componentes.
+
+Referencia histórica antes de payroll:
+- QA-A: costo laboral `$0`, margen `$900.000`, `90 %`;
+- QA-B: costo laboral `$0`, margen `$300.000`, `60 %`.
+
+Si ambos proyectos muestran costo laboral distinto de `$0` y márgenes coherentes con los payrolls reales, Rentabilidad = PASS y corresponde cerrar UAT FINAL como PASS.
+
+Si alguno falla o sigue con costo laboral `$0`, detenerse y diagnosticar solo Rentabilidad.
+
+Producción permanece NO autorizada hasta confirmar Rentabilidad PASS y registrar cierre UAT FINAL.
