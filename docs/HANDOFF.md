@@ -61,65 +61,97 @@ No hace falta editar `.env` para la promoción.
 
 Miguel decidió: ELIMINAR antes del go-live todos los datos QA/UAT y dejar solo el baseline paramétrico/productivo.
 
-Baseline que se debe PRESERVAR:
+PRESERVAR:
 - catálogos de sistema;
 - parámetros legales/tributarios/previsionales;
 - geografía Chile;
 - tablas de impuesto a la renta;
-- catálogos operacionales y configuraciones por empresa necesarios para que la aplicación funcione;
+- catálogos operacionales/configuraciones por empresa necesarios;
 - empresa base productiva;
-- al menos un usuario administrador real de producción.
+- administrador real de producción.
 
-Datos a ELIMINAR:
+ELIMINAR:
 - `QA-A-*`, `QA-B-*`, `QA-USER`, `QA-CENTRO-COSTO`;
 - `REM-000013`, `REM-000014`;
-- cualquier otro dato UAT/QA;
-- cualquier dato DEMO/local si existe;
+- cualquier dato UAT/QA/demo;
 - datos transaccionales/operacionales no paramétricos creados para pruebas.
 
-Referencia repo:
-- `DatabaseSeeder` separa catálogos/bootstrap de `DemoDataSeeder`;
-- DemoDataSeeder solo corresponde a local/testing;
-- `SystemCatalogSeeder`, `IncomeTaxBracketSeeder`, `ChileGeographySeeder` y `OperationalCatalogSeeder` representan baseline paramétrico.
-
-## 6. Empresa/admin productivos confirmados en BD — 2026-09-03
-
-Capturas phpMyAdmin confirman:
+## 6. Empresa/admin productivos confirmados
 
 `companies`:
-- existe UNA sola empresa;
-- `id=1`;
-- `code=STAGING`;
-- `name=Empresa Staging`;
-- `status=active`.
+- una empresa real en BD;
+- `id=1`, `code=STAGING`, `name=Empresa Staging`, activa: CONSERVAR.
 
 `users`:
-- `id=1`, `company_id=1`, `name=Administrador inicial`, email corporativo de Tdat, verificado: CONSERVAR como administrador productivo;
-- `id=5`, `company_id=1`, `name=QA-USER`, email QA, no verificado: ELIMINAR durante limpieza.
+- `id=1`, `company_id=1`, Administrador inicial, email corporativo verificado: CONSERVAR;
+- `id=5`, `company_id=1`, `QA-USER`: ELIMINAR.
 
-Decisión operativa:
-- conservar `company_id=1` y `user_id=1`;
-- eliminar `user_id=5` una vez revisadas sus dependencias;
-- el código/nombre `STAGING` de la empresa se puede renombrar más adelante si se desea, pero NO es requisito técnico para el go-live y no debe mezclarse con la limpieza de datos.
+No renombrar empresa durante la limpieza; puede hacerse después si se desea.
 
-## 7. Reglas de limpieza
+## 7. Inventario BD previo a limpieza
+
+Miguel ejecutó inventario con `information_schema.TABLES`. `TABLE_ROWS` es aproximado para InnoDB; usarlo solo como orientación.
+
+Clasificación basada en repo/seeders:
+
+### Baseline paramétrico — PRESERVAR filas
+`activities`, `afp_rates`, `afps`, `approval_statuses`, `bank_account_types`, `banks`, `cash_movement_types`, `client_types`, `communes`, `company_settings`, `contract_types`, `currencies`, `document_types`, `employment_modes`, `exchange_rates`, `expense_categories`, `expense_subcategories`, `expense_types`, `health_systems`, `income_tax_brackets`, `legal_organizations`, `legal_parameters`, `obligation_types`, `occupational_insurance_entities`, `payment_methods`, `payment_terms`, `project_types`, `record_statuses`, `regions`, `scenarios`, `tax_regimes`, `uf_values`, `utm_values`.
+
+También preservar tabla/estado técnico de `migrations` y `companies`, y `users` solo para admin real `id=1`.
+
+`CatalogService::seedDefaultsForCompany()` confirma que ProjectManager, Position y CostCenter NO se crean como defaults; se generan por backfill desde datos existentes. Por tanto las filas actuales de `project_managers`, `positions`, `cost_centers` no forman parte del baseline paramétrico automático y deben tratarse como datos derivados de QA salvo evidencia contraria.
+
+### Datos QA/transaccionales — LIMPIAR
+Filas actuales aproximadas reportadas:
+- `cash_accounts` 1;
+- `cash_movements` 4;
+- `clients` 2;
+- `cost_centers` 1 (`QA-CENTRO-COSTO` conocido);
+- `expense_documents` 2;
+- `payroll_record_time_entries` 6;
+- `payroll_records` 2;
+- `people` 2;
+- `positions` 3;
+- `project_assignments` 2;
+- `project_managers` 1;
+- `projects` 2;
+- `sales_documents` 2;
+- `time_entries` 7;
+- `users`: eliminar `id=5` QA.
+
+Tablas transaccionales actualmente reportadas en 0 pero que deben quedar vacías: `budgets`, `legal_obligations`, `monthly_closures`, `payroll_adjustments`, `sales_document_time_entries`.
+
+### Runtime/histórico QA — LIMPIAR
+- `audit_logs` ~37;
+- `cache` ~66;
+- `sessions` ~8;
+- `cache_locks`, `failed_jobs`, `job_batches`, `jobs`, `password_reset_tokens`: actualmente 0; mantener vacías.
+
+No tocar estructuras/tablas. Solo filas.
+
+## 8. Reglas de limpieza
 
 - NO DELETE todavía;
 - NO borrar por patrones a ciegas;
 - NO desactivar foreign keys globalmente;
 - SQL incremental revisado, child-to-parent;
-- primero SELECT/COUNT de previsualización;
+- primero SELECT/COUNT/previsualización;
 - validar exactamente qué quedará;
-- backup de BD disponible para rollback.
+- backup BD disponible para rollback.
 
-## 8. Próximo paso EXACTO
+FK relevante ya confirmada en repo: `payroll_record_time_entries.time_entry_id` usa `RESTRICT ON DELETE`, por lo que los links deben borrarse antes que `time_entries`; `payroll_record_id` tiene cascade.
 
-Ejecutar en phpMyAdmin una consulta de SOLO LECTURA para inventariar todas las tablas y cantidad aproximada de filas. Con ese inventario se clasifican tablas en PARAMÉTRICAS / SISTEMA / TRANSACCIONALES y se prepara el SQL de limpieza.
+## 9. Próximo paso EXACTO
 
-No ejecutar DELETE todavía.
-Después de limpieza validada: smoke mínimo `/up`, `/login`, login, 2FA, dashboard.
+Ejecutar en phpMyAdmin SOLO consultas de lectura para:
+1. previsualizar identidad de todas las filas candidatas a eliminar;
+2. listar el grafo de foreign keys entre tablas candidatas.
 
-## 9. Política de ahorro de créditos
+Con esos dos resultados preparar el único script DELETE final, ordenado por FKs y con validación post-limpieza.
+
+Después de limpieza: smoke mínimo `/up`, `/login`, login, 2FA, dashboard.
+
+## 10. Política de ahorro de créditos
 
 - sin Codex para inspecciones manuales cPanel/phpMyAdmin;
 - no repetir UAT/builds PASS;
