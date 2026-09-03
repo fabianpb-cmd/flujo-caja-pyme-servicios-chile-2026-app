@@ -140,21 +140,13 @@ Plantilla productiva:
 - NO es reproducible desde clone remoto actual;
 - no exponer su contenido ni secretos.
 
-Datos de producción aún no confirmados:
-- APP_ROOT candidato `/home/tdatcons/apps/flujo-caja-production`: TENTATIVO, inferido del default del script;
-- PUBLIC_ROOT: NO DEFINIDO;
-- dominio/APP_URL production: NO DEFINIDO;
-- existencia/estado de BD production: NO CONFIRMADO;
-- tipo de deploy: NO CONFIRMADO;
-- uso de bootstrap vs migración incremental: NO DETERMINABLE hasta conocer BD.
-
 Backups obligatorios antes de deploy:
 - BD;
 - APP_ROOT;
 - PUBLIC_ROOT;
 - `.env`.
 
-### Inspección manual cPanel
+### Inspección manual cPanel — filesystem
 
 Captura del Administrador de archivos confirma:
 - home de la cuenta: `/home/tdatcons`;
@@ -164,17 +156,33 @@ Captura del Administrador de archivos confirma:
 - staging está en `/home/tdatcons/apps/flujo-caja-staging` y contiene `.env`;
 - no se abrió ni expuso el contenido del `.env`.
 
+### Inspección manual cPanel — dominios
+
+Captura de cPanel > Dominios confirma dos dominios visibles:
+
+1. `licitaciones.tdatconsulting.cl`
+- document root mostrado: `/public_html/licitaciones.tdatconsulting.cl`;
+- ruta absoluta inferida desde home de cuenta: `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
+- Force HTTPS Redirect: activado;
+- corresponde al staging ya validado.
+
+2. `tdatconsulting.cl`
+- dominio principal de la cuenta;
+- document root mostrado: `/public_html`;
+- ruta absoluta inferida desde home de cuenta: `/home/tdatcons/public_html`;
+- Force HTTPS Redirect aparece desactivado en la captura.
+
 Conclusión provisional:
-- APP_ROOT productivo aún NO existe/NO está confirmado en el filesystem mostrado;
-- sigue pendiente definir/crear el APP_ROOT productivo después de confirmar dominio y document root;
-- esto sigue siendo preparación, no deploy.
+- si `tdatconsulting.cl` será el dominio productivo de esta aplicación, su PUBLIC_ROOT sería `/home/tdatcons/public_html`;
+- esto todavía requiere confirmación explícita de Miguel antes de tratarlo como APP_URL/producción;
+- APP_ROOT productivo todavía no existe/no está confirmado; candidato sigue siendo `/home/tdatcons/apps/flujo-caja-production`;
+- no crear carpetas ni cambiar redirects todavía.
 
-## 7. Próximo paso EXACTO — confirmación manual en cPanel, SIN CODEX
+## 7. Próximo paso EXACTO — manual, SIN CODEX
 
-Pendiente confirmar:
-1. PUBLIC_ROOT/document root productivo real y dominio HTTPS exacto;
-2. estado de la BD productiva: inexistente/vacía o existente con datos que preservar;
-3. si existe algún `.env` productivo en otra ubicación (no abrirlo ni mostrar contenido).
+1. Miguel debe confirmar si `https://tdatconsulting.cl` será efectivamente el dominio productivo de esta aplicación.
+2. Después revisar `Manage My Databases` para determinar si existe BD productiva y si está vacía o contiene datos.
+3. No abrir ni compartir passwords ni contenido de `.env`.
 
 NO build production todavía.
 NO generar SQL todavía.
