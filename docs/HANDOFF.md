@@ -67,50 +67,61 @@ Baseline que se debe PRESERVAR:
 - geografía Chile;
 - tablas de impuesto a la renta;
 - catálogos operacionales y configuraciones por empresa necesarios para que la aplicación funcione;
-- empresa base productiva necesaria para el tenant;
-- al menos un usuario administrador REAL de producción para poder ingresar.
+- empresa base productiva;
+- al menos un usuario administrador real de producción.
 
 Datos a ELIMINAR:
-- `QA-A-*`;
-- `QA-B-*`;
-- `QA-USER`;
-- `QA-CENTRO-COSTO`;
-- `REM-000013`;
-- `REM-000014`;
-- cualquier otro dato creado durante UAT/QA;
-- cualquier dato DEMO/local si existe en la BD (`Empresa Demo`, `admin@flujo.local`, `RESP_JAIME`, `RESP_EMILIO`, posiciones IRIS/BI demo, `BANK-001`, etc.);
+- `QA-A-*`, `QA-B-*`, `QA-USER`, `QA-CENTRO-COSTO`;
+- `REM-000013`, `REM-000014`;
+- cualquier otro dato UAT/QA;
+- cualquier dato DEMO/local si existe;
 - datos transaccionales/operacionales no paramétricos creados para pruebas.
 
 Referencia repo:
-- `DatabaseSeeder` separa catálogos/bootstrap de `DemoDataSeeder`; DemoDataSeeder solo corresponde a local/testing;
-- `BootstrapCompanySeeder` crea empresa + admin inicial si existen variables bootstrap;
+- `DatabaseSeeder` separa catálogos/bootstrap de `DemoDataSeeder`;
+- DemoDataSeeder solo corresponde a local/testing;
 - `SystemCatalogSeeder`, `IncomeTaxBracketSeeder`, `ChileGeographySeeder` y `OperationalCatalogSeeder` representan baseline paramétrico.
 
-Reglas de limpieza:
-- NO borrar por patrones a ciegas sin revisar dependencias;
+## 6. Empresa/admin productivos confirmados en BD — 2026-09-03
+
+Capturas phpMyAdmin confirman:
+
+`companies`:
+- existe UNA sola empresa;
+- `id=1`;
+- `code=STAGING`;
+- `name=Empresa Staging`;
+- `status=active`.
+
+`users`:
+- `id=1`, `company_id=1`, `name=Administrador inicial`, email corporativo de Tdat, verificado: CONSERVAR como administrador productivo;
+- `id=5`, `company_id=1`, `name=QA-USER`, email QA, no verificado: ELIMINAR durante limpieza.
+
+Decisión operativa:
+- conservar `company_id=1` y `user_id=1`;
+- eliminar `user_id=5` una vez revisadas sus dependencias;
+- el código/nombre `STAGING` de la empresa se puede renombrar más adelante si se desea, pero NO es requisito técnico para el go-live y no debe mezclarse con la limpieza de datos.
+
+## 7. Reglas de limpieza
+
+- NO DELETE todavía;
+- NO borrar por patrones a ciegas;
 - NO desactivar foreign keys globalmente;
-- usar SQL incremental revisado, child-to-parent;
-- primero ejecutar consultas SELECT/COUNT de previsualización;
-- ejecutar DELETE solo después de validar exactamente qué quedará;
-- backup de BD ya existe para rollback.
+- SQL incremental revisado, child-to-parent;
+- primero SELECT/COUNT de previsualización;
+- validar exactamente qué quedará;
+- backup de BD disponible para rollback.
 
-## 6. Próximo paso EXACTO — identificar empresa/admin a conservar y preparar SQL de limpieza
+## 8. Próximo paso EXACTO
 
-Antes de cualquier DELETE:
-1. identificar `company` productiva real y usuario admin real a conservar;
-2. inventariar datos no paramétricos actuales y dependencias;
-3. preparar SQL de previsualización (SELECT/COUNT) y luego SQL de limpieza ordenado por FKs;
-4. revisar que el resultado esperado sea catálogos + empresa + admin, sin QA/demo/transacciones;
-5. solo entonces ejecutar en phpMyAdmin;
-6. smoke mínimo: `/up`, `/login`, login, 2FA, dashboard.
+Ejecutar en phpMyAdmin una consulta de SOLO LECTURA para inventariar todas las tablas y cantidad aproximada de filas. Con ese inventario se clasifican tablas en PARAMÉTRICAS / SISTEMA / TRANSACCIONALES y se prepara el SQL de limpieza.
 
-NO ejecutar DELETE todavía.
-NO importar bootstrap.
-NO mover APP_ROOT.
+No ejecutar DELETE todavía.
+Después de limpieza validada: smoke mínimo `/up`, `/login`, login, 2FA, dashboard.
 
-## 7. Política de ahorro de créditos
+## 9. Política de ahorro de créditos
 
-- sin Codex para inspecciones manuales cPanel;
+- sin Codex para inspecciones manuales cPanel/phpMyAdmin;
 - no repetir UAT/builds PASS;
 - modelo económico + esfuerzo Bajo cuando Codex sea necesario;
 - checkpoints compactos en este archivo.
