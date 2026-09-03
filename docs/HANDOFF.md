@@ -438,3 +438,77 @@ Solo después de UAT FINAL PASS:
 - usar migración incremental revisada si correspondiera;
 - validar manifest/checksums/ZIP/secrets;
 - smoke mínimo post-deploy: `/up`, `/login`, login, 2FA, dashboard.
+
+## 19. Integración, build staging y tag del fix `bonuses = NULL`
+
+Fecha: 2026-09-03.
+
+Integración:
+- `origin/main` inicial confirmado: `5f25be96fb0b15f32308f36f4bd2dc77f88ceeaf`;
+- commit funcional local original: `2b11a09000c54441d087403b4182a805967792df`;
+- estrategia usada: `git rebase origin/main`;
+- conflicto: solo `docs/HANDOFF.md`;
+- resolución del conflicto: se preservó el HANDOFF remoto como fuente principal, que ya contenía el diagnóstico del `NULL`, y se reaplicó solo el fix funcional;
+- `docs/HANDOFF-LATEST.md`: no existe en HEAD integrado;
+- HEAD funcional final integrado: `ec1d51160b8899b7351950fc1202f157d72e42c4`.
+
+Fix funcional integrado:
+- `app/Services/PayrollService.php`: normaliza `bonuses`, `non_taxable_allowances`, `advances` y `other_deductions` a valores numéricos en `calculate()` y los devuelve también para modalidad honorarios/pago por hora;
+- `tests/Feature/PayrollTimeEntryTraceTest.php`: el test manual horario envía esos campos como strings vacíos, verifica persistencia en `0.0`, 10 h aprobadas y trazabilidad.
+
+Test dirigido:
+- comando: `php artisan test tests\Feature\PayrollTimeEntryTraceTest.php`;
+- resultado: PASS;
+- tests: 10;
+- assertions: 92.
+
+Push:
+- `git push origin main`: PASS;
+- `HEAD` y `origin/main` verificados en `ec1d51160b8899b7351950fc1202f157d72e42c4`.
+
+Compare contra release desplegado actual `3efcf37f69b2dbebbbacdbba14d7220c943376f4`:
+- runtime: `app/Services/PayrollService.php`;
+- tests: `tests/Feature/PayrollTimeEntryTraceTest.php`;
+- docs: `docs/HANDOFF.md` y eliminación de `docs/HANDOFF-LATEST.md`;
+- tooling: ninguno;
+- `public/`: sin cambios.
+
+Build staging completo:
+- comando: `scripts/build-cpanel-release.sh` con `CPANEL_RELEASE_MODE=staging` y MySQL Laragon activo;
+- resultado: PASS, exit code 0;
+- `manifest.git_commit`: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
+- release id generado: `cpanel-staging-20260903-124325`;
+- `app-private.zip`: PASS `unzip -t`;
+- `public.zip`: PASS `unzip -t`;
+- secret scan: PASS dentro del build;
+- SQL validation: PASS dentro del build;
+- checksums: PASS con `shasum -a 256 -c checksums.txt`;
+- APP_ROOT: `/home/tdatcons/apps/flujo-caja-staging`.
+
+Tag staging:
+- nombre: `cpanel-staging-20260903-124424`;
+- SHA: `ec1d51160b8899b7351950fc1202f157d72e42c4`;
+- push tag: PASS;
+- verificación: `git rev-list -n 1 cpanel-staging-20260903-124424` devuelve `ec1d51160b8899b7351950fc1202f157d72e42c4`.
+
+Deploy requerido, NO ejecutado:
+- subir solo `app-private.zip`;
+- NO subir `public.zip`;
+- NO importar `staging-bootstrap.sql`;
+- NO ejecutar SQL;
+- NO ejecutar migración nueva;
+- preservar `.env`;
+- preservar `storage/`;
+- preservar data QA staging.
+
+Estado importante:
+- TAG `cpanel-staging-20260903-124424` = release funcional desplegable;
+- main HEAD posterior puede avanzar solo por este checkpoint documental;
+- si main queda por delante del tag por documentación, NO reconstruir release por eso.
+
+Próximo paso exacto:
+1. deploy manual de `app-private.zip` del release `cpanel-staging-20260903-124424`;
+2. después del deploy, repetir SOLO Remuneración A con `QA-A-PERSONA UAT QA`, período `2026-09-01`, `QA-A-PROYECTO`, base `Bruto`, fecha pago `2026-09-30`;
+3. validar Proyecto habilitado, 10 h, guardado sin 500, ID/código, cálculo y trazabilidad;
+4. si A falla, detenerse;
+5. solo si A pasa, continuar B y Rentabilidad.
