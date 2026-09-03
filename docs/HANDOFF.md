@@ -90,7 +90,7 @@ Reglas:
 Backups obligatorios antes del cutover:
 - BD actual completa: COMPLETADO por Miguel el 2026-09-03;
 - APP_ROOT actual: COMPLETADO por Miguel el 2026-09-03;
-- PUBLIC_ROOT: PENDIENTE;
+- PUBLIC_ROOT: COMPLETADO por Miguel el 2026-09-03;
 - `.env` actual: PENDIENTE.
 
 ## 6. Production readiness — decisiones confirmadas 2026-09-03
@@ -124,8 +124,8 @@ Consecuencias:
 Estado actual:
 1. backup completo BD actual: COMPLETADO;
 2. backup de `/home/tdatcons/apps/flujo-caja-staging`: COMPLETADO;
-3. siguiente: backup de `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`;
-4. luego backup privado del `.env` actual;
+3. backup de `/home/tdatcons/public_html/licitaciones.tdatconsulting.cl`: COMPLETADO;
+4. siguiente: backup privado del `.env` actual;
 5. recién después revisar/cambiar configuración mínima productiva (`APP_ENV=production`, `APP_DEBUG=false`, APP_URL/seguridad), preservando APP_KEY y credenciales actuales.
 
 NO build production todavía.
