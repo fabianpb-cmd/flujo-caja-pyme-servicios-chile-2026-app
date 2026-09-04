@@ -184,7 +184,7 @@ class CashMovementService
                 ->lockForUpdate()
                 ->first();
 
-            if (! $record || in_array($record->status, ['Borrador', 'Anulado'], true)) {
+            if (! $record || ! in_array($record->status, ['Confirmado', 'Parcial'], true)) {
                 throw new DomainException('Seleccione una remuneracion vigente con saldo pendiente.');
             }
 

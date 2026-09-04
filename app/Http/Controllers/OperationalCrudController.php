@@ -366,6 +366,27 @@ class OperationalCrudController extends Controller
         );
     }
 
+    public function confirmPayrollRecord(Request $request, string $resource, int $record): RedirectResponse
+    {
+        abort_unless($resource === 'payroll-records', 404);
+
+        $config = $this->config($resource);
+        $item = PayrollRecord::query()->findOrFail($record);
+        $this->authorizeResource($request, $config, 'update', $item);
+
+        try {
+            $this->payroll->confirm($item, $request->user());
+        } catch (DomainException $exception) {
+            return redirect()
+                ->route('operational.show', [$resource, $item->id])
+                ->withErrors(['payroll_confirmation' => $exception->getMessage()]);
+        }
+
+        return redirect()
+            ->route('operational.show', [$resource, $item->id])
+            ->with('status', 'Remuneración confirmada.');
+    }
+
     public function update(CrudResourceRequest $request, string $resource, int $record): RedirectResponse
     {
         $config = $this->config($resource);
@@ -569,6 +590,10 @@ class OperationalCrudController extends Controller
             );
         }
 
+        if ($resource === 'payroll-records') {
+            unset($data['status']);
+        }
+
         $table = (new (config('operational.'.$resource.'.model')))->getTable();
         if (Schema::hasColumn($table, 'company_id')) {
             $data['company_id'] = $request->user()->company_id;
@@ -645,7 +670,11 @@ class OperationalCrudController extends Controller
             }
 
             $data = array_merge($data, $this->payroll->calculate($person, $period, $data));
-            $data['status'] = 'Pendiente';
+            $data['status'] = match (true) {
+                $existingRecord && $existingRecord->status === 'Confirmado' => 'Confirmado',
+                strtoupper((string) ($data['calculation_status'] ?? 'OK')) !== 'OK' => 'Requiere revisión',
+                default => 'Borrador',
+            };
         }
 
         return $data;
@@ -1275,7 +1304,7 @@ class OperationalCrudController extends Controller
 
         $payrollRecords = PayrollRecord::query()
             ->forCompany($companyId)
-            ->whereNotIn('status', ['Borrador', 'Anulado'])
+            ->whereIn('status', ['Confirmado', 'Parcial'])
             ->orderBy('period_date')
             ->orderBy('code')
             ->get();

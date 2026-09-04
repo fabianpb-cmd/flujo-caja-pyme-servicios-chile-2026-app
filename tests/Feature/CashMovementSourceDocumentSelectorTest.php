@@ -252,7 +252,8 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
             'period_date' => '2026-09-01',
             'payment_date' => '2026-09-30',
             'net_pay' => $netPay,
-            'status' => 'Pendiente',
+            'calculation_status' => 'OK',
+            'status' => 'Confirmado',
         ]);
     }
 

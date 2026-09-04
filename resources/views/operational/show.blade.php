@@ -40,6 +40,12 @@
     </div>
     <div class="page-toolbar">
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Volver</a>
+        @if ($resource === 'payroll-records' && $item instanceof \App\Models\PayrollRecord && $item->status === 'Borrador' && $item->calculation_status === 'OK')
+            <form method="POST" action="{{ route('operational.confirm', [$resource, $item->id]) }}" class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-success">Confirmar</button>
+            </form>
+        @endif
         @if (blank($timeEntryUpdateBlockedMessage))
             <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
         @endif

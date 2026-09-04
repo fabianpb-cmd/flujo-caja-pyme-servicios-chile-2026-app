@@ -9,6 +9,7 @@ use App\Models\PayrollRecord;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\TimeEntry;
+use App\Models\User;
 use App\Support\UiFormatter;
 use Carbon\CarbonInterface;
 use DomainException;
@@ -25,6 +26,8 @@ class PayrollService
         private readonly IncomeTaxService $incomeTax,
         private readonly HourlyRateService $hourlyRates,
         private readonly CompanySettingsService $settings,
+        private readonly FinancialDocumentGuard $financialDocuments,
+        private readonly AuditService $audit,
     )
     {
     }
@@ -313,6 +316,75 @@ class PayrollService
 
         $this->guardHourlyTimeEntryTraceConflicts($record, $timeEntryIds);
         $record->timeEntries()->sync($timeEntryIds);
+    }
+
+    public function confirm(PayrollRecord $record, ?User $user = null): PayrollRecord
+    {
+        return DB::transaction(function () use ($record, $user): PayrollRecord {
+            $locked = PayrollRecord::query()
+                ->whereKey($record->getKey())
+                ->where('company_id', $record->company_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($user && (int) $user->company_id !== (int) $locked->company_id) {
+                throw new DomainException('La remuneración no pertenece a la empresa del usuario.');
+            }
+
+            if ($locked->status !== 'Borrador') {
+                throw new DomainException('Solo una remuneración en Borrador puede confirmarse.');
+            }
+
+            if (strtoupper((string) $locked->calculation_status) !== 'OK') {
+                throw new DomainException('Solo una remuneración con cálculo OK puede confirmarse.');
+            }
+
+            if ((float) $locked->net_pay <= 0) {
+                throw new DomainException('La remuneración debe tener líquido a pagar mayor que cero.');
+            }
+
+            $this->financialDocuments->assertPeriodOpen((int) $locked->company_id, $locked->period_date);
+
+            $person = Person::query()
+                ->forCompany($locked->company_id)
+                ->findOrFail($locked->person_id);
+
+            if ($this->modalityFlags($person)['is_hourly']) {
+                $this->assertHourlyTraceIsConsistent($locked, $person);
+            }
+
+            if ($this->balance($locked) <= 0.00001) {
+                throw new DomainException('La remuneración seleccionada no tiene saldo pendiente.');
+            }
+
+            $before = $locked->toArray();
+            $locked->forceFill(['status' => 'Confirmado'])->save();
+            $locked->refresh();
+
+            $this->audit->record('payroll_record.confirmed', $locked, $user, $before);
+
+            return $locked;
+        });
+    }
+
+    private function assertHourlyTraceIsConsistent(PayrollRecord $record, Person $person): void
+    {
+        if (! $record->period_date) {
+            throw new DomainException('La remuneración horaria debe tener período informado.');
+        }
+
+        $expected = $this->hourlyPayrollTimeEntries($person, $record->period_date, $record->project_id);
+        $actualIds = $record->timeEntries()->pluck('time_entries.id')->map(fn ($id): int => (int) $id)->sort()->values()->all();
+        $expectedIds = $expected->pluck('id')->map(fn ($id): int => (int) $id)->sort()->values()->all();
+
+        if ($expectedIds === [] || $actualIds !== $expectedIds) {
+            throw new DomainException('La trazabilidad de horas de la remuneración no coincide con las horas aprobadas del período.');
+        }
+
+        $expectedHours = round((float) $expected->sum('hours_approved'), 2);
+        if (abs($expectedHours - (float) $record->hours_approved) > 0.00001) {
+            throw new DomainException('Las horas aprobadas de la remuneración no coinciden con su trazabilidad.');
+        }
     }
 
     private function guardHourlyTimeEntryTraceConflicts(PayrollRecord $record, array $timeEntryIds): void
@@ -1288,6 +1360,10 @@ class PayrollService
 
     public function deriveStatus(PayrollRecord $record, CarbonInterface|string|null $asOf = null): string
     {
+        if (in_array($record->status, ['Anulado', 'Cerrado'], true)) {
+            return $record->status;
+        }
+
         if (($record->calculation_status ?? null) && strtoupper((string) $record->calculation_status) !== 'OK') {
             return 'Requiere revisión';
         }
@@ -1301,6 +1377,14 @@ class PayrollService
 
         if ($paid > 0) {
             return 'Parcial';
+        }
+
+        if ($record->status === 'Confirmado') {
+            return 'Confirmado';
+        }
+
+        if ($record->status === 'Borrador') {
+            return 'Borrador';
         }
 
         if (! $record->payment_date) {

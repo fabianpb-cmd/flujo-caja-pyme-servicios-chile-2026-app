@@ -406,6 +406,7 @@ class PayrollTimeEntryTraceTest extends TestCase
         app(PayrollBatchService::class)->generate($this->company->id, '2026-08-01');
         $record = PayrollRecord::query()->where('person_id', $person->id)->firstOrFail();
         $record->update(['payment_date' => '2026-08-25']);
+        app(PayrollService::class)->confirm($record->refresh(), $this->admin);
 
         app(CashMovementService::class)->create([
             'company_id' => $this->company->id,

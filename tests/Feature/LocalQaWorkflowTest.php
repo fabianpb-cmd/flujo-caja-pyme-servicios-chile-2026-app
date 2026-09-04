@@ -102,13 +102,18 @@ class LocalQaWorkflowTest extends TestCase
             'person_id' => $person->id,
             'project_id' => $project->id,
             'period_date' => '2026-08-01',
+            'hours_approved' => 10,
+            'hourly_value' => 50000,
             'base_salary' => 500000,
             'taxable_amount' => 500000,
             'vacation_provision' => 41650,
             'employer_cost' => 541650,
             'net_pay' => 500000,
-            'status' => 'Pendiente',
+            'calculation_status' => 'OK',
+            'status' => 'Borrador',
         ]);
+        app(\App\Services\PayrollService::class)->syncHourlyTimeEntryTrace($payroll, $person);
+        app(\App\Services\PayrollService::class)->confirm($payroll, $user);
 
         $invoice = SalesDocument::query()->create([
             'company_id' => $company->id,
@@ -208,14 +213,15 @@ class LocalQaWorkflowTest extends TestCase
             'payment_status' => 'Pendiente',
         ]);
 
-        PayrollRecord::query()->create([
+        $payroll = PayrollRecord::query()->create([
             'company_id' => $company->id,
             'code' => 'REM-DC',
             'person_id' => $person->id,
             'project_id' => $project->id,
             'period_date' => '2026-08-01',
             'net_pay' => 200000,
-            'status' => 'Pendiente',
+            'calculation_status' => 'OK',
+            'status' => 'Confirmado',
         ]);
 
         LegalObligation::query()->create([

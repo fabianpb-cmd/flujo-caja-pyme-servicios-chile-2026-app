@@ -4904,7 +4904,7 @@ class OperationalUiTest extends TestCase
         $response->assertSessionHas('status', 'Registro actualizado.');
 
         $payroll->refresh();
-        $this->assertSame(\App\Services\PayrollService::STATUS_PENDING_PAYMENT_DATE, $payroll->status);
+        $this->assertSame('Borrador', $payroll->status);
         $this->assertSame('OK', $payroll->calculation_status);
         $this->assertEqualsWithDelta(4084479.0, (float) $payroll->base_salary, 0.01);
         $this->assertEqualsWithDelta(622883.05, (float) $payroll->employee_retention, 0.01);
@@ -4919,7 +4919,7 @@ class OperationalUiTest extends TestCase
 
         $show = $this->actingAs($admin)->get(route('operational.show', ['payroll-records', $payroll->id]));
         $show->assertOk();
-        $show->assertSee('Pendiente de fecha de pago');
+        $show->assertSee('Borrador');
         $show->assertDontSee(\App\Services\PayrollService::STATUS_PENDING_PAYMENT_DATE);
     }
 

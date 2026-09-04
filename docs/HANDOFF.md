@@ -151,3 +151,39 @@ Fallos preexistentes conservados fuera de alcance:
 BD/migraciones: requiere aplicar una migración/SQL incremental. No se tocó producción.
 
 Próximo paso: deploy incremental manual pendiente de aprobación; subir código y ejecutar SQL/migración en el orden documentado. No abordar `QA-PERSONAL-05` en este bloque.
+
+## 8. Fix #2B — confirmación explícita de remuneraciones (2026-09-04)
+
+Se resolvió `QA-PERSONAL-05` incorporando un flujo explícito de confirmación antes de caja:
+- Ciclo soportado: `Borrador` → `Confirmado` → `Parcial` / `Pagado`.
+- `Borrador` sigue editable/recalculable mientras no tenga movimiento contabilizado, pero no es pagable.
+- `Requiere revisión` no es confirmable ni pagable.
+- `Confirmado` y `Parcial` son los únicos estados pagables de Payroll en `CashMovementService`, siempre con saldo pendiente y período abierto.
+- `Pagado`, `Anulado` y `Cerrado` quedan excluidos de pago.
+- La confirmación se realiza por `PayrollService::confirm()` en transacción, con validación de empresa, existencia, estado `Borrador`, `calculation_status=OK`, `net_pay > 0`, período abierto, trazabilidad horaria consistente y saldo pendiente.
+- La acción queda auditada en `audit_logs` como `payroll_record.confirmed`, con usuario y timestamp.
+- La UI de detalle de remuneración muestra botón `Confirmar` solo para `Borrador` + `OK`; backend valida igual si se invoca la ruta manualmente.
+- El CRUD genérico ya no permite volver una remuneración confirmada a `Borrador` mediante payload `status`.
+
+Archivos modificados:
+- `app/Services/PayrollService.php`
+- `app/Services/CashMovementService.php`
+- `app/Http/Controllers/OperationalCrudController.php`
+- `routes/web.php`
+- `resources/views/operational/show.blade.php`
+- `tests/Feature/PayrollConfirmationWorkflowTest.php`
+- `tests/Feature/PayrollTimeEntryTraceTest.php`
+- `tests/Feature/CashMovementSourceDocumentSelectorTest.php`
+- `tests/Feature/FinancialCoreTest.php`
+- `tests/Feature/LocalQaWorkflowTest.php`
+- `tests/Feature/OperationalUiTest.php`
+- `docs/HANDOFF.md`
+
+Tests dirigidos PASS:
+- `PayrollConfirmationWorkflowTest`: 7 tests / 39 assertions.
+- Bloque obligatorio (`PayrollTimeEntryTraceTest`, `PayrollBatchGenerationTest`, `PayrollSourceIntegrityTest`, `FinancialTransactionIntegrityTest`, `CashMovementSourceDocumentSelectorTest`, `FinancialCoreTest`, `PayrollConfirmationWorkflowTest`): 85 tests / 547 assertions.
+- Bloque dirigido ampliado con `LocalQaWorkflowTest`: 88 tests / 586 assertions.
+- Filtro pertinente `OperationalUiTest --filter=payroll`: 10 tests / 170 assertions.
+- Filtro pertinente `SecurityGateTest --filter=payroll`: 1 test / 1 assertion.
+
+BD/migraciones: no requiere migración ni SQL incremental. Producción no fue tocada durante la implementación local.

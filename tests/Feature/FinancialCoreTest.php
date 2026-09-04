@@ -475,7 +475,7 @@ class FinancialCoreTest extends TestCase
         $this->assertStringNotContainsString('Proyecto · Proyecto Tarifa Proyecto', $explanationJson);
     }
 
-    public function test_payroll_status_without_payment_date_remains_recalculable_and_specific(): void
+    public function test_payroll_draft_without_payment_date_remains_draft_and_recalculable(): void
     {
         $person = $this->person([
             'modality' => 'Honorarios mensual',
@@ -492,7 +492,7 @@ class FinancialCoreTest extends TestCase
 
         app(PayrollService::class)->refreshStatus($record);
 
-        $this->assertSame(PayrollService::STATUS_PENDING_PAYMENT_DATE, $record->refresh()->status);
+        $this->assertSame('Borrador', $record->refresh()->status);
     }
 
     public function test_dependent_payroll_calculates_afp_health_afc_and_company_cost(): void
