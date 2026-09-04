@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\CashAccount;
+use App\Models\Activity;
+use App\Models\ApprovalStatus;
 use App\Models\Client;
 use App\Models\ClientType;
 use App\Models\Company;
@@ -16,6 +18,7 @@ use App\Models\PaymentTerm;
 use App\Models\Person;
 use App\Models\Position;
 use App\Models\Project;
+use App\Models\ProjectAssignment;
 use App\Models\ProjectManager;
 use App\Models\RecordStatus;
 use App\Models\TimeEntry;
@@ -383,10 +386,61 @@ class CatalogMaintainersTest extends TestCase
             'employment_mode_id' => $this->employmentModeId($company->id, 'PAGO_POR_HORA'),
             'worker_status_id' => $this->statusId($company->id, 'worker', 'active'),
         ]);
-
-        $result = app(PayrollService::class)->calculate($person->load('employmentMode'), '2026-08-01', [
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'code' => 'CLI-FK',
+            'legal_name' => 'Cliente FK',
+            'client_status_id' => $this->statusId($company->id, 'client', 'active'),
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-FK',
+            'name' => 'Proyecto FK',
+            'project_status_id' => $this->statusId($company->id, 'project', 'active'),
+            'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
+        ]);
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-FK',
+            'start_date' => '2026-08-01',
+            'end_date' => '2026-08-31',
+            'assignment_status_id' => $this->statusId($company->id, 'assignment', 'active'),
+        ]);
+        $activity = Activity::query()->create([
+            'company_id' => $company->id,
+            'code' => 'ACT-FK',
+            'name' => 'Actividad FK',
+            'active' => true,
+        ]);
+        $approvedStatus = ApprovalStatus::query()
+            ->where('company_id', $company->id)
+            ->where('code', 'approved')
+            ->valueOrFail('id');
+        TimeEntry::query()->create([
+            'company_id' => $company->id,
+            'code' => 'HOR-FK',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'activity_id' => $activity->id,
+            'activity' => $activity->name,
+            'entry_date' => '2026-08-15',
+            'hours_worked' => 10,
             'hours_approved' => 10,
             'hourly_value' => 25000,
+            'calculated_amount' => 250000,
+            'approval_status_id' => $approvedStatus,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $result = app(PayrollService::class)->calculate($person->load('employmentMode'), '2026-08-01', [
+            'project_id' => $project->id,
         ]);
 
         $this->assertSame(250000.0, $result['base_salary']);

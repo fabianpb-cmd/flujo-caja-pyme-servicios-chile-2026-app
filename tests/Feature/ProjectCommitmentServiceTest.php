@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\Activity;
+use App\Models\ApprovalStatus;
 use App\Models\Company;
 use App\Models\Currency;
 use App\Models\EmploymentMode;
@@ -11,6 +13,7 @@ use App\Models\Person;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
+use App\Models\TimeEntry;
 use App\Models\UfValue;
 use App\Services\CatalogService;
 use App\Services\HourlyRateService;
@@ -148,7 +151,8 @@ class ProjectCommitmentServiceTest extends TestCase
 
         $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
         $expectedCommitment = round(app(HourlyRateService::class)->resolveAssignmentRate($assignment, '2026-08-01') * 15, 2);
-        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id, 'hours_approved' => 10]);
+        $this->approvedTimeEntry($person, $project, $assignment, '2026-08-15', 10);
+        $payroll = app(PayrollService::class)->calculate($person, '2026-08-01', ['project_id' => $project->id]);
         $expectedPayrollRate = app(HourlyRateService::class)->resolvePersonRate($person, '2026-08-01');
 
         $this->assertTrue($summary['calculation_complete']);
@@ -599,6 +603,39 @@ class ProjectCommitmentServiceTest extends TestCase
             'project_value' => null,
             'monthly_hours' => null,
         ], $overrides));
+    }
+
+    private function approvedTimeEntry(Person $person, Project $project, ProjectAssignment $assignment, string $date, float $hours): TimeEntry
+    {
+        $activity = Activity::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'ACT-'.uniqid(),
+            'name' => 'Actividad '.uniqid(),
+            'active' => true,
+        ]);
+        $approvedStatus = ApprovalStatus::query()
+            ->where('company_id', $this->company->id)
+            ->where('code', 'approved')
+            ->valueOrFail('id');
+
+        return TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HOR-'.uniqid(),
+            'person_id' => $person->id,
+            'client_id' => $project->client_id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'activity_id' => $activity->id,
+            'activity' => $activity->name,
+            'entry_date' => $date,
+            'hours_worked' => $hours,
+            'hours_approved' => $hours,
+            'hourly_value' => app(HourlyRateService::class)->resolveAssignmentRate($assignment, $date),
+            'calculated_amount' => round($hours * app(HourlyRateService::class)->resolveAssignmentRate($assignment, $date), 2),
+            'approval_status_id' => $approvedStatus,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
     }
 
     private function ufValue(string $date, float $value): void

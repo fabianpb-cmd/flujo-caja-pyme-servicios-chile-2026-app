@@ -276,7 +276,7 @@ class PayrollService
     {
         $query = TimeEntry::query()
             ->forCompany($companyId)
-            ->with(['approvalStatus', 'project.client', 'assignment.project', 'assignment.assignmentStatus'])
+            ->with(['approvalStatus', 'person', 'project.client', 'assignment.project', 'assignment.assignmentStatus'])
             ->where('person_id', $personId)
             ->whereBetween('entry_date', [$period->toDateString(), $period->copy()->endOfMonth()->toDateString()])
             ->where('hours_approved', '>', 0);
@@ -285,7 +285,9 @@ class PayrollService
             $query->where('project_id', $projectId);
         }
 
-        return $query->get()->filter(fn (TimeEntry $entry): bool => $this->isApproved($entry))->values();
+        return $query->get()
+            ->filter(fn (TimeEntry $entry): bool => $this->isApproved($entry) && $this->isWithinPersonEmployment($entry))
+            ->values();
     }
 
     public function syncHourlyTimeEntryTrace(PayrollRecord $record, ?Person $person = null): void
@@ -338,6 +340,28 @@ class PayrollService
         return in_array($code, ['approved', 'aprobado'], true);
     }
 
+    private function isWithinPersonEmployment(TimeEntry $entry): bool
+    {
+        $entry->loadMissing('person');
+        $person = $entry->person;
+
+        if (! $person || ! $entry->entry_date) {
+            return false;
+        }
+
+        $date = Carbon::parse($entry->entry_date)->startOfDay();
+
+        if ($person->start_date && Carbon::parse($person->start_date)->startOfDay()->gt($date)) {
+            return false;
+        }
+
+        if ($person->end_date && Carbon::parse($person->end_date)->startOfDay()->lt($date)) {
+            return false;
+        }
+
+        return true;
+    }
+
     private function payrollNumericValue(mixed $value): ?float
     {
         if ($value === null || $value === '') {
@@ -370,22 +394,26 @@ class PayrollService
         $workedDays = null;
         $amountBasis = strtoupper((string) ($data['amount_basis'] ?? 'GROSS')) === 'NET' ? 'NET' : 'GROSS';
         $projectId = isset($data['project_id']) && $data['project_id'] !== '' ? (int) $data['project_id'] : null;
+        $isDependent = $this->isDependent($modeCode, $contractCode, $modality);
+        $isHourly = $this->isHourly($modeCode, $modality);
+        $isProject = $this->isProject($modeCode, $modality);
         $context = $this->payrollContext($person, $period, $projectId);
         $hoursApprovedAuto = $context['hours_approved_auto'];
-        $hoursApproved = $this->payrollEffectiveNumeric($data['hours_approved'] ?? null, $hoursApprovedAuto) ?? 0.0;
+        $hoursApproved = $isHourly
+            ? (float) ($hoursApprovedAuto ?? 0.0)
+            : ($this->payrollEffectiveNumeric($data['hours_approved'] ?? null, $hoursApprovedAuto) ?? 0.0);
         $monthlyValue = $this->payrollEffectiveNumeric($data['monthly_value'] ?? null, $context['monthly_value_auto']);
-        $hourlyValue = $this->payrollEffectiveNumeric($data['hourly_value'] ?? null, $context['hourly_value_auto']);
+        $hourlyValue = $isHourly
+            ? $context['hourly_value_auto']
+            : $this->payrollEffectiveNumeric($data['hourly_value'] ?? null, $context['hourly_value_auto']);
         $projectValue = $this->payrollEffectiveNumeric($data['project_value'] ?? null, $context['project_value_auto']);
         $healthAdditional = $this->payrollEffectiveNumeric($data['health_additional'] ?? null, $context['health_additional_auto']);
         $notes = array_values(array_filter($context['notes']));
         $requiresReview = (bool) $context['requires_review'];
 
-        $isDependent = $this->isDependent($modeCode, $contractCode, $modality);
-        $isHourly = $this->isHourly($modeCode, $modality);
-        $isProject = $this->isProject($modeCode, $modality);
-
         if ($isHourly && $hoursApproved <= 0) {
             $notes[] = 'Sin horas aprobadas en el período.';
+            $requiresReview = true;
         }
 
         if ($isHourly && ($hourlyValue === null || $hourlyValue <= 0)) {
@@ -444,6 +472,10 @@ class PayrollService
             'worked_days' => $workedDays,
             'month_days' => $monthDays,
             'hours_approved' => $hoursApproved,
+            'hourly_value' => isset($data['hourly_value']) ? (float) $data['hourly_value'] : null,
+            'project_value' => isset($data['project_value']) ? (float) $data['project_value'] : null,
+            'monthly_value' => isset($data['monthly_value']) ? (float) $data['monthly_value'] : null,
+            'health_additional' => (float) ($data['health_additional'] ?? $person->additional_health_plan ?? 0),
             'amount_basis' => $amountBasis,
             'base_salary' => $gross,
             'gross_amount' => $gross,
@@ -1287,5 +1319,20 @@ class PayrollService
         ])->save();
 
         return $record->refresh();
+    }
+
+    public function assertUniquePersonPeriod(int $companyId, int $personId, CarbonInterface|string $periodDate, ?int $ignoreRecordId = null): void
+    {
+        $period = Carbon::parse($periodDate)->startOfMonth();
+        $exists = PayrollRecord::query()
+            ->forCompany($companyId)
+            ->where('person_id', $personId)
+            ->whereDate('period_date', $period->toDateString())
+            ->when($ignoreRecordId !== null, fn ($query) => $query->whereKeyNot($ignoreRecordId))
+            ->exists();
+
+        if ($exists) {
+            throw new DomainException('Ya existe una remuneración para esta persona y período.');
+        }
     }
 }

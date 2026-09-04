@@ -251,6 +251,10 @@ class CrudResourceRequest extends FormRequest
                 $validator->errors()->add('project_id', 'Seleccione un proyecto asignado para remunerar las horas aprobadas del período.');
             }
 
+            if ($resource === 'payroll-records' && filled($this->input('person_id')) && filled($this->input('period_date'))) {
+                $this->validatePayrollRecordUniqueness($validator);
+            }
+
             if ($resource === 'time-entries') {
                 $this->validateTimeEntryPeriodIntegrity($validator);
             }
@@ -587,6 +591,25 @@ class CrudResourceRequest extends FormRequest
 
         if ($query->exists()) {
             $validator->errors()->add('period_date', 'Ya existe un presupuesto para el mismo proyecto, escenario y período.');
+        }
+    }
+
+    private function validatePayrollRecordUniqueness(Validator $validator): void
+    {
+        $period = UiFormatter::parseDateInput($this->input('period_date'));
+        if (! $period) {
+            return;
+        }
+
+        try {
+            app(\App\Services\PayrollService::class)->assertUniquePersonPeriod(
+                (int) $this->user()->company_id,
+                (int) $this->input('person_id'),
+                $period,
+                $this->route('record') ? (int) $this->route('record') : null,
+            );
+        } catch (\DomainException $exception) {
+            $validator->errors()->add('period_date', $exception->getMessage());
         }
     }
 

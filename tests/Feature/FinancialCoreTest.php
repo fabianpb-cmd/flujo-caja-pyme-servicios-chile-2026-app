@@ -144,8 +144,63 @@ class FinancialCoreTest extends TestCase
             'modality' => 'Pago por hora',
             'hourly_value' => 32800,
         ]);
+        $client = Client::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'CLI-HH-ND',
+            'legal_name' => 'Cliente HH No Dependiente',
+            'client_status_id' => $this->statusId('client', 'active'),
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $this->company->id,
+            'client_id' => $client->id,
+            'code' => 'PRY-HH-ND',
+            'name' => 'Proyecto HH No Dependiente',
+            'project_status_id' => $this->statusId('project', 'active'),
+            'billing_status_id' => $this->statusId('billing', 'pending'),
+        ]);
+        $assignment = ProjectAssignment::query()->create([
+            'company_id' => $this->company->id,
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'code' => 'ASI-HH-ND',
+            'start_date' => '2026-07-01',
+            'end_date' => '2026-07-31',
+            'assignment_status_id' => $this->statusId('assignment', 'active'),
+        ]);
+        $approvalStatus = ApprovalStatus::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'approved',
+            'name' => 'Aprobado',
+            'active' => true,
+        ]);
+        $activity = Activity::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'ACT-HH-ND',
+            'name' => 'Actividad HH No Dependiente',
+            'active' => true,
+        ]);
 
-        $payroll = app(PayrollService::class)->calculate($person, '2026-07-01', ['hours_approved' => 10]);
+        TimeEntry::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'HOR-HH-ND',
+            'person_id' => $person->id,
+            'client_id' => $client->id,
+            'project_id' => $project->id,
+            'assignment_id' => $assignment->id,
+            'entry_date' => '2026-07-15',
+            'activity_id' => $activity->id,
+            'activity' => $activity->name,
+            'hours_worked' => 10,
+            'hours_approved' => 10,
+            'hourly_value' => 32800,
+            'calculated_amount' => 328000,
+            'approval_status_id' => $approvalStatus->id,
+            'approval_status' => 'approved',
+            'payment_status' => 'pending',
+        ]);
+
+        $payroll = app(PayrollService::class)->calculate($person, '2026-07-01', ['project_id' => $project->id]);
 
         $this->assertSame(328000.0, $payroll['base_salary']);
         $this->assertSame(50020.0, $payroll['employee_retention']);

@@ -99,8 +99,11 @@ class PayrollBatchService
                 if ($existing) {
                     $manualOverrides = $this->payroll->manualOverrideInputs($existing);
                     unset($manualOverrides['hours_approved']);
+                    if ($isHourly) {
+                        unset($manualOverrides['hourly_value']);
+                    }
 
-                    // Keep historical monetary overrides, but always refresh approved hours from Horas.
+                    // Keep allowed historical overrides, but refresh hourly sources from Horas and Personal.
                     $data = array_merge($data, $manualOverrides);
                 }
 

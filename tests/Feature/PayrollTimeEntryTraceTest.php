@@ -288,7 +288,7 @@ class PayrollTimeEntryTraceTest extends TestCase
 
         $response->assertRedirect(route('operational.create', 'payroll-records'));
         $response->assertSessionHasErrors([
-            'payroll' => 'Una o más horas aprobadas ya están asociadas a otra remuneración.',
+            'period_date' => 'Ya existe una remuneración para esta persona y período.',
         ]);
         $this->assertSame(1, PayrollRecord::query()->where('person_id', $person->id)->count());
         $this->assertSame($existingRecord->id, PayrollRecord::query()->where('person_id', $person->id)->firstOrFail()->id);

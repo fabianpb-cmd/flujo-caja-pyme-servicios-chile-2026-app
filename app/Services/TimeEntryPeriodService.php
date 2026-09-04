@@ -438,6 +438,10 @@ class TimeEntryPeriodService
             $errors[] = 'Seleccione una persona y un proyecto válidos.';
         }
 
+        if (($row['included'] ?? false) && $date && $person && ! $this->dateIsWithinPersonEmployment($person, $date)) {
+            $errors[] = 'La fecha de horas está fuera de la vigencia laboral de la persona.';
+        }
+
         if (($row['included'] ?? false) && $date && $person && $project) {
             $matchingAssignments = $activeAssignments
                 ->filter(function (ProjectAssignment $assignment) use ($date): bool {
@@ -669,6 +673,19 @@ class TimeEntryPeriodService
         }
 
         return 'No existe una asignación vigente para esta persona y proyecto en la fecha indicada.';
+    }
+
+    private function dateIsWithinPersonEmployment(Person $person, Carbon $date): bool
+    {
+        if ($person->start_date && Carbon::parse($person->start_date)->startOfDay()->gt($date)) {
+            return false;
+        }
+
+        if ($person->end_date && Carbon::parse($person->end_date)->startOfDay()->lt($date)) {
+            return false;
+        }
+
+        return true;
     }
 
     private function rowIncluded(array $row): bool

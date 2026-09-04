@@ -1,6 +1,6 @@
 # HANDOFF — Flujo Caja PyME Servicios Chile 2026
 
-Última actualización: 2026-09-03.
+Última actualización: 2026-09-04.
 
 ÚNICA fuente de continuidad entre cuentas de ChatGPT/Codex. Leer este archivo al retomar y NO repetir tareas cerradas. No guardar secretos.
 
@@ -111,3 +111,43 @@ Commit funcional: este mismo commit (`fix: enforce financial transaction immutab
 BD/migraciones: no requiere migración, SQL ni cambio de esquema. Producción no fue tocada.
 
 Próximo paso: deploy incremental manual pendiente de aprobación y smoke dirigido de inmutabilidad; no generar release ni desplegar sin autorización.
+
+## 7. Fix #2A — integridad crítica de remuneraciones (2026-09-04)
+
+Se corrigieron los tres P0 de Payroll/Personal definidos para este bloque:
+- `QA-PERSONAL-01`: en modalidades horarias, `hours_approved` se deriva exclusivamente de `TimeEntry` aprobados, válidos y consumibles; `hourly_value` se deriva de Personal mediante `HourlyRateService`. El request HTTP ya no puede inflar horas ni tarifa.
+- `QA-PERSONAL-02`: `TimeEntryPeriodService` rechaza altas/ediciones de horas fuera de `people.start_date` / `people.end_date`; `PayrollService` además excluye defensivamente cualquier `TimeEntry` histórica fuera de vigencia laboral.
+- `QA-PERSONAL-03`: una empresa solo puede tener un `PayrollRecord` por `person_id` + `period_date`. Hay validación HTTP amigable y restricción BD `payroll_records_company_person_period_unique`.
+
+Archivos modificados:
+- `app/Services/PayrollService.php`
+- `app/Services/PayrollBatchService.php`
+- `app/Services/TimeEntryPeriodService.php`
+- `app/Http/Requests/CrudResourceRequest.php`
+- `database/migrations/2026_09_04_000100_add_unique_person_period_to_payroll_records.php`
+- `tests/Feature/PayrollSourceIntegrityTest.php`
+- ajustes de tests existentes que usaban horas horarias inyectadas como atajo.
+
+SQL previo para detectar duplicados antes de aplicar en cPanel/phpMyAdmin:
+`SELECT company_id, person_id, DATE(period_date) AS period_date, COUNT(*) AS duplicates, GROUP_CONCAT(id ORDER BY id) AS payroll_record_ids FROM payroll_records GROUP BY company_id, person_id, DATE(period_date) HAVING COUNT(*) > 1;`
+
+SQL MySQL equivalente de la migración, si no se puede ejecutar Artisan:
+`ALTER TABLE payroll_records DROP INDEX payroll_records_company_person_period_idx;`
+`ALTER TABLE payroll_records ADD UNIQUE KEY payroll_records_company_person_period_unique (company_id, person_id, period_date);`
+
+Si aparecen duplicados, no aplicar el índice todavía: revisar cada grupo, conservar solo el registro correcto por persona/período según trazabilidad/pagos, resolver duplicados con aprobación funcional y recién después ejecutar el `ALTER TABLE`.
+
+Tests dirigidos PASS:
+- `PayrollSourceIntegrityTest`: 6 tests / 51 assertions.
+- Bloque dirigido principal (`PayrollSourceIntegrityTest`, `PayrollBatchGenerationTest`, `FinancialCoreTest`, `FinancialTransactionIntegrityTest`, `OperationalDependencyIntegrityTest`, `ProfitabilityServiceTest`): 78 tests / 435 assertions.
+- Filtros payroll UI: 4 tests / 57 assertions.
+
+Fallos preexistentes conservados fuera de alcance:
+- `PayrollTimeEntryTraceTest::test_paying_payroll_does_not_mutate_time_entry_payment_status`: `QA-PERSONAL-05`, batch queda `Borrador` y no pagable.
+- Tests legados de Horas en `OperationalUiTest` / `SecurityGateTest`.
+- Entorno sin `ZipArchive` en importer Excel.
+- `ProjectCommitmentServiceTest::test_commitment_normalizes_uf_sale_net_for_currency_comparison`.
+
+BD/migraciones: requiere aplicar una migración/SQL incremental. No se tocó producción.
+
+Próximo paso: deploy incremental manual pendiente de aprobación; subir código y ejecutar SQL/migración en el orden documentado. No abordar `QA-PERSONAL-05` en este bloque.
