@@ -80,3 +80,34 @@ Próximo paso: deploy incremental pendiente de aprobación; no ejecutar build/de
 ## 5. Política de ahorro
 
 No repetir UAT/builds PASS. Sin Codex para tareas manuales de cPanel/phpMyAdmin. Checkpoints compactos en este archivo.
+
+## 6. Fix #1 — integridad transaccional financiera (2026-09-04)
+
+Se aplicó una política conservadora para cerrar los bypass transversales confirmados en las QA profundas:
+- `CashMovement` contabilizado es inmutable: no admite edición, retorno a borrador ni eliminación física. Una reversión contable queda como funcionalidad futura.
+- Los borradores se editan/eliminan mediante `CashMovementService`; la transición a contabilizado ejecuta transacción, locks, período abierto, empresa, documento vigente, saldo/sobrepago, refresco del documento y auditoría.
+- `SalesDocument`, `ExpenseDocument`, `PayrollRecord` y `LegalObligation` con movimientos contabilizados son inmutables desde el CRUD genérico.
+- Cualquier movimiento, incluso borrador, bloquea la eliminación física del documento fuente con dependencia scopeada por empresa, tipo y código.
+- La creación, modificación y eliminación de documentos fuente se bloquea en períodos cerrados. Un update valida tanto el período original como el destino.
+- El selector de estado de caja incorpora explícitamente `draft` / Borrador.
+
+QA resueltas por este bloque: `QA-VENTAS-01`, `QA-VENTAS-02`, `QA-VENTAS-03`, `QA-VENTAS-07`, `QA-VENTAS-08`, `QA-GASTOS-08`, `QA-GASTOS-09`, `QA-GASTOS-10`, `QA-PERSONAL-04` y los patrones documentados de mutación de Payroll posterior al pago/cierre.
+
+Tests dirigidos PASS:
+- `FinancialTransactionIntegrityTest`: 10 tests / 132 assertions.
+- `CashMovementSourceDocumentSelectorTest`: 2 / 40.
+- `FinancialCoreTest`: 29 / 103.
+- `CashFlowServiceTest`: 7 / 22.
+- `OperationalDependencyIntegrityTest`: 4 / 27.
+- `LocalQaWorkflowTest`: 3 / 39.
+- `ProfitabilityServiceTest`: 8 / 32.
+- filtros pertinentes de `OperationalUiTest`: 4 / 50.
+- filtros pertinentes de `SecurityGateTest`: 3 / 6.
+
+`PayrollTimeEntryTraceTest` mantiene 9 tests PASS y el fallo preexistente del flujo `Payroll Batch` que genera estado `Borrador`; corresponde a `QA-PERSONAL-05`, fuera de este fix. La suite completa también conserva fallos preexistentes no relacionados de payload legado de Horas, entorno sin `ZipArchive` y fixtures UF/proyección; no se corrigieron artificialmente.
+
+Commit funcional: este mismo commit (`fix: enforce financial transaction immutability`; SHA en `git log`).
+
+BD/migraciones: no requiere migración, SQL ni cambio de esquema. Producción no fue tocada.
+
+Próximo paso: deploy incremental manual pendiente de aprobación y smoke dirigido de inmutabilidad; no generar release ni desplegar sin autorización.

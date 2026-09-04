@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CrudResourceRequest;
+use App\Models\CashMovement;
 use App\Models\ExpenseDocument;
 use App\Models\Currency;
 use App\Models\LegalObligation;
@@ -16,6 +17,7 @@ use App\Models\TimeEntry;
 use App\Policies\CompanyOwnedPolicy;
 use App\Services\AuditService;
 use App\Services\CashMovementService;
+use App\Services\FinancialDocumentGuard;
 use App\Services\CatalogService;
 use App\Services\HourlyRateService;
 use App\Services\HourlyCostService;
@@ -59,6 +61,7 @@ class OperationalCrudController extends Controller
         private readonly OperationalDependencyService $dependencies,
         private readonly TimeEntryPeriodService $timeEntryPeriods,
         private readonly AuditService $audit,
+        private readonly FinancialDocumentGuard $financialDocuments,
     ) {
     }
 
@@ -168,8 +171,14 @@ class OperationalCrudController extends Controller
                 ));
         }
 
+        $validated = $request->validated();
         try {
-            $data = $this->prepareData($request, $resource, $request->validated());
+            $this->financialDocuments->assertCreateAllowed($resource, (int) $request->user()->company_id, $validated);
+        } catch (DomainException $exception) {
+            return back()->withInput()->withErrors(['financial' => $exception->getMessage()]);
+        }
+        try {
+            $data = $this->prepareData($request, $resource, $validated);
         } catch (DomainException $exception) {
             return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
         }
@@ -410,8 +419,14 @@ class OperationalCrudController extends Controller
             }
         }
 
+        $validated = $request->validated();
         try {
-            $data = $this->prepareData($request, $resource, $request->validated());
+            $this->financialDocuments->assertUpdateAllowed($item, $validated);
+        } catch (DomainException $exception) {
+            return back()->withInput()->withErrors(['financial' => $exception->getMessage()]);
+        }
+        try {
+            $data = $this->prepareData($request, $resource, $validated);
         } catch (DomainException $exception) {
             return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
         }
@@ -419,6 +434,17 @@ class OperationalCrudController extends Controller
             unset($data['code']);
         }
         $before = $item->toArray();
+
+        if ($item instanceof CashMovement) {
+            try {
+                $this->cashMovements->update($item, $data, $request->user());
+            } catch (DomainException $exception) {
+                return back()->withInput()->withErrors(['cash_movement' => $exception->getMessage()]);
+            }
+
+            return redirect()->route('operational.show', [$resource, $item->id])->with('status', 'Registro actualizado.');
+        }
+
         try {
             DB::transaction(function () use ($item, $data): void {
                 MassAssignment::fillAndSave($item, $data);
@@ -451,6 +477,17 @@ class OperationalCrudController extends Controller
             return redirect()->route('operational.show', [$resource, $item->id])->withErrors(['catalog' => $message]);
         }
 
+        if ($item instanceof CashMovement) {
+            try {
+                $this->cashMovements->delete($item, $request->user());
+            } catch (DomainException $exception) {
+                return redirect()->route('operational.show', [$resource, $item->id])
+                    ->withErrors(['cash_movement' => $exception->getMessage()]);
+            }
+
+            return redirect()->route('operational.index', $resource)->with('status', 'Registro eliminado.');
+        }
+
         if ($resource === 'time-entries' && $item instanceof TimeEntry && filled($item->period_batch_id)) {
             $batchEntries = TimeEntry::query()
                 ->forCompany($request->user()->company_id)
@@ -472,6 +509,13 @@ class OperationalCrudController extends Controller
             });
 
             return redirect()->route('operational.index', $resource)->with('status', 'Bloque eliminado.');
+        }
+
+        try {
+            $this->financialDocuments->assertDeleteAllowed($item);
+        } catch (DomainException $exception) {
+            return redirect()->route('operational.show', [$resource, $item->id])
+                ->withErrors(['financial' => $exception->getMessage()]);
         }
 
         if ($message = $this->dependencies->deletionMessage($item)) {

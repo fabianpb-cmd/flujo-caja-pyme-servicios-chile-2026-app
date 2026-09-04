@@ -5,13 +5,11 @@ namespace App\Services;
 use App\Models\CashMovement;
 use App\Models\ExpenseDocument;
 use App\Models\LegalObligation;
-use App\Models\MonthlyClosure;
 use App\Models\PayrollRecord;
 use App\Models\SalesDocument;
 use App\Models\User;
 use App\Support\MassAssignment;
 use DomainException;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class CashMovementService
@@ -22,6 +20,7 @@ class CashMovementService
         private readonly PayrollService $payroll,
         private readonly LegalObligationService $obligations,
         private readonly AuditService $audit,
+        private readonly FinancialDocumentGuard $financialDocuments,
     ) {
     }
 
@@ -40,15 +39,80 @@ class CashMovementService
             $data['created_by_user_id'] = $user?->id;
             $data['status'] = $data['status'] ?? 'posted';
 
-            $this->rejectClosedPeriod($data);
-            $this->validateAgainstDocument($data);
+            if ($data['status'] === 'posted') {
+                $this->rejectClosedPeriod($data);
+                $this->validateAgainstDocument($data);
+            }
 
             $movement = MassAssignment::create(CashMovement::class, $data);
 
-            $this->refreshSourceDocument($movement);
+            if ($movement->status === 'posted') {
+                $this->refreshSourceDocument($movement);
+            }
             $this->audit->record('cash_movement.created', $movement, $user);
 
             return $movement;
+        });
+    }
+
+    public function update(CashMovement $movement, array $data, ?User $user = null): CashMovement
+    {
+        return DB::transaction(function () use ($movement, $data, $user): CashMovement {
+            $locked = CashMovement::query()
+                ->whereKey($movement->getKey())
+                ->where('company_id', $movement->company_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($locked->status === 'posted') {
+                throw new DomainException('Un movimiento de caja contabilizado es inmutable. Deberá utilizar una reversión cuando ese flujo esté disponible.');
+            }
+
+            $income = round((float) ($data['income'] ?? 0), 2);
+            $expense = round((float) ($data['expense'] ?? 0), 2);
+            if (($income > 0 && $expense > 0) || ($income <= 0 && $expense <= 0)) {
+                throw new DomainException('Un movimiento debe tener ingreso o egreso, pero no ambos.');
+            }
+
+            $before = $locked->toArray();
+            $data['income'] = $income;
+            $data['expense'] = $expense;
+            $data['company_id'] = $locked->company_id;
+            $data['status'] = $data['status'] ?? $locked->status;
+
+            if ($data['status'] === 'posted') {
+                $this->rejectClosedPeriod($data);
+                $this->validateAgainstDocument($data);
+            }
+
+            MassAssignment::fillAndSave($locked, $data);
+
+            if ($locked->status === 'posted') {
+                $this->refreshSourceDocument($locked);
+            }
+
+            $this->audit->record('cash_movement.updated', $locked->refresh(), $user, $before);
+
+            return $locked->refresh();
+        });
+    }
+
+    public function delete(CashMovement $movement, ?User $user = null): void
+    {
+        DB::transaction(function () use ($movement, $user): void {
+            $locked = CashMovement::query()
+                ->whereKey($movement->getKey())
+                ->where('company_id', $movement->company_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($locked->status === 'posted') {
+                throw new DomainException('Un movimiento de caja contabilizado es inmutable. Deberá utilizar una reversión cuando ese flujo esté disponible.');
+            }
+
+            $before = $locked->toArray();
+            $locked->delete();
+            $this->audit->record('cash_movement.deleted', $locked, $user, $before, null);
         });
     }
 
@@ -58,17 +122,7 @@ class CashMovementService
             return;
         }
 
-        $period = Carbon::parse($data['movement_date'])->startOfMonth()->toDateString();
-
-        $closed = MonthlyClosure::query()
-            ->where('company_id', $data['company_id'])
-            ->whereDate('period_date', $period)
-            ->where('status', 'closed')
-            ->exists();
-
-        if ($closed) {
-            throw new DomainException("El periodo {$period} esta cerrado para movimientos de caja.");
-        }
+        $this->financialDocuments->assertPeriodOpen((int) $data['company_id'], $data['movement_date']);
     }
 
     private function validateAgainstDocument(array $data): void

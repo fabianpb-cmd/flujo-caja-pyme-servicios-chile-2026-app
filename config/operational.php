@@ -414,7 +414,7 @@ return [
             'payment_method_id' => ['label' => 'Medio pago', 'type' => 'relation', 'model' => PaymentMethod::class, 'display' => 'name'],
             'cash_account_id' => ['label' => 'Cuenta', 'type' => 'relation', 'model' => CashAccount::class, 'display' => 'name'],
             'reference' => ['label' => 'Referencia', 'type' => 'text'],
-            'status' => ['label' => 'Estado', 'type' => 'select', 'options' => ['posted' => 'Contabilizado', 'voided' => 'Anulado']],
+            'status' => ['label' => 'Estado', 'type' => 'select', 'options' => ['draft' => 'Borrador', 'posted' => 'Contabilizado', 'voided' => 'Anulado']],
         ],
         'rules' => [
             'code' => ['required', 'string', 'max:40'],
@@ -429,7 +429,7 @@ return [
             'payment_method_id' => ['nullable', 'integer'],
             'cash_account_id' => ['nullable', 'integer', 'exists:cash_accounts,id'],
             'reference' => ['nullable', 'string', 'max:255'],
-            'status' => ['required', 'string', 'max:20'],
+            'status' => ['required', 'string', 'in:draft,posted,voided'],
         ],
     ],
     'payroll-records' => [

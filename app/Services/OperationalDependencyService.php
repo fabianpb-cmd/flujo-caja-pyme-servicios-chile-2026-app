@@ -7,6 +7,7 @@ use App\Models\CashAccount;
 use App\Models\CashMovement;
 use App\Models\Client;
 use App\Models\ExpenseDocument;
+use App\Models\LegalObligation;
 use App\Models\PayrollAdjustment;
 use App\Models\PayrollRecord;
 use App\Models\PayrollRecordTimeEntry;
@@ -105,14 +106,16 @@ class OperationalDependencyService
             ],
             SalesDocument::class => [
                 $this->dependency(SalesDocumentTimeEntry::class, 'sales_document_id', 'líneas de prefacturación'),
+                $this->cashMovementDependency('sales_document'),
             ],
             ExpenseDocument::class => [
-                $this->queryDependency(
-                    'movimientos de caja',
-                    fn (Model $record) => CashMovement::query()
-                        ->where('source_document_type', 'expense_document')
-                        ->where('source_document_code', $record->getAttribute('code'))
-                ),
+                $this->cashMovementDependency('expense_document'),
+            ],
+            PayrollRecord::class => [
+                $this->cashMovementDependency('payroll_record'),
+            ],
+            LegalObligation::class => [
+                $this->cashMovementDependency('legal_obligation'),
             ],
             CashAccount::class => [
                 $this->dependency(CashMovement::class, 'cash_account_id', 'movimientos de caja'),
@@ -153,6 +156,17 @@ class OperationalDependencyService
     private function queryDependency(string $label, callable $query): array
     {
         return compact('label', 'query');
+    }
+
+    private function cashMovementDependency(string $sourceType): array
+    {
+        return $this->queryDependency(
+            'movimientos de caja',
+            fn (Model $record) => CashMovement::query()
+                ->where('company_id', $record->getAttribute('company_id'))
+                ->where('source_document_type', $sourceType)
+                ->where('source_document_code', $record->getAttribute('code'))
+        );
     }
 
     /**
