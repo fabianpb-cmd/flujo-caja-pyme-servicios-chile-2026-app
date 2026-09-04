@@ -2009,6 +2009,10 @@
                 return;
             }
 
+            if (!(personSelect instanceof HTMLSelectElement)) {
+                return;
+            }
+
             const option = personSelect.options[personSelect.selectedIndex];
             if (!option || !option.value) {
                 personSummary.querySelector('.payroll-person-title').textContent = personSummary.dataset.emptyTitle;
@@ -2037,6 +2041,10 @@
 
         const syncPayrollVisibility = () => {
             if (!personSelect) {
+                return;
+            }
+
+            if (!(personSelect instanceof HTMLSelectElement)) {
                 return;
             }
 

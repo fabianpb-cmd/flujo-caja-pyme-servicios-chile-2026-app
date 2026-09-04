@@ -4245,6 +4245,7 @@ class OperationalUiTest extends TestCase
         $response->assertSeeText('Origen: módulo Horas.');
         $response->assertSeeText('Resultado');
         $response->assertSeeText('Control del cálculo');
+        $response->assertSee('if (!(personSelect instanceof HTMLSelectElement))', false);
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar remuneración/s', $response->getContent());
     }
 
