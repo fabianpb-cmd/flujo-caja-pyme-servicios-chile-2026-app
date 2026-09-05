@@ -130,6 +130,47 @@ class CashFlowServiceTest extends TestCase
         $this->assertSame(790000.0, $row['accounts_receivable']);
     }
 
+    public function test_cash_flow_counts_only_posted_movements_and_rejected_creation_leaves_no_effect(): void
+    {
+        foreach ([
+            ['code' => 'MOV-CFS-POSTED', 'status' => 'posted', 'income' => 100],
+            ['code' => 'MOV-CFS-DRAFT', 'status' => 'draft', 'income' => 200],
+            ['code' => 'MOV-CFS-VOIDED-LEGACY', 'status' => 'voided', 'income' => 300],
+        ] as $movement) {
+            CashMovement::query()->create([
+                'company_id' => $this->company->id,
+                'code' => $movement['code'],
+                'movement_type' => 'income',
+                'cash_account_id' => $this->cashAccount->id,
+                'movement_date' => '2026-08-20',
+                'income' => $movement['income'],
+                'expense' => 0,
+                'status' => $movement['status'],
+            ]);
+        }
+
+        $before = app(CashFlowService::class)->monthly($this->company->id, '2026-08-01', 1)[0];
+        $this->assertSame(100.0, $before['income_real']);
+
+        try {
+            app(\App\Services\CashMovementService::class)->create([
+                'company_id' => $this->company->id,
+                'movement_type' => 'income',
+                'movement_date' => '2026-08-20',
+                'income' => 0,
+                'expense' => 0,
+                'status' => 'posted',
+            ]);
+            $this->fail('El movimiento inválido debía rechazarse.');
+        } catch (\DomainException) {
+            // La transacción debe revertirse sin dejar caja real.
+        }
+
+        $after = app(CashFlowService::class)->monthly($this->company->id, '2026-08-01', 1)[0];
+        $this->assertSame(100.0, $after['income_real']);
+        $this->assertSame(3, CashMovement::query()->forCompany($this->company->id)->count());
+    }
+
     public function test_monthly_cash_flow_projects_only_remaining_payable_after_partial_payment(): void
     {
         ExpenseDocument::query()->create([

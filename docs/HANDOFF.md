@@ -210,3 +210,22 @@ Tests dirigidos PASS:
 - `php artisan test tests\Feature\FinancialTransactionIntegrityTest.php --filter="draft_movement_can_be_edited_and_deleted_with_audit|draft_to_posted_validates_balance_period_and_refreshes_source_atomically|document_dependency_lookup_is_scoped_by_company"` — 3 tests / 26 assertions.
 
 BD/migraciones: no requiere migración, SQL ni cambio de estructura. Producción no fue tocada. No se generó release ni deploy.
+
+## 10. QA dirigida — riesgos de ciclo de vida de Movimientos de caja (2026-09-05)
+
+Se ejecutó QA adversarial limitada a `voided`, stale draft → posted, cierre de período al contabilizar, caja real y concurrencia. Se confirmó un bug real y se aplicó la corrección mínima:
+- Antes del fix, la UI/validación HTTP aceptaba `status=voided` al crear y al transicionar un borrador. `CashMovementService` no validaba ese estado, por lo que tampoco protegía llamadas fuera del controlador. El movimiento no afectaba caja ni documentos, pero `Anulado` sugería erróneamente una reversión inexistente.
+- Se eliminó `Anulado` de las opciones/rules de Movimientos de caja. Servicio y HTTP ahora admiten solo `draft` y `posted`; `voided` requiere un flujo formal de reversión que aún no existe.
+- Registros `voided` legados no pueden reactivarse como borrador; sí se pueden eliminar como registros sin efecto contable.
+- Stale draft: al pasar a `posted`, el servicio bloquea el documento fuente y revalida saldo/estado vigente. Se probaron saldo consumido parcialmente o por completo, documento anulado y estado `Borrador`; todos rechazan la contabilización y preservan el draft.
+- Período cerrado al contabilizar un draft: PASS; el borrador permanece sin efecto y la transición es rechazada.
+- Cash flow: solo `posted` entra a caja real; `draft`, un `voided` legado y una creación rechazada no alteran resultados.
+- Concurrencia: PASS por análisis estático para ventas, gastos, remuneraciones y obligaciones. Cada rama de `validateAgainstDocument()` ejecuta `lockForUpdate()` sobre el mismo documento fuente antes de consultar el saldo; el segundo proceso espera el commit del primero y calcula el saldo después de obtener el lock. No se agregó prueba frágil sobre SQLite.
+
+Tests dirigidos PASS:
+- `php artisan test tests\Feature\FinancialTransactionIntegrityTest.php --filter="voided_is_not_a_supported_cash_movement_creation_or_transition|legacy_voided_movement_cannot_be_resurrected_as_a_draft|stale_draft_revalidates_current_document_state_before_posting|draft_to_posted_validates_balance_period_and_refreshes_source_atomically"`
+- `php artisan test tests\Feature\CashFlowServiceTest.php --filter=cash_flow_counts_only_posted_movements_and_rejected_creation_leaves_no_effect`
+
+BD/migraciones: no requiere migración ni SQL. Producción no fue tocada; no se generó build ni deploy.
+
+Próximo paso: QA de seguridad/integridad de endpoints financieros.

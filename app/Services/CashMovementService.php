@@ -38,6 +38,7 @@ class CashMovementService
             $data['expense'] = $expense;
             $data['created_by_user_id'] = $user?->id;
             $data['status'] = $data['status'] ?? 'posted';
+            $this->assertSupportedStatus($data['status']);
 
             if ($data['status'] === 'posted') {
                 $this->rejectClosedPeriod($data);
@@ -68,6 +69,10 @@ class CashMovementService
                 throw new DomainException('Un movimiento de caja contabilizado es inmutable. Deberá utilizar una reversión cuando ese flujo esté disponible.');
             }
 
+            if ($locked->status === 'voided') {
+                throw new DomainException('Un movimiento de caja anulado legado no puede reactivarse. Elimínelo si corresponde a un registro sin efecto contable.');
+            }
+
             $income = round((float) ($data['income'] ?? 0), 2);
             $expense = round((float) ($data['expense'] ?? 0), 2);
             if (($income > 0 && $expense > 0) || ($income <= 0 && $expense <= 0)) {
@@ -79,6 +84,7 @@ class CashMovementService
             $data['expense'] = $expense;
             $data['company_id'] = $locked->company_id;
             $data['status'] = $data['status'] ?? $locked->status;
+            $this->assertSupportedStatus($data['status']);
 
             if ($data['status'] === 'posted') {
                 $this->rejectClosedPeriod($data);
@@ -123,6 +129,13 @@ class CashMovementService
         }
 
         $this->financialDocuments->assertPeriodOpen((int) $data['company_id'], $data['movement_date']);
+    }
+
+    private function assertSupportedStatus(string $status): void
+    {
+        if (! in_array($status, ['draft', 'posted'], true)) {
+            throw new DomainException('El estado Anulado no está disponible para movimientos de caja. Una reversión contable requiere un flujo específico.');
+        }
     }
 
     private function validateAgainstDocument(array $data): void

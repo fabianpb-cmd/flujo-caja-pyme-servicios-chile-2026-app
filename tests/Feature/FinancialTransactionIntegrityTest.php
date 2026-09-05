@@ -137,6 +137,94 @@ class FinancialTransactionIntegrityTest extends TestCase
         $this->assertDatabaseHas('cash_movements', ['id' => $closedMovement->id]);
     }
 
+    public function test_voided_is_not_a_supported_cash_movement_creation_or_transition(): void
+    {
+        $document = $this->document('sales_document', '2026-09-01');
+
+        $this->actingAs($this->admin)->post(
+            route('operational.store', 'cash-movements'),
+            $this->movementPayload($document, 'sales_document', 100, 'voided')
+        )->assertSessionHasErrors('status');
+
+        $draft = $this->movement($document, 'sales_document', 'draft', 100);
+        $this->actingAs($this->admin)->put(
+            route('operational.update', ['cash-movements', $draft->id]),
+            $this->movementPayload($document, 'sales_document', 100, 'voided')
+        )->assertSessionHasErrors('status');
+
+        $before = CashMovement::query()->count();
+        try {
+            app(\App\Services\CashMovementService::class)->create(
+                ['company_id' => $this->company->id] + $this->movementPayload($document, 'sales_document', 100, 'voided'),
+                $this->admin,
+            );
+            $this->fail('El servicio no debe aceptar movimientos anulados.');
+        } catch (\DomainException) {
+            // El bypass fuera del controlador también debe quedar bloqueado.
+        }
+        $this->assertSame($before, CashMovement::query()->count());
+    }
+
+    public function test_legacy_voided_movement_cannot_be_resurrected_as_a_draft(): void
+    {
+        $document = $this->document('sales_document', '2026-09-01');
+        $voided = $this->movement($document, 'sales_document', 'voided', 100);
+
+        $this->actingAs($this->admin)->put(
+            route('operational.update', ['cash-movements', $voided->id]),
+            $this->movementPayload($document, 'sales_document', 100, 'draft')
+        )->assertSessionHasErrors('cash_movement');
+
+        $this->assertSame('voided', $voided->fresh()->status);
+        $this->actingAs($this->admin)
+            ->delete(route('operational.destroy', ['cash-movements', $voided->id]))
+            ->assertRedirect(route('operational.index', 'cash-movements'));
+        $this->assertDatabaseMissing('cash_movements', ['id' => $voided->id]);
+    }
+
+    public function test_stale_draft_revalidates_current_document_state_before_posting(): void
+    {
+        $partiallyConsumed = $this->document('sales_document', '2026-09-01', 100);
+        $stalePartial = $this->movement($partiallyConsumed, 'sales_document', 'draft', 100);
+        $this->movement($partiallyConsumed, 'sales_document', 'posted', 60);
+
+        $this->actingAs($this->admin)->put(
+            route('operational.update', ['cash-movements', $stalePartial->id]),
+            $this->movementPayload($partiallyConsumed, 'sales_document', 100, 'posted')
+        )->assertSessionHasErrors('cash_movement');
+        $this->assertSame('draft', $stalePartial->fresh()->status);
+
+        $voided = $this->document('sales_document', '2026-09-01', 100);
+        $staleVoided = $this->movement($voided, 'sales_document', 'draft', 100);
+        $voided->forceFill(['is_voided' => true, 'status' => 'Anulado'])->save();
+
+        $this->actingAs($this->admin)->put(
+            route('operational.update', ['cash-movements', $staleVoided->id]),
+            $this->movementPayload($voided, 'sales_document', 100, 'posted')
+        )->assertSessionHasErrors('cash_movement');
+        $this->assertSame('draft', $staleVoided->fresh()->status);
+
+        $paid = $this->document('sales_document', '2026-09-01', 100);
+        $stalePaid = $this->movement($paid, 'sales_document', 'draft', 100);
+        $this->movement($paid, 'sales_document', 'posted', 100);
+
+        $this->actingAs($this->admin)->put(
+            route('operational.update', ['cash-movements', $stalePaid->id]),
+            $this->movementPayload($paid, 'sales_document', 100, 'posted')
+        )->assertSessionHasErrors('cash_movement');
+        $this->assertSame('draft', $stalePaid->fresh()->status);
+
+        $notPayable = $this->document('sales_document', '2026-09-01', 100);
+        $staleNotPayable = $this->movement($notPayable, 'sales_document', 'draft', 100);
+        $notPayable->forceFill(['status' => 'Borrador'])->save();
+
+        $this->actingAs($this->admin)->put(
+            route('operational.update', ['cash-movements', $staleNotPayable->id]),
+            $this->movementPayload($notPayable, 'sales_document', 100, 'posted')
+        )->assertSessionHasErrors('cash_movement');
+        $this->assertSame('draft', $staleNotPayable->fresh()->status);
+    }
+
     public function test_draft_movement_can_be_edited_and_deleted_with_audit(): void
     {
         $movement = CashMovement::query()->create([
