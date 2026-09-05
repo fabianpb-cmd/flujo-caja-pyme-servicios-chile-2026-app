@@ -56,6 +56,9 @@
         }
 
         $renderedFieldInput = '<select id="'.e($field).'" name="'.e($field).'" class="form-select'.e($fieldErrorClass).'"'.$selectAttributes.'>'.$optionsHtml.'</select>';
+        if (($definition['source_document_selector'] ?? false) === true) {
+            $renderedFieldInput .= '<input id="'.e($field).'_other" name="" type="text" value="'.e($value).'" class="form-control'.e($fieldErrorClass).'" placeholder="Referencia o código libre" hidden disabled data-source-document-other-input="true">';
+        }
     } elseif ($type === 'relation') {
         $relationAttributes = '';
         if (isset($definition['depends_on'])) {

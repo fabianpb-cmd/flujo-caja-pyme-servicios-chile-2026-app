@@ -58,6 +58,7 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
         $response->assertOk();
         $response->assertSee('Tipo documento origen');
         $response->assertSee('data-source-document-select="true"', false);
+        $response->assertSee('data-source-document-other-input="true"', false);
         $response->assertSee('data-parent-field="source_document_type"', false);
         $response->assertSee('value="'.$invoice->code.'"', false);
         $response->assertSee('Clínica Los Andes');
@@ -79,6 +80,7 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
 
         $this->assertStringContainsString("cashSourceTypeSelect.addEventListener('change'", $html);
         $this->assertStringContainsString('resetCashSourceDerivedFields', $html);
+        $this->assertStringContainsString("cashSourceDocumentOtherInput.name = isOther ? 'source_document_code' : ''", $html);
         $this->assertStringContainsString('option.dataset.suggestedIncome', $html);
         $this->assertStringContainsString('option.dataset.suggestedExpense', $html);
     }
@@ -153,6 +155,96 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
             ]);
         $this->assertSame(2, CashMovement::query()->where('source_document_code', 'ING-PAY-001')->count());
         $this->assertSame(0, CashMovement::query()->where('source_document_code', '1')->count());
+    }
+
+    public function test_other_keeps_a_free_reference_without_internal_document_validation(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin('CMP-CASH-OTHER');
+        $movement = $this->postMovement($admin, $company, [
+            'source_document_type' => 'other',
+            'source_document_code' => 'TRANSFERENCIA-EXTERNA-42',
+            'counterparty_name' => 'Contraparte externa',
+            'income' => 125000,
+            'expense' => 0,
+        ]);
+
+        $movement->assertRedirect(route('operational.index', 'cash-movements'));
+        $this->assertDatabaseHas('cash_movements', [
+            'company_id' => $company->id,
+            'source_document_type' => 'other',
+            'source_document_code' => 'TRANSFERENCIA-EXTERNA-42',
+        ]);
+
+        $invalidType = $this->actingAs($admin)->from(route('operational.create', 'cash-movements'))->post(route('operational.store', 'cash-movements'), $this->movementPayload($company, [
+            'source_document_type' => 'unexpected_type',
+            'source_document_code' => 'ING-NO-BYPASS',
+            'income' => 1,
+        ]));
+
+        $invalidType->assertRedirect(route('operational.create', 'cash-movements'))
+            ->assertSessionHasErrors('source_document_type');
+    }
+
+    public function test_server_rejects_manipulated_cross_company_voided_and_paid_documents_without_a_404(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin('CMP-CASH-PROTECT');
+        [$client, $project] = $this->clientAndProject($company);
+        [$otherCompany] = $this->companyWithAdmin('CMP-CASH-PROTECT-OTHER');
+        [$otherClient, $otherProject] = $this->clientAndProject($otherCompany);
+        $foreign = $this->salesDocument($otherCompany, $otherClient, $otherProject, 'ING-FOREIGN-001', 1000);
+        $voided = $this->salesDocument($company, $client, $project, 'ING-VOID-001', 1000);
+        $voided->update(['is_voided' => true]);
+        $paid = $this->salesDocument($company, $client, $project, 'ING-PAID-001', 1000);
+
+        foreach ([$foreign->code, $voided->code] as $code) {
+            $response = $this->actingAs($admin)->from(route('operational.create', 'cash-movements'))->post(route('operational.store', 'cash-movements'), $this->movementPayload($company, [
+                'source_document_type' => 'sales_document',
+                'source_document_code' => $code,
+                'income' => 100,
+            ]));
+
+            $response->assertRedirect(route('operational.create', 'cash-movements'))
+                ->assertSessionHasErrors('cash_movement');
+        }
+
+        $this->postMovement($admin, $company, [
+            'source_document_type' => 'sales_document',
+            'source_document_code' => $paid->code,
+            'income' => 1000,
+            'expense' => 0,
+        ])->assertRedirect(route('operational.index', 'cash-movements'));
+
+        $paidResponse = $this->actingAs($admin)->from(route('operational.create', 'cash-movements'))->post(route('operational.store', 'cash-movements'), $this->movementPayload($company, [
+            'source_document_type' => 'sales_document',
+            'source_document_code' => $paid->code,
+            'income' => 1,
+        ]));
+        $paidResponse->assertRedirect(route('operational.create', 'cash-movements'))
+            ->assertSessionHasErrors('cash_movement');
+
+        $form = $this->actingAs($admin)->get(route('operational.create', 'cash-movements'));
+        $html = $form->getContent();
+        $this->assertStringNotContainsString('data-source-document-code="'.$foreign->code.'"', $html);
+        $this->assertStringNotContainsString('data-source-document-code="'.$voided->code.'"', $html);
+        $this->assertStringNotContainsString('data-source-document-code="'.$paid->code.'"', $html);
+    }
+
+    private function postMovement(User $admin, Company $company, array $overrides)
+    {
+        return $this->actingAs($admin)->post(route('operational.store', 'cash-movements'), $this->movementPayload($company, $overrides));
+    }
+
+    private function movementPayload(Company $company, array $overrides): array
+    {
+        return array_replace([
+            'movement_type_id' => CashMovementType::query()->where('company_id', $company->id)->valueOrFail('id'),
+            'movement_date' => '2026-09-15',
+            'income' => 0,
+            'expense' => 0,
+            'payment_method_id' => PaymentMethod::query()->where('company_id', $company->id)->valueOrFail('id'),
+            'cash_account_id' => $this->cashAccount($company)->id,
+            'status' => 'posted',
+        ], $overrides);
     }
 
     private function companyWithAdmin(string $code): array

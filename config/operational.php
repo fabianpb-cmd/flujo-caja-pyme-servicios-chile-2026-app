@@ -419,7 +419,7 @@ return [
         'rules' => [
             'code' => ['required', 'string', 'max:40'],
             'movement_type_id' => ['required', 'integer'],
-            'source_document_type' => ['nullable', 'string', 'max:40'],
+            'source_document_type' => ['nullable', 'string', 'max:40', 'in:sales_document,expense_document,payroll_record,legal_obligation,other'],
             'source_document_code' => ['nullable', 'string', 'max:40'],
             'counterparty_name' => ['nullable', 'string', 'max:255'],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],

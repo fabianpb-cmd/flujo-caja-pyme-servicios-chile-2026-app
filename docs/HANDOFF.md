@@ -187,3 +187,26 @@ Tests dirigidos PASS:
 - Filtro pertinente `SecurityGateTest --filter=payroll`: 1 test / 1 assertion.
 
 BD/migraciones: no requiere migración ni SQL incremental. Producción no fue tocada durante la implementación local.
+
+## 9. Auditoría selector documento origen de caja (2026-09-05)
+
+Se auditó `main` desde `d91b731d063884bde62236aa0fca814ceeb35281` (igual a `origin/main`) y se completó un ajuste UX/validación acotado:
+- Para `sales_document`, `expense_document`, `payroll_record` y `legal_obligation` se conserva el selector dependiente, con código funcional persistido, etiqueta descriptiva, sugerencia de contraparte/proyecto/monto y filtrado por empresa, vigencia y saldo.
+- Para `other`, `source_document_code` vuelve a ser una referencia libre visible; no se muestra ni envía el selector interno. Al alternar tipos, se limpian referencia/selección y campos derivados incompatibles.
+- La regla HTTP de `source_document_type` quedó cerrada a los cuatro tipos internos y `other`, evitando que un payload manual use un tipo arbitrario para eludir `CashMovementService`.
+- La validación de documentos internos sigue scopeada por empresa y devuelve error de formulario (`DomainException` capturada), nunca un `firstOrFail`/404 para códigos inválidos, anulados o sin saldo.
+
+Archivos modificados:
+- `config/operational.php`
+- `resources/views/operational/form.blade.php`
+- `resources/views/operational/partials/field-input.blade.php`
+- `tests/Feature/CashMovementSourceDocumentSelectorTest.php`
+- `docs/HANDOFF.md`
+
+Tests dirigidos PASS:
+- `php artisan test tests\Feature\CashMovementSourceDocumentSelectorTest.php` — 4 tests / 66 assertions.
+- `php artisan test tests\Feature\FinancialCoreTest.php --filter="partial_payments_update_invoice_balance_and_status|overpayment_is_rejected_inside_cash_transaction|expense_payments_update_balance_and_reject_overpayment"` — 3 tests / 12 assertions.
+- `php artisan test tests\Feature\PayrollConfirmationWorkflowTest.php --filter="cash|payment|paid"` — 4 tests / 23 assertions.
+- `php artisan test tests\Feature\FinancialTransactionIntegrityTest.php --filter="draft_movement_can_be_edited_and_deleted_with_audit|draft_to_posted_validates_balance_period_and_refreshes_source_atomically|document_dependency_lookup_is_scoped_by_company"` — 3 tests / 26 assertions.
+
+BD/migraciones: no requiere migración, SQL ni cambio de estructura. Producción no fue tocada. No se generó release ni deploy.

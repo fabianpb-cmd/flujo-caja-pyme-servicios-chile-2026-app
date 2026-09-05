@@ -1882,6 +1882,7 @@
 
         const cashSourceTypeSelect = form.querySelector('#source_document_type');
         const cashSourceDocumentSelect = form.querySelector('[data-source-document-select="true"]');
+        const cashSourceDocumentOtherInput = form.querySelector('[data-source-document-other-input="true"]');
         const counterpartyInput = form.querySelector('#counterparty_name');
         const cashProjectSelect = form.querySelector('#project_id');
         const incomeInput = form.querySelector('#income');
@@ -1889,6 +1890,9 @@
 
         if (cashSourceTypeSelect && cashSourceDocumentSelect) {
             const resetCashSourceDerivedFields = () => {
+                if (cashSourceDocumentOtherInput) {
+                    cashSourceDocumentOtherInput.value = '';
+                }
                 if (counterpartyInput) {
                     counterpartyInput.value = '';
                 }
@@ -1906,6 +1910,7 @@
 
             const syncCashSourceDocuments = (clearSelection = false) => {
                 const sourceType = cashSourceTypeSelect.value || '';
+                const isOther = sourceType === 'other';
                 const placeholder = cashSourceDocumentSelect.options[0];
                 let visibleOptions = 0;
                 let hasSelectedVisible = false;
@@ -1933,9 +1938,16 @@
                     cashSourceDocumentSelect.value = '';
                 }
 
-                if (sourceType === '' || sourceType === 'other') {
+                if (cashSourceDocumentOtherInput) {
+                    cashSourceDocumentOtherInput.hidden = !isOther;
+                    cashSourceDocumentOtherInput.disabled = !isOther;
+                    cashSourceDocumentOtherInput.name = isOther ? 'source_document_code' : '';
+                    cashSourceDocumentSelect.name = isOther ? '' : 'source_document_code';
+                }
+
+                if (sourceType === '' || isOther) {
                     cashSourceDocumentSelect.disabled = true;
-                    placeholder.textContent = sourceType === 'other' ? 'No aplica' : cashSourceDocumentSelect.dataset.placeholderParent;
+                    placeholder.textContent = isOther ? 'Use la referencia libre' : cashSourceDocumentSelect.dataset.placeholderParent;
                 } else if (visibleOptions === 0) {
                     cashSourceDocumentSelect.disabled = true;
                     placeholder.textContent = cashSourceDocumentSelect.dataset.placeholderEmpty;
