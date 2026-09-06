@@ -13,6 +13,7 @@
 - Marcador GitHub de producción: rama `production-20260905` apuntando a `f18c368065bf134412e12d3ae87d17bb058772a2`
 - `.env` productivo preservado: `APP_ENV=production`, `APP_DEBUG=false`, APP_URL correcto, sesiones seguras, APP_KEY y credenciales BD sin cambios.
 - Backups frescos de BD, APP_ROOT y PUBLIC_ROOT: COMPLETADOS antes del deploy del 2026-09-05.
+- Estado global: **PROYECTO CERRADO / PRODUCCIÓN ESTABLE Y LIMPIA**.
 
 ## BD / migraciones
 
@@ -61,11 +62,11 @@ No repetir UAT, suite completa, QA de seguridad ni smoke de esta release. Reabri
 3. cambio de esquema/código;
 4. evidencia nueva.
 
-## Limpieza final de datos de prueba — autorizada
+## Limpieza final de datos de prueba — COMPLETADA
 
-Miguel confirmó que los datos actuales son de prueba y pueden eliminarse, preservando parámetros/configuración base.
+Miguel confirmó que los datos operacionales existentes eran de prueba y autorizó su eliminación preservando parámetros/configuración base.
 
-Preservar obligatoriamente:
+Preservado:
 - `companies` y usuario(s) necesarios para acceso;
 - `migrations`;
 - `company_settings`;
@@ -73,7 +74,7 @@ Preservar obligatoriamente:
 - catálogos y geografía;
 - escenarios baseline (`scenarios`) y catálogos/configuración de empresa.
 
-Eliminar como datos de prueba/operacionales:
+Eliminado como datos de prueba/operacionales:
 - pivotes de trazabilidad de horas/remuneraciones;
 - ajustes y registros de remuneración;
 - movimientos de caja;
@@ -89,7 +90,22 @@ Eliminar como datos de prueba/operacionales:
 - cuentas de caja;
 - auditoría generada por las pruebas.
 
-Estado: **PRODUCCIÓN FUNCIONAL CERRADA / LIMPIEZA DE DATOS DE PRUEBA PENDIENTE**.
+Verificación manual post-limpieza en phpMyAdmin: **PASS**. Todas las tablas operacionales verificadas devolvieron `0` filas:
+- `clients`
+- `projects`
+- `people`
+- `project_assignments`
+- `time_entries`
+- `payroll_records`
+- `sales_documents`
+- `expense_documents`
+- `legal_obligations`
+- `cash_movements`
+- `cash_accounts`
+- `budgets`
+- `monthly_closures`
+
+Estado: **PRODUCCIÓN LIMPIA / PARÁMETROS Y CONFIGURACIÓN BASE PRESERVADOS / PASS**.
 
 ## Operación mínima
 
