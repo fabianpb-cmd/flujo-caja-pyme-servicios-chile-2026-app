@@ -120,18 +120,38 @@ Proyecto `Alerta Matrículas` (`PRY-000012`), cliente DuocUC:
 
 No limpiar estos datos hasta cerrar el smoke funcional.
 
+## Hallazgo fechas de facturación — 2026-09-06
+
+Antes de emitir en producción se revisó la lógica de fechas y se detectaron brechas reales. **Pausar el smoke de emisión hasta corregir/probar estas reglas.**
+
+Hallazgos:
+- `planned_invoice_date` de hitos solo valida ser fecha; no existe regla server-side de orden cronológico por `sequence` ni coherencia del plan.
+- El detalle del proyecto precarga `issue_date` con `planned_invoice_date` cuando existe. Esto confunde fecha planificada con fecha real de emisión y puede generar una factura histórica/futura por un clic si no se corrige manualmente.
+- La ruta de emisión de hito valida `issue_date` solo como `date`; hoy permite fechas futuras sin regla funcional.
+- `ProjectBillingMilestoneService::issue()` usa `issue_date` para UF/tasa e IVA, pero no calcula `due_date` ni `projected_collection_date` desde la condición de pago del proyecto/cliente.
+- `PaymentTerm` posee `days`; `Project` y `Client` poseen relación `paymentTerm`, por lo que la información existe pero no se usa al generar borradores por hito.
+- Prefacturación Por Hora recibe `period` e `issue_date` independientes. Hoy no impide que `issue_date` sea anterior a HH incluidas en el documento ni define explícitamente la coherencia con la periodicidad mensual.
+
+Reglas recomendadas para implementar con tests antes de continuar:
+- `planned_invoice_date` es fecha planificada, no fecha real; en el detalle mostrarla aparte y precargar la fecha real de emisión con `hoy`, no con la fecha planificada.
+- Rechazar `issue_date` futura para documentos reales/borradores de factura.
+- No bloquear emisión temprana/tardía respecto de `planned_invoice_date`; permitir desviación porque la fecha planificada es forecast. Conservar ambas fechas y, si se desea, mostrar diferencia como warning informativo.
+- Para plan de hitos activo, exigir fechas planificadas y orden no decreciente por `sequence`; no imponer que la última fecha sea <= `project.end_date` porque aceptación/facturación final puede ocurrir después del término operativo.
+- `due_date = issue_date + payment_term.days`, usando primero condición del Proyecto y fallback al Cliente. Si ninguna existe, dejar `due_date` nula y advertir/configurar, no inventar días.
+- `projected_collection_date` debe seguir `due_date` inicialmente salvo que exista una regla explícita distinta.
+- En Por Hora mensual, impedir facturar HH cuya `entry_date` sea posterior a `issue_date`. Definir con test si además se exige `issue_date >= fin del período`; recomendación actual: sí, mientras la modalidad siga declarada como `Mensual`, para evitar incluir horas futuras del mismo mes.
+- Conversión UF/moneda continúa usando exclusivamente `issue_date`; nunca planned/due/entry date.
+
+Próximo paso: TDD focalizado de fechas, sin suite completa, sin deploy y sin tocar producción. Ejecutar tests rojos primero, corrección mínima y luego PASS. Actualizar este mismo HANDOFF con resultados.
+
 ## Pendiente inmediato
 
-**Smoke funcional mínimo pendiente; no repetir suite completa ni UAT amplio.**
+**Smoke funcional de emisión PAUSADO por hallazgo de fechas.** No repetir suite completa ni UAT amplio.
 
-1. Proyecto cerrado: emitir de forma controlada un solo hito con fecha de emisión explícita y verificar:
-   - neto deriva del porcentaje contractual (no de HH/costo);
-   - conversión UF/moneda usa fecha de emisión;
-   - documento queda vinculado al hito;
-   - hito pasa a facturado y queda inmutable;
-   - HH no se consumen como fuente de ingreso.
-2. Por Hora: smoke mínimo con un proyecto/escenario QA válido para confirmar `contracted_hourly_rate` comercial y tasa de `issue_date`.
-3. Tras PASS, actualizar este mismo HANDOFF y cerrar la release.
+1. Implementar y ejecutar set focalizado de pruebas automatizadas de fechas para Proyecto cerrado + Por Hora.
+2. Corregir únicamente las reglas reveladas por esos tests.
+3. Revisar diff una vez; después deploy incremental solo de archivos afectados.
+4. Recién entonces retomar emisión controlada del Hito 1 de `Alerta Matrículas`.
 
 Antes de cualquier nueva operación riesgosa o cambio de código, checkpoint aquí. Ante incidente, revisar primero `storage/logs` y comparar contra `main`.
 
