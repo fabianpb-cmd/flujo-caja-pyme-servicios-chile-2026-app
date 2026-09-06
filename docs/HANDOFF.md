@@ -1,6 +1,6 @@
 # HANDOFF — Flujo Caja PyME Servicios Chile 2026
 
-Última actualización: 2026-09-04.
+Última actualización: 2026-09-05.
 
 ÚNICA fuente de continuidad entre cuentas de ChatGPT/Codex. Leer este archivo al retomar y NO repetir tareas cerradas. No guardar secretos.
 
@@ -229,3 +229,13 @@ Tests dirigidos PASS:
 BD/migraciones: no requiere migración ni SQL. Producción no fue tocada; no se generó build ni deploy.
 
 Próximo paso: QA de seguridad/integridad de endpoints financieros.
+
+## 11. Pre-check BD productiva — Payroll unique index (2026-09-05)
+
+Validación manual en phpMyAdmin, sin Codex y sin cambios de datos:
+- consulta de duplicados por `company_id + person_id + DATE(period_date)` devolvió **0 filas**;
+- `SHOW INDEX` confirmó que producción ya tiene `payroll_records_company_person_period_unique` con `Non_unique=0` sobre `company_id, person_id, period_date`;
+- el índice legado `payroll_records_company_person_period_idx` no apareció en el resultado;
+- por lo tanto, **NO ejecutar los `ALTER TABLE` de la migración**: el esquema productivo ya coincide con el estado final requerido por `2026_09_04_000100_add_unique_person_period_to_payroll_records.php`.
+
+Estado pendiente: confirmar únicamente si la migración está registrada en la tabla `migrations`; no hacer escrituras de BD hasta resolver ese punto. Producción de aplicación aún no fue desplegada a `f18c368065bf134412e12d3ae87d17bb058772a2`.
