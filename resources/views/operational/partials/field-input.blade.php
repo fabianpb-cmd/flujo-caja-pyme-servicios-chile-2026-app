@@ -118,3 +118,74 @@
 @endphp
 
 {!! $renderedFieldInput !!}
+
+@once
+    @push('scripts')
+        <script nonce="{{ $cspNonce ?? '' }}">
+            (() => {
+                const moneyInputs = Array.from(document.querySelectorAll('[data-money-input="true"]'));
+                if (moneyInputs.length === 0) {
+                    return;
+                }
+
+                const normalizeMoney = (value) => {
+                    let normalized = String(value ?? '').trim().replace(/[^0-9,.-]/g, '');
+                    if (normalized === '') {
+                        return '';
+                    }
+
+                    const negative = normalized.startsWith('-');
+                    normalized = normalized.replace(/-/g, '');
+                    const hasComma = normalized.includes(',');
+                    const dotCount = (normalized.match(/\./g) || []).length;
+
+                    if (hasComma) {
+                        normalized = normalized.replace(/\./g, '').replace(',', '.');
+                    } else if (dotCount > 1) {
+                        normalized = normalized.replace(/\./g, '');
+                    } else if (dotCount === 1) {
+                        const [integerPart, decimalPart = ''] = normalized.split('.');
+                        if (decimalPart.length === 3 && integerPart.length >= 1) {
+                            normalized = integerPart + decimalPart;
+                        }
+                    }
+
+                    return (negative ? '-' : '') + normalized;
+                };
+
+                const formatMoney = (value) => {
+                    const normalized = normalizeMoney(value);
+                    if (normalized === '' || Number.isNaN(Number(normalized))) {
+                        return value;
+                    }
+
+                    const decimals = normalized.includes('.')
+                        ? Math.min(normalized.split('.')[1].length, 2)
+                        : 0;
+
+                    return new Intl.NumberFormat('es-CL', {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: decimals,
+                    }).format(Number(normalized));
+                };
+
+                moneyInputs.forEach((input) => {
+                    input.addEventListener('focus', () => {
+                        input.value = normalizeMoney(input.value);
+                    });
+                    input.addEventListener('blur', () => {
+                        input.value = formatMoney(input.value);
+                    });
+                });
+
+                document.querySelectorAll('form').forEach((form) => {
+                    form.addEventListener('submit', () => {
+                        form.querySelectorAll('[data-money-input="true"]').forEach((input) => {
+                            input.value = normalizeMoney(input.value);
+                        });
+                    }, { capture: true });
+                });
+            })();
+        </script>
+    @endpush
+@endonce
