@@ -242,4 +242,31 @@ Validación manual en phpMyAdmin, sin Codex:
 - se registró manualmente la migración `2026_09_04_000100_add_unique_person_period_to_payroll_records` en `migrations` con `batch=3`, sin tocar datos de negocio ni estructura;
 - verificación posterior devolvió la migración con `batch=3`.
 
-Estado BD: **ALINEADO/PASS** para esta migración. Producción de aplicación aún no fue desplegada al release pendiente. Próximo paso: preparar y ejecutar deploy incremental del código cuando Miguel lo autorice explícitamente.
+Estado BD: **ALINEADO/PASS** para esta migración.
+
+## 12. Deploy incremental producción — 2026-09-05
+
+Miguel autorizó explícitamente el deploy y reportó subida manual completada en cPanel sobre `/home/tdatcons/apps/flujo-caja-staging`.
+
+Código funcional desplegado corresponde al release validado hasta `f18c368065bf134412e12d3ae87d17bb058772a2`; los commits posteriores en `main` hasta este checkpoint son documentales de `docs/HANDOFF.md`.
+
+Archivos de aplicación subidos/reemplazados:
+- `app/Services/FinancialDocumentGuard.php`
+- `app/Services/OperationalDependencyService.php`
+- `app/Services/TimeEntryPeriodService.php`
+- `app/Services/PayrollBatchService.php`
+- `app/Services/PayrollService.php`
+- `app/Services/CashMovementService.php`
+- `app/Http/Requests/CrudResourceRequest.php`
+- `app/Http/Controllers/OperationalCrudController.php`
+- `config/operational.php`
+- `resources/views/operational/partials/field-input.blade.php`
+- `resources/views/operational/form.blade.php`
+- `resources/views/operational/show.blade.php`
+- `routes/web.php`
+- `database/migrations/2026_09_04_000100_add_unique_person_period_to_payroll_records.php`
+
+No se tocó `.env`, `storage/`, `vendor/`, `public/` ni se ejecutó Artisan/SQL adicional. La migración se subió solo como archivo porque BD ya estaba alineada y registrada con `batch=3`.
+
+Estado deploy: **ARCHIVOS SUBIDOS / SMOKE PRODUCTIVO PENDIENTE**.
+Próximo paso: smoke mínimo manual (`/up`, login, dashboard, pantalla de Movimientos de caja y detalle/confirmación de Remuneraciones) sin crear datos innecesarios.
