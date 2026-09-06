@@ -30,7 +30,10 @@
         $renderedFieldInput = '<textarea id="'.e($field).'" name="'.e($field).'" class="form-control'.e($fieldErrorClass).'" rows="3">'.e($value).'</textarea>';
     } elseif ($type === 'money') {
         $inputValue = $rawNumericValue($value);
-        $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="number" step="0.01" min="0" inputmode="decimal" class="form-control'.e($fieldErrorClass).'" value="'.e($inputValue ?? '').'">';
+        $displayInputValue = $inputValue !== null && is_numeric($inputValue)
+            ? \App\Support\UiFormatter::formatNumber($inputValue)
+            : ($value !== null ? (string) $value : '');
+        $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-money-input="true" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'">';
     } elseif ($type === 'select') {
         $optionsHtml = '<option value="">Seleccione</option>';
         foreach (($options[$field] ?? ($definition['options'] ?? [])) as $key => $option) {
