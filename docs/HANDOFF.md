@@ -232,10 +232,14 @@ Próximo paso: QA de seguridad/integridad de endpoints financieros.
 
 ## 11. Pre-check BD productiva — Payroll unique index (2026-09-05)
 
-Validación manual en phpMyAdmin, sin Codex y sin cambios de datos:
+Validación manual en phpMyAdmin, sin Codex:
 - consulta de duplicados por `company_id + person_id + DATE(period_date)` devolvió **0 filas**;
 - `SHOW INDEX` confirmó que producción ya tiene `payroll_records_company_person_period_unique` con `Non_unique=0` sobre `company_id, person_id, period_date`;
 - el índice legado `payroll_records_company_person_period_idx` no apareció en el resultado;
-- por lo tanto, **NO ejecutar los `ALTER TABLE` de la migración**: el esquema productivo ya coincide con el estado final requerido por `2026_09_04_000100_add_unique_person_period_to_payroll_records.php`.
+- por lo tanto, **NO ejecutar los `ALTER TABLE` de la migración**: el esquema productivo ya coincide con el estado final requerido por `2026_09_04_000100_add_unique_person_period_to_payroll_records.php`;
+- la consulta inicial a `migrations` devolvió 0 filas para esa migración;
+- `MAX(batch)` era 2;
+- se registró manualmente la migración `2026_09_04_000100_add_unique_person_period_to_payroll_records` en `migrations` con `batch=3`, sin tocar datos de negocio ni estructura;
+- verificación posterior devolvió la migración con `batch=3`.
 
-Estado pendiente: confirmar únicamente si la migración está registrada en la tabla `migrations`; no hacer escrituras de BD hasta resolver ese punto. Producción de aplicación aún no fue desplegada a `f18c368065bf134412e12d3ae87d17bb058772a2`.
+Estado BD: **ALINEADO/PASS** para esta migración. Producción de aplicación aún no fue desplegada al release pendiente. Próximo paso: preparar y ejecutar deploy incremental del código cuando Miguel lo autorice explícitamente.
