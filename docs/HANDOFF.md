@@ -54,7 +54,7 @@ Estado del ajuste: **CERRADO / PASS**.
 
 Caso QA observado:
 - proyecto `Alerta Matrículas`, tipo de contrato `Proyecto cerrado`;
-- venta neta contractual: `UF 180` (aprox. CLP 7,36 MM según UF de referencia mostrada por la aplicación);
+- venta neta contractual: `UF 180`;
 - persona/asignación con tarifa de costeo cercana a `UF 0,77 / HH`;
 - 9,75 h aprobadas del período;
 - factura generada `ING-000006` con neto aproximado `CLP 306.688`.
@@ -63,21 +63,60 @@ Causa raíz confirmada por revisión de código:
 - `SalesPrefacturationService::calculate()` construye el neto sumando líneas de horas aprobadas (`subtotal_clp`) y no usa `projects.sale_net` como base contractual.
 - `SalesPrefacturationService::lineForEntry()` obtiene la tarifa mediante `HourlyRateService::resolveForEntry()`.
 - `HourlyRateService::resolveForTimeEntry()` prioriza `project_assignments.hourly_value` cuando es > 0; solo si no existe usa `projects.contracted_hourly_rate`.
-- Ese `project_assignments.hourly_value` es presentado en UI como tarifa/valor HH de costeo, por lo que hoy puede terminar reutilizado como tarifa de facturación.
-- Para UF, cada línea de hora se convierte usando la UF de la fecha de la hora, lo que explica que el neto resultante sea del orden de `9,75 h x 0,77 UF/h x UF histórica ≈ CLP 306 mil`.
-
-Conclusión funcional: para un contrato `Proyecto cerrado`, la facturación no debería derivarse del costo HH de la persona/asignación. Debe usar la venta contractual del proyecto (`sale_net`) y/o un esquema explícito de hitos/porcentajes/saldo por facturar. En contratos por hora, la tarifa de venta debe estar separada de la tarifa de costeo.
+- Ese `project_assignments.hourly_value` es tarifa de costeo y hoy puede terminar reutilizado como tarifa de facturación.
 
 Estado: **BUG DE LÓGICA DE NEGOCIO CONFIRMADO / NO CERRAR PROYECTO TODAVÍA**.
 
-Próximo bloque recomendado, sin suite completa:
-1. separar base de facturación por tipo de contrato;
-2. `Proyecto cerrado`: facturar contra `sale_net`, controlando saldo ya facturado e hitos/parcialidades;
-3. contratos por hora: usar tarifa comercial del proyecto/asignación, nunca tarifa de costeo;
-4. prueba dirigida con el caso `UF 180` y una prueba de facturación por HH;
-5. desplegar solo después de PASS dirigido.
+## Diseño acordado — hitos de facturación para Proyecto cerrado
 
-No limpiar todavía los datos QA de este caso: son útiles para reproducir y validar el fix.
+Objetivo: separar definitivamente ingreso contractual de costo de personal y soportar uno o más hitos de facturación con porcentaje del total del proyecto.
+
+Reglas funcionales acordadas:
+- `projects.sale_net` + moneda de venta son la fuente contractual para `Proyecto cerrado`.
+- Cada proyecto cerrado puede tener 1..N hitos con: nombre/descripción, fecha prevista, porcentaje y orden.
+- El monto del hito NO se ingresa manualmente: se calcula `sale_net * porcentaje / 100` en la moneda contractual.
+- La suma de hitos puede quedar temporalmente bajo 100% y se mostrará `% pendiente por programar`; nunca puede superar 100%.
+- Un hito facturado no se puede editar ni borrar.
+- Si existe facturación activa de hitos, se bloquea el cambio retroactivo de `sale_net` y moneda del proyecto.
+- La factura de un hito usa el monto contractual del hito y lo convierte a CLP a la fecha de emisión con los servicios de conversión/parámetros existentes. La factura conserva snapshot de porcentaje, monto contractual, moneda, tasa/UF y fecha de conversión.
+- La facturación por hito NO consume ni vincula horas como base de ingreso; las horas permanecen como trazabilidad/costo.
+- Si una factura de hito es anulada, debe poder reemitirse el hito; la aplicación debe impedir más de una factura activa no anulada por hito.
+
+Warning de cobertura/caja:
+- No bloquear la facturación si el hito no cubre los costos devengados.
+- El warning debe comparar de forma **acumulada** la facturación contractual acumulada hasta el hito vs. el costo referencial acumulado de HH aprobadas del proyecto hasta la fecha del hito/emisión. Esto evita falsos warnings en hitos posteriores.
+- Costo referencial de HH aprobadas: usar la ruta de costeo (asignación/persona), nunca la tarifa comercial del proyecto. Debe poder calcularse aun si Payroll aún no está confirmado/calculable.
+- Mensaje esperado si cobertura negativa: indicar facturación acumulada, costo HH aprobado acumulado y brecha, aclarando que puede implicar financiar/adelantar pago al consultor hasta hitos futuros y que no bloquea el proceso.
+- Este warning es de timing/cobertura, no altera el margen contractual final.
+
+Separación con remuneraciones:
+- Los hitos de facturación al cliente NO deben crear/modificar automáticamente el `Monto pactado remuneración por proyecto/hito` del consultor.
+- Facturación del cliente y pago del consultor son conceptos distintos. El warning solo informa cobertura; no acopla ambos flujos.
+
+Contratos por hora:
+- Mantener flujo por HH separado.
+- La tarifa comercial por HH debe usar `projects.contracted_hourly_rate` + moneda de venta; nunca `project_assignments.hourly_value`/tarifa de costeo.
+- El modelo `Project` ya posee `contracted_hourly_rate`; falta exponer/usar correctamente este valor en el flujo comercial.
+
+Diseño técnico mínimo recomendado:
+- nueva tabla `project_billing_milestones` (`company_id`, `project_id`, `sequence`, `name`, `planned_invoice_date`, `percentage`, `notes`, timestamps);
+- nuevo FK nullable `project_billing_milestone_id` en `sales_documents` para trazabilidad histórica y reemisión tras anulación;
+- monto del hito derivado, no persistido, para evitar divergencia mientras no esté facturado;
+- snapshot contractual en `sales_documents.billing_snapshot` al emitir;
+- servicio dedicado pequeño para plan/hitos + rama `PROJECT_MILESTONE` en `SalesPrefacturationService`;
+- UI aislada en detalle de Proyecto (`Plan de facturación`) para no complejizar el CRUD genérico.
+
+Pruebas dirigidas suficientes, sin suite completa:
+1. UF 180 con hitos 30/40/30 => UF 54/72/54 y 100% total;
+2. impedir suma >100%;
+3. factura de hito 30% usa UF 54 convertido a CLP a fecha de emisión, no `9,75h x 0,77UF`;
+4. hito no consume horas;
+5. warning acumulado aparece si ingreso acumulado < costo HH aprobado acumulado y NO bloquea;
+6. no warning cuando cobertura acumulada >= costo;
+7. hito facturado y venta/moneda contractual quedan protegidos;
+8. flujo por HH usa `contracted_hourly_rate`, no tarifa de costeo.
+
+Mantener los datos QA actuales para reproducir este caso hasta validar el fix. Implementar todo este bloque en una sola iteración antes de deploy.
 
 ## Política de pruebas / continuidad
 
