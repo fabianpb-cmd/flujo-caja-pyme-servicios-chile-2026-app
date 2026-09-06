@@ -34,6 +34,12 @@
             ? \App\Support\UiFormatter::formatNumber($inputValue)
             : ($value !== null ? (string) $value : '');
         $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-money-input="true" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'">';
+    } elseif (($definition['presentation'] ?? null) === 'percent') {
+        $inputValue = $rawNumericValue($value);
+        $displayInputValue = $inputValue !== null && is_numeric($inputValue)
+            ? \App\Support\UiFormatter::formatNumber(((float) $inputValue) * 100)
+            : ($value !== null ? (string) $value : '');
+        $renderedFieldInput = '<div class="input-group"><input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-percent-input="true" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'"><span class="input-group-text">%</span></div>';
     } elseif ($type === 'select') {
         $optionsHtml = '<option value="">Seleccione</option>';
         foreach (($options[$field] ?? ($definition['options'] ?? [])) as $key => $option) {
@@ -124,11 +130,12 @@
         <script nonce="{{ $cspNonce ?? '' }}">
             (() => {
                 const moneyInputs = Array.from(document.querySelectorAll('[data-money-input="true"]'));
-                if (moneyInputs.length === 0) {
+                const percentInputs = Array.from(document.querySelectorAll('[data-percent-input="true"]'));
+                if (moneyInputs.length === 0 && percentInputs.length === 0) {
                     return;
                 }
 
-                const normalizeMoney = (value) => {
+                const normalizeLocalizedNumber = (value) => {
                     let normalized = String(value ?? '').trim().replace(/[^0-9,.-]/g, '');
                     if (normalized === '') {
                         return '';
@@ -153,8 +160,8 @@
                     return (negative ? '-' : '') + normalized;
                 };
 
-                const formatMoney = (value) => {
-                    const normalized = normalizeMoney(value);
+                const formatLocalizedNumber = (value) => {
+                    const normalized = normalizeLocalizedNumber(value);
                     if (normalized === '' || Number.isNaN(Number(normalized))) {
                         return value;
                     }
@@ -171,17 +178,32 @@
 
                 moneyInputs.forEach((input) => {
                     input.addEventListener('focus', () => {
-                        input.value = normalizeMoney(input.value);
+                        input.value = normalizeLocalizedNumber(input.value);
                     });
                     input.addEventListener('blur', () => {
-                        input.value = formatMoney(input.value);
+                        input.value = formatLocalizedNumber(input.value);
+                    });
+                });
+
+                percentInputs.forEach((input) => {
+                    input.addEventListener('focus', () => {
+                        input.value = normalizeLocalizedNumber(input.value);
+                    });
+                    input.addEventListener('blur', () => {
+                        input.value = formatLocalizedNumber(input.value);
                     });
                 });
 
                 document.querySelectorAll('form').forEach((form) => {
                     form.addEventListener('submit', () => {
                         form.querySelectorAll('[data-money-input="true"]').forEach((input) => {
-                            input.value = normalizeMoney(input.value);
+                            input.value = normalizeLocalizedNumber(input.value);
+                        });
+                        form.querySelectorAll('[data-percent-input="true"]').forEach((input) => {
+                            const normalized = normalizeLocalizedNumber(input.value);
+                            input.value = normalized === '' || Number.isNaN(Number(normalized))
+                                ? normalized
+                                : String(Number(normalized) / 100);
                         });
                     }, { capture: true });
                 });
