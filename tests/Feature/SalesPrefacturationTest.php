@@ -62,7 +62,7 @@ class SalesPrefacturationTest extends TestCase
             'unit' => '%',
             'active' => true,
         ]);
-        UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-08-09', 'value' => 40844.79, 'active' => true]);
+        UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-08-31', 'value' => 40844.79, 'active' => true]);
     }
 
     public function test_only_approved_billable_hours_are_used(): void
@@ -71,7 +71,7 @@ class SalesPrefacturationTest extends TestCase
         $this->entry($assignment, 10, $this->approvedId);
         $this->entry($assignment, 8, $this->pendingId);
 
-        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31');
 
         $this->assertSame(10.0, $calculation['hours_total']);
         $this->assertSame(350000.0, $calculation['net_amount']);
@@ -85,7 +85,7 @@ class SalesPrefacturationTest extends TestCase
         $assignment = $this->assignment(['hourly_value' => 99, 'hourly_rate_unit_type' => 'UF']);
         $this->entry($assignment, 120, $this->approvedId);
 
-        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31');
 
         $this->assertSame(180.0, $calculation['lines'][0]['subtotal_original']);
         $this->assertSame(7352062.0, $calculation['net_amount']);
@@ -97,15 +97,15 @@ class SalesPrefacturationTest extends TestCase
         $this->project->update(['sales_currency_id' => $uf->id, 'contracted_hourly_rate' => 1.2]);
         UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-08-01', 'value' => 30000, 'active' => true]);
         UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-08-02', 'value' => 35000, 'active' => true]);
-        UfValue::query()->where('company_id', $this->company->id)->whereDate('value_date', '2026-08-09')->update(['value' => 40000, 'active' => true]);
+        UfValue::query()->where('company_id', $this->company->id)->whereDate('value_date', '2026-08-31')->update(['value' => 40000, 'active' => true]);
         $assignment = $this->assignment(['hourly_value' => 99, 'hourly_rate_unit_type' => 'UF']);
         $this->entry($assignment, 2, $this->approvedId, '2026-08-01');
         $this->entry($assignment, 3, $this->approvedId, '2026-08-02');
 
-        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31');
 
         $this->assertSame(240000.0, $calculation['net_before_adjustment']);
-        $this->assertSame(2, collect($calculation['lines'])->where('conversion_date', '2026-08-09')->count());
+        $this->assertSame(2, collect($calculation['lines'])->where('conversion_date', '2026-08-31')->count());
         $this->assertSame(40000.0, $calculation['lines'][0]['conversion_rate']);
         $this->assertSame(40000.0, $calculation['lines'][1]['conversion_rate']);
     }
@@ -115,7 +115,7 @@ class SalesPrefacturationTest extends TestCase
         $assignment = $this->assignment(['hourly_value' => 35000, 'hourly_rate_unit_type' => 'CURRENCY']);
         $this->entry($assignment, 10, $this->approvedId);
 
-        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09', false);
+        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31', false);
 
         $this->assertSame(350000.0, $calculation['net_amount']);
         $this->assertSame(0.0, $calculation['vat_rate']);
@@ -125,13 +125,13 @@ class SalesPrefacturationTest extends TestCase
     public function test_foreign_currency_rate_uses_historical_exchange_rate(): void
     {
         $usd = $this->currency('USD', 'Dólar de prueba');
-        ExchangeRate::query()->create(['company_id' => $this->company->id, 'currency_id' => $usd->id, 'rate_date' => '2026-08-09', 'value_clp' => 924.78, 'active' => true]);
+        ExchangeRate::query()->create(['company_id' => $this->company->id, 'currency_id' => $usd->id, 'rate_date' => '2026-08-31', 'value_clp' => 924.78, 'active' => true]);
         $assignment = $this->assignment(['hourly_value' => 45.5, 'hourly_rate_unit_type' => 'CURRENCY', 'hourly_rate_currency_id' => $usd->id]);
         $this->project->update(['sales_currency_id' => $usd->id]);
         $this->project->update(['contracted_hourly_rate' => 45.5]);
         $this->entry($assignment, 10, $this->approvedId);
 
-        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31');
 
         $this->assertSame(420775.0, $calculation['net_amount']);
         $this->assertSame('USD', $calculation['commercial_currency']['code']);
@@ -149,7 +149,7 @@ class SalesPrefacturationTest extends TestCase
         $this->expectException(DomainException::class);
         $this->expectExceptionMessage('Falta UF oficial');
 
-        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31');
     }
 
     public function test_generated_draft_links_hours_and_prevents_duplicate_billing(): void
@@ -160,7 +160,7 @@ class SalesPrefacturationTest extends TestCase
         $document = app(SalesPrefacturationService::class)->generateDraft($this->company->id, [
             'project_id' => $this->project->id,
             'period' => '2026-08-01',
-            'issue_date' => '2026-08-09',
+            'issue_date' => '2026-08-31',
             'taxable' => true,
         ]);
 
@@ -171,7 +171,7 @@ class SalesPrefacturationTest extends TestCase
         app(SalesPrefacturationService::class)->generateDraft($this->company->id, [
             'project_id' => $this->project->id,
             'period' => '2026-08-01',
-            'issue_date' => '2026-08-09',
+            'issue_date' => '2026-08-31',
             'taxable' => true,
         ]);
     }
@@ -184,7 +184,7 @@ class SalesPrefacturationTest extends TestCase
         $document = app(SalesPrefacturationService::class)->generateDraft($this->company->id, [
             'project_id' => $this->project->id,
             'period' => '2026-08-01',
-            'issue_date' => '2026-08-09',
+            'issue_date' => '2026-08-31',
             'taxable' => true,
         ]);
         $assignment->update(['hourly_value' => 70000]);
@@ -202,7 +202,7 @@ class SalesPrefacturationTest extends TestCase
         $response = $this->actingAs($this->admin)->post(route('sales-prefacturation.generate-draft'), [
             'project_id' => $this->project->id,
             'period' => '08/2026',
-            'issue_date' => '2026-08-09',
+            'issue_date' => '2026-08-31',
             'taxable' => 1,
             'net_amount' => 1,
             'gross_amount' => 2,
@@ -222,7 +222,7 @@ class SalesPrefacturationTest extends TestCase
 
         $this->expectException(DomainException::class);
         $this->expectExceptionMessage('tarifa comercial HH del proyecto');
-        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31');
     }
 
     public function test_closed_project_cannot_use_hh_prefacturation(): void
@@ -234,7 +234,7 @@ class SalesPrefacturationTest extends TestCase
 
         $this->expectException(DomainException::class);
         $this->expectExceptionMessage('Plan de facturación / hitos');
-        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-31');
     }
 
     private function assignment(array $overrides = []): ProjectAssignment
@@ -252,7 +252,7 @@ class SalesPrefacturationTest extends TestCase
         ], $overrides));
     }
 
-    private function entry(ProjectAssignment $assignment, float $hours, int $approvalStatusId, string $date = '2026-08-09'): TimeEntry
+    private function entry(ProjectAssignment $assignment, float $hours, int $approvalStatusId, string $date = '2026-08-30'): TimeEntry
     {
         return TimeEntry::query()->create([
             'company_id' => $this->company->id,

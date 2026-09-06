@@ -61,12 +61,21 @@ class BillingStrategyService
         }
         $total = 0.0;
         $sequences = [];
+        $previousPlannedDate = null;
         foreach ($milestones as $milestone) {
             $sequence = (int) ($milestone['sequence'] ?? 0);
             $percentage = (float) ($milestone['percentage'] ?? 0);
             if ($sequence <= 0 || in_array($sequence, $sequences, true) || trim((string) ($milestone['name'] ?? '')) === '' || $percentage <= 0) {
                 throw new DomainException('Cada hito requiere orden único, nombre y porcentaje mayor que cero.');
             }
+            $plannedDate = $milestone['planned_invoice_date'] ?? null;
+            if (Project::isVigentStatusCode($project->projectStatus?->code) && blank($plannedDate)) {
+                throw new DomainException('Cada hito de un proyecto vigente requiere fecha prevista de facturación.');
+            }
+            if ($plannedDate && $previousPlannedDate && $plannedDate < $previousPlannedDate) {
+                throw new DomainException('Las fechas previstas deben respetar el orden cronológico de los hitos.');
+            }
+            $previousPlannedDate = $plannedDate ?: $previousPlannedDate;
             $sequences[] = $sequence;
             $total += $percentage;
         }

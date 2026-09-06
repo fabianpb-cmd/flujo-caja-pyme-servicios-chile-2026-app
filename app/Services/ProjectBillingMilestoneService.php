@@ -86,12 +86,16 @@ class ProjectBillingMilestoneService
             $project = $locked->project;
             $this->assertClosedContract($project);
             if ($this->isInvoiced($locked)) throw new DomainException('Este hito ya posee una factura activa. Anule esa factura antes de reemitirlo.');
-            $issue = Carbon::parse($issueDate); $contractual = $this->contractualAmount($project, $locked);
+            $issue = Carbon::parse($issueDate)->startOfDay();
+            if ($issue->gt(Carbon::today())) throw new DomainException('La fecha de emisión no puede ser futura.');
+            $contractual = $this->contractualAmount($project, $locked);
             $conversion = $this->toClp($project, $contractual, $issue); $amounts = $this->receivables->amountsWithVat($project->company_id, $conversion['converted_amount'], $issue);
             $coverage = $this->coverage($locked, $issue);
+            $dueDate = $this->dueDate($project, $issue);
             return MassAssignment::create(SalesDocument::class, [
                 'company_id' => $project->company_id, 'client_id' => $project->client_id, 'project_id' => $project->id, 'project_billing_milestone_id' => $locked->id,
                 'document_type' => 'Factura hito', 'issue_date' => $issue->toDateString(), 'net_amount' => $amounts['net_amount'], 'vat_rate' => $taxable ? $amounts['vat_rate'] : 0,
+                'due_date' => $dueDate?->toDateString(), 'projected_collection_date' => $dueDate?->toDateString(),
                 'vat_amount' => $taxable ? $amounts['vat_amount'] : 0, 'gross_amount' => $taxable ? $amounts['gross_amount'] : $amounts['net_amount'], 'collected_amount' => 0,
                 'status' => 'Borrador', 'is_voided' => false, 'billing_source' => 'PROJECT_MILESTONE', 'calculation_status' => 'OK',
                 'billing_snapshot' => ['source' => 'PROJECT_MILESTONE', 'milestone_id' => $locked->id, 'sequence' => $locked->sequence, 'name' => $locked->name, 'percentage' => (float) $locked->percentage, 'contractual_amount' => $contractual, 'contractual_currency' => UiFormatter::currencyCode($project->salesCurrency ?: 'CLP'), 'conversion' => $conversion, 'issue_date' => $issue->toDateString(), 'coverage' => $coverage],
@@ -120,6 +124,11 @@ class ProjectBillingMilestoneService
 
     public function contractualAmount(Project $project, ProjectBillingMilestone $milestone): float { return UiFormatter::roundAmount((float) $project->sale_net * (float) $milestone->percentage / 100, $project->salesCurrency ?: 'CLP'); }
     public function isInvoiced(ProjectBillingMilestone $milestone): bool { return $milestone->salesDocuments()->where('is_voided', false)->where('status', '!=', 'Anulado')->exists(); }
+    private function dueDate(Project $project, Carbon $issue): ?Carbon
+    {
+        $term = $project->paymentTerm ?: $project->client?->paymentTerm;
+        return $term && $term->days !== null ? $issue->copy()->addDays((int) $term->days) : null;
+    }
     public function isClosedContract(Project $project): bool { return strcasecmp(trim((string) ($project->contractType?->name ?: '')), 'Proyecto cerrado') === 0; }
     private function assertClosedContract(Project $project): void { if (! $this->isClosedContract($project)) throw new DomainException('El plan de hitos solo aplica a contratos Proyecto cerrado.'); }
     private function toClp(Project $project, float $amount, Carbon $date): array { $currency = $project->salesCurrency ?: 'CLP'; $code = UiFormatter::currencyCode($currency); if ($code === 'CLP') return ['converted_amount' => round($amount, 0), 'exchange_rate' => 1, 'conversion_date' => $date->toDateString(), 'currency_code' => 'CLP']; $rate = $code === 'UF' ? $this->legalParameters->ufValue($project->company_id, $date) : $this->legalParameters->exchangeRate($project->company_id, $currency->id, $date); return $this->conversions->convert($amount, $currency, 'CLP', $rate, $date); }

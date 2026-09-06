@@ -161,3 +161,29 @@ Los checkpoints documentales se realizan directamente en `main`; antes de volver
 
 Prompt de continuidad entre cuentas:
 `Lee docs/HANDOFF.md del repositorio y continúa desde el estado actual. No repitas tareas ya completadas.`
+
+## Corrección de semántica de fechas — validación local 2026-09-06
+
+Patch local de fechas de facturación completado y validado.
+
+Reglas implementadas:
+- planned_invoice_date permanece como fecha planificada/forecast y no se reutiliza como fecha real de emisión.
+- En Proyecto cerrado vigente, los hitos requieren fecha prevista y mantienen orden cronológico no decreciente por secuencia.
+- issue_date futura es rechazada.
+- Un hito puede emitirse antes o después de su fecha prevista; la conversión UF/FX usa exclusivamente issue_date.
+- due_date se calcula desde la condición de pago del Proyecto y, si falta, desde la del Cliente.
+- projected_collection_date se inicializa con due_date.
+- Sin condición de pago no se inventan días; vencimiento/proyección quedan nulos.
+- En Por Hora, primero se valida la estrategia: CLOSED_PROJECT es rechazado antes de aplicar reglas mensuales.
+- Para Por Hora mensual, issue_date debe ser al menos el cierre del período y no se permiten HH posteriores a la fecha de emisión.
+- Conversión de todas las líneas HH continúa usando issue_date.
+
+Validación focalizada:
+- BillingDateRulesTest: 13 tests / 22 assertions — PASS.
+- ProjectBillingMilestoneServiceTest: 7 tests / 22 assertions — PASS.
+- SalesPrefacturationTest: 11 tests / 32 assertions — PASS.
+- git diff --check: PASS.
+- Sin migraciones nuevas.
+- Producción todavía NO contiene este patch.
+
+Estado: **PATCH DE FECHAS VALIDADO LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.

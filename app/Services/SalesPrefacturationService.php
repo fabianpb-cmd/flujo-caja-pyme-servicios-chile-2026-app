@@ -43,12 +43,20 @@ class SalesPrefacturationService
         if ($strategy === BillingStrategyService::CLOSED_PROJECT) {
             throw new DomainException('Los proyectos Proyecto cerrado deben facturarse mediante su Plan de facturación / hitos.');
         }
-
+        if ($issue->startOfDay()->gt(Carbon::today())) {
+            throw new DomainException('La fecha de emisión no puede ser futura.');
+        }
+        if ($issue->startOfDay()->lt($periodEnd->startOfDay())) {
+            throw new DomainException('La fecha de emisión mensual no puede ser anterior al término del período.');
+        }
         $entries = $this->billableEntries($companyId, $projectId, $period, $periodEnd);
         $commercialCurrency = $project->salesCurrency ?: 'CLP';
 
         if ($entries->isEmpty()) {
             throw new DomainException('No existen HH aprobadas facturables para el proyecto y período seleccionados.');
+        }
+        if ($entries->contains(fn (TimeEntry $entry): bool => $entry->entry_date && $entry->entry_date->startOfDay()->gt($issue->startOfDay()))) {
+            throw new DomainException('No se pueden facturar HH posteriores a la fecha de emisión.');
         }
 
         $lines = $entries->map(fn (TimeEntry $entry): array => $this->lineForEntry($entry, $commercialCurrency, $issue));
@@ -168,6 +176,8 @@ class SalesPrefacturationService
                 'project_id' => $calculation['project']->id,
                 'document_type' => 'Prefacturación HH',
                 'issue_date' => $calculation['issue_date'],
+                'due_date' => $this->dueDate($calculation['project'], Carbon::parse($calculation['issue_date']))?->toDateString(),
+                'projected_collection_date' => $this->dueDate($calculation['project'], Carbon::parse($calculation['issue_date']))?->toDateString(),
                 'net_amount' => $calculation['net_amount'],
                 'vat_rate' => $calculation['vat_rate'],
                 'vat_amount' => $calculation['vat_amount'],
@@ -378,6 +388,12 @@ class SalesPrefacturationService
             'commercial_gross_amount' => $calculation['commercial_gross_amount'],
             'lines' => $calculation['lines'],
         ];
+    }
+
+    private function dueDate(Project $project, Carbon $issue): ?Carbon
+    {
+        $term = $project->paymentTerm ?: $project->client?->paymentTerm;
+        return $term && $term->days !== null ? $issue->copy()->addDays((int) $term->days) : null;
     }
 
     private function breakdown(
