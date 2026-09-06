@@ -78,21 +78,26 @@ Verificación manual post-limpieza en phpMyAdmin: **PASS**. Tablas operacionales
 
 Estado: **PRODUCCIÓN LIMPIA / PARÁMETROS Y CONFIGURACIÓN BASE PRESERVADOS / PASS**.
 
-## Ajuste UX posterior — formato de montos editables (2026-09-05)
+## Ajuste UX posterior — formato de montos y porcentajes editables (2026-09-05)
 
-Hallazgo visual en producción: campos monetarios editables del CRUD genérico se mostraban con valor numérico crudo/local del navegador, por ejemplo `306688,00` en `Neto`, mientras campos calculados mostraban `$ 58.271` / `$ 364.959`.
+Hallazgos visuales en producción:
+- campos monetarios editables del CRUD genérico se mostraban sin separador de miles, por ejemplo `306688,00` en `Neto`, mientras los calculados mostraban `$ 58.271` / `$ 364.959`;
+- campos porcentuales editables se mostraban como fracción cruda, por ejemplo `1.000000` en `Probabilidad`, pese a que funcionalmente `1` equivale a `100 %`.
 
-Corrección implementada en `main`, todavía **NO desplegada a producción**:
-- `resources/views/operational/partials/field-input.blade.php` ahora renderiza los campos `type => money` editables como texto numérico localizado `es-CL`, con separador de miles visible (ej. `306.688`).
-- Al enfocar se normaliza a una forma cómoda para edición; al salir se vuelve a aplicar formato chileno.
-- Antes de enviar cualquier formulario que contenga estos campos se remueven separadores visuales y se envía el número normalizado, evitando cambiar persistencia, cálculos o esquema BD.
-- Alcance de este ajuste: formularios operacionales genéricos que usan el partial común (incluye el caso observado de Facturas/Ingresos `Neto`).
-- No se modificaron cálculos financieros, servicios ni BD.
+Corrección implementada en `main`, aún pendiente de deploy:
+- `resources/views/operational/partials/field-input.blade.php` renderiza `type => money` editables como texto localizado `es-CL`, con separador de miles visible (ej. `306.688`).
+- Los campos editables con `presentation => percent` muestran el porcentaje humano (ej. valor persistido `1` se muestra `100 %`).
+- Al enviar el formulario, dinero se normaliza a número crudo y porcentaje vuelve a fracción (`100` visible -> `1` enviado), preservando reglas actuales, servicios, persistencia y BD.
+- No se modificaron cálculos financieros, servicios ni esquema BD.
 
-Commits de implementación: `ab378a1326dc6f4b6cffb771b8068ef38ffb1d9a` y `dd8aee22550bd8d157be784a28056a7b233c06f8`.
-Validación realizada: revisión estática del partial y flujo de normalización. No se ejecutó suite completa para ahorrar créditos; producción permanece en la release anterior hasta autorización de deploy.
+Commits principales del ajuste:
+- money inicial: `ab378a1326dc6f4b6cffb771b8068ef38ffb1d9a`
+- normalización money: `dd8aee22550bd8d157be784a28056a7b233c06f8`
+- money + percent definitivo: `186a21c3782bb1387b386b5897efaba5de1aca55`
 
-Próximo paso para este ajuste: revisión dirigida del diff y, si se aprueba, deploy de **solo** `resources/views/operational/partials/field-input.blade.php` seguido de smoke visual en Factura/Ingreso sin guardar datos innecesarios.
+Validación: revisión estática dirigida del componente común y de la definición de `sales-documents` (`payment_probability` rango 0..1 y `net_amount` money). No suite completa para ahorrar créditos.
+
+Próximo paso: desplegar SOLO la versión actual de `resources/views/operational/partials/field-input.blade.php` y hacer smoke visual en Factura/Ingreso: `Neto` debe verse `306.688`; `Probabilidad` debe verse `100 %`. No guardar datos solo para probar.
 
 ## Operación mínima
 
