@@ -268,5 +268,11 @@ Archivos de aplicación subidos/reemplazados:
 
 No se tocó `.env`, `storage/`, `vendor/`, `public/` ni se ejecutó Artisan/SQL adicional. La migración se subió solo como archivo porque BD ya estaba alineada y registrada con `batch=3`.
 
-Estado deploy: **ARCHIVOS SUBIDOS / SMOKE PRODUCTIVO PENDIENTE**.
-Próximo paso: smoke mínimo manual (`/up`, login, dashboard, pantalla de Movimientos de caja y detalle/confirmación de Remuneraciones) sin crear datos innecesarios.
+Smoke productivo manual posterior al deploy: **PASS**.
+- Movimientos de caja: selector dependiente visible; tipo `Otro` habilita referencia libre correctamente.
+- Estado de Movimientos de caja: solo `Borrador` y `Contabilizado`; `Anulado` no aparece.
+- Remuneraciones: listado y edición cargan correctamente; `REM-000016` mostró `Estado cálculo=OK`, `Estado pago=Borrador` y el botón `Confirmar` aparece en la vista de detalle, sin ejecutarlo durante el smoke.
+- No se crearon movimientos ni se confirmó remuneración solo para probar.
+
+Estado deploy: **PRODUCCIÓN ACTUALIZADA / SMOKE PASS**.
+No repetir este smoke salvo incidente, nueva release o evidencia nueva.
