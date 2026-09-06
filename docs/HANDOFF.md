@@ -27,7 +27,7 @@
 
 Se eliminaron los datos operacionales de prueba preservando empresa, usuario(s), migraciones, parámetros legales/económicos, catálogos, geografía, escenarios y configuración base. Verificación manual previa: tablas operacionales principales en `0` filas.
 
-## Ajuste UX money/percent — desplegado 2026-09-06
+## Ajuste UX money/percent — desplegado y validado 2026-09-06
 
 Hallazgo: inputs editables mostraban números crudos (`306688,00`, `1.000000`) y los montos editables no mostraban unidad monetaria.
 
@@ -42,9 +42,15 @@ Commits funcionales del ajuste:
 - `186a21c3782bb1387b386b5897efaba5de1aca55` — money + percent
 - `a085f2f1d187c2b15b79f6ce528cf045f0e8ef43` — prefijo/unidad monetaria
 
-Miguel confirmó deploy manual del partial actualizado y smoke visual **PASS**: el formato quedó corregido en producción.
+Validación productiva:
+- deploy manual del partial actualizado: PASS;
+- smoke visual: PASS;
+- prueba mínima de persistencia/submit sin modificar valores: PASS;
+- al reabrir, Neto/moneda, Probabilidad, IVA y Total conservaron valores/formato esperados.
 
-Pendiente único antes del cierre definitivo de este ajuste: una prueba mínima de persistencia/submit con un registro QA existente, seguida de limpieza de los datos QA creados para esta revisión. No repetir UAT ni suite completa.
+Estado del ajuste: **CERRADO / PASS**.
+
+Pendiente administrativo: limpiar los datos operacionales QA creados para esta última revisión y verificar nuevamente las tablas operacionales principales en `0`, preservando parámetros/configuración base.
 
 ## Política de pruebas / continuidad
 
