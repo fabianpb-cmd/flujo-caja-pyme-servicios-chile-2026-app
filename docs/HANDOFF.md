@@ -141,6 +141,25 @@ Mantener los datos QA actuales (`Alerta Matrículas` / Jaime Soriano / UF 180) h
 
 ## Política de pruebas / continuidad
 
+## Corrección de bloqueadores de prefacturación — 2026-09-06
+
+Implementada localmente y **NO DESPLEGADA / PRODUCCIÓN NO TOCADA**:
+- HH comercial usa exclusivamente `projects.contracted_hourly_rate` + `projects.salesCurrency`; desaparecieron los fallbacks de asignación/TimeEntry.
+- `Proyecto cerrado` queda excluido de prefacturación HH y debe usar Plan de facturación / hitos.
+- Cobertura acumula facturas de hitos anteriores activas por su neto histórico, más el hito actual convertido a su fecha de emisión; hitos no facturados no cuentan.
+- Emisión de hitos bloquea el registro con `lockForUpdate()` y revalida factura activa dentro de la transacción.
+- La vista muestra fecha de emisión editable, prellenada con fecha prevista o fecha actual.
+- Secuencias duplicadas devuelven error funcional antes del índice SQL.
+- Plan de facturación solo se muestra para contratos `Proyecto cerrado`.
+
+Tests focalizados ejecutados:
+- `php artisan test tests/Feature/ProjectBillingMilestoneServiceTest.php` — PASS.
+- `php artisan test tests/Feature/SalesPrefacturationTest.php` — PASS.
+
+Archivos relevantes: `app/Services/SalesPrefacturationService.php`, `app/Services/ProjectBillingMilestoneService.php`, `app/Http/Controllers/OperationalCrudController.php`, `resources/views/operational/show.blade.php`, `tests/Feature/SalesPrefacturationTest.php`, `tests/Feature/ProjectBillingMilestoneServiceTest.php`.
+
+Pasos mínimos posteriores de deploy: aplicar la migración de hitos antes del código, desplegar los archivos relevantes, limpiar cache de configuración/rutas/vistas y ejecutar smoke de hitos/HH. No se ejecutó deploy.
+
 No repetir UAT, suite completa, QA de seguridad ni smoke ya cerrados. Reabrir solo ante incidente real, nueva release, cambio de esquema/código o evidencia nueva.
 
 Ante incidente: revisar primero `storage/logs`; comparar código contra la release productiva correspondiente.

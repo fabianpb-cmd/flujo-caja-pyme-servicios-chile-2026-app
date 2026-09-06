@@ -38,6 +38,10 @@ class SalesPrefacturationService
         $period = Carbon::parse($periodDate)->startOfMonth();
         $periodEnd = $period->copy()->endOfMonth();
         $issue = Carbon::parse($issueDate);
+        if ($this->isClosedContract($project)) {
+            throw new DomainException('Los proyectos Proyecto cerrado deben facturarse mediante su Plan de facturación / hitos.');
+        }
+
         $entries = $this->billableEntries($companyId, $projectId, $period, $periodEnd);
         $commercialCurrency = $project->salesCurrency ?: 'CLP';
 
@@ -219,18 +223,18 @@ class SalesPrefacturationService
     private function lineForEntry(TimeEntry $entry, mixed $commercialCurrency = 'CLP'): array
     {
         $assignment = $this->assignmentForEntry($entry);
-        $resolution = $this->hourlyRates->resolveForEntry($entry);
+        $project = $entry->project?->loadMissing('salesCurrency');
         $hours = (float) $entry->hours_approved;
         $entryDate = $entry->entry_date;
-        $rate = (float) ($resolution['amount'] ?? $assignment?->hourly_value ?? $entry->hourly_value ?? 0);
+        $rate = (float) ($project?->contracted_hourly_rate ?? 0);
 
         if ($rate <= 0) {
-            throw new DomainException("Falta tarifa HH para la hora {$entry->code}.");
+            throw new DomainException("Falta la tarifa comercial HH del proyecto para la hora {$entry->code}.");
         }
 
-        $unit = strtoupper((string) ($resolution['unit_type'] ?? ($assignment?->hourly_rate_unit_type ?: 'CURRENCY')));
-        $currency = $resolution['currency'] ?? $assignment?->hourlyRateCurrency;
-        $currencyCode = strtoupper((string) ($resolution['currency_code'] ?? ($unit === 'UF' ? 'UF' : ($currency instanceof Currency ? $currency->code : 'CLP'))));
+        $currency = $project?->salesCurrency;
+        $currencyCode = strtoupper((string) ($currency instanceof Currency ? $currency->code : 'CLP'));
+        $unit = $currencyCode === 'UF' ? 'UF' : 'CURRENCY';
         $subtotalOriginal = $hours * $rate;
         $conversionRate = 1.0;
         $rawClp = $subtotalOriginal;
@@ -267,6 +271,11 @@ class SalesPrefacturationService
             'commercial_currency_code' => UiFormatter::currencyCode($commercialCurrency),
             'subtotal_commercial' => (float) $commercial['converted_amount'],
         ];
+    }
+
+    private function isClosedContract(Project $project): bool
+    {
+        return strcasecmp(trim((string) ($project->contractType?->name ?? '')), 'Proyecto cerrado') === 0;
     }
 
     private function convertClpAmount(float $amount, mixed $currency, int $companyId, CarbonInterface|string $date): array

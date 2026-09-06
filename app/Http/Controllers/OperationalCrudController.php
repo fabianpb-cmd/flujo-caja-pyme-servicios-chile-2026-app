@@ -238,7 +238,8 @@ class OperationalCrudController extends Controller
         }
 
         $projectCommitment = $resource === 'projects' ? $this->commitments->summarizeProject($item) : null;
-        $billingPlan = $resource === 'projects' ? app(\App\Services\ProjectBillingMilestoneService::class)->plan($item) : null;
+        $billingService = app(\App\Services\ProjectBillingMilestoneService::class);
+        $billingPlan = $resource === 'projects' && $billingService->isClosedContract($item) ? $billingService->plan($item) : null;
 
         return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment', 'billingPlan'));
     }

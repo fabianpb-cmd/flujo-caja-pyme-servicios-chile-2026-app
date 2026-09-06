@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ApprovalStatus;
 use App\Models\Client;
 use App\Models\Company;
+use App\Models\ContractType;
 use App\Models\Currency;
 use App\Models\ExchangeRate;
 use App\Models\LegalParameter;
@@ -46,7 +47,7 @@ class SalesPrefacturationTest extends TestCase
             'active' => true,
         ]);
         $this->client = Client::query()->create(['company_id' => $this->company->id, 'code' => 'CLI-HH', 'legal_name' => 'Cliente HH']);
-        $this->project = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $this->client->id, 'code' => 'PRY-HH', 'name' => 'Proyecto HH']);
+        $this->project = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $this->client->id, 'code' => 'PRY-HH', 'name' => 'Proyecto HH', 'contracted_hourly_rate' => 35000]);
         $this->person = Person::query()->create(['company_id' => $this->company->id, 'code' => 'PER-HH', 'name' => 'Consultora HH', 'modality' => 'Honorarios mensual', 'status' => 'active']);
         $this->approvedId = ApprovalStatus::query()->create(['company_id' => $this->company->id, 'code' => 'approved', 'name' => 'Aprobado', 'active' => true])->id;
         $this->pendingId = ApprovalStatus::query()->create(['company_id' => $this->company->id, 'code' => 'pending', 'name' => 'Pendiente', 'active' => true])->id;
@@ -65,7 +66,7 @@ class SalesPrefacturationTest extends TestCase
 
     public function test_only_approved_billable_hours_are_used(): void
     {
-        $assignment = $this->assignment(['hourly_value' => 35000, 'hourly_rate_unit_type' => 'CURRENCY']);
+        $assignment = $this->assignment(['hourly_value' => 99999, 'hourly_rate_unit_type' => 'CURRENCY']);
         $this->entry($assignment, 10, $this->approvedId);
         $this->entry($assignment, 8, $this->pendingId);
 
@@ -79,7 +80,8 @@ class SalesPrefacturationTest extends TestCase
 
     public function test_uf_rate_uses_historical_uf_and_rounds_final_clp(): void
     {
-        $assignment = $this->assignment(['hourly_value' => 1.5, 'hourly_rate_unit_type' => 'UF']);
+        $this->project->update(['sales_currency_id' => $this->currency('UF', 'Unidad de fomento')->id, 'contracted_hourly_rate' => 1.5]);
+        $assignment = $this->assignment(['hourly_value' => 99, 'hourly_rate_unit_type' => 'UF']);
         $this->entry($assignment, 120, $this->approvedId);
 
         $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
@@ -106,6 +108,7 @@ class SalesPrefacturationTest extends TestCase
         ExchangeRate::query()->create(['company_id' => $this->company->id, 'currency_id' => $usd->id, 'rate_date' => '2026-08-09', 'value_clp' => 924.78, 'active' => true]);
         $assignment = $this->assignment(['hourly_value' => 45.5, 'hourly_rate_unit_type' => 'CURRENCY', 'hourly_rate_currency_id' => $usd->id]);
         $this->project->update(['sales_currency_id' => $usd->id]);
+        $this->project->update(['contracted_hourly_rate' => 45.5]);
         $this->entry($assignment, 10, $this->approvedId);
 
         $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
@@ -119,7 +122,8 @@ class SalesPrefacturationTest extends TestCase
     public function test_missing_uf_blocks_calculation_with_controlled_alert(): void
     {
         UfValue::query()->delete();
-        $assignment = $this->assignment(['hourly_value' => 1.5, 'hourly_rate_unit_type' => 'UF']);
+        $this->project->update(['sales_currency_id' => $this->currency('UF', 'Unidad de fomento')->id, 'contracted_hourly_rate' => 1.5]);
+        $assignment = $this->assignment(['hourly_value' => 99, 'hourly_rate_unit_type' => 'UF']);
         $this->entry($assignment, 10, $this->approvedId);
 
         $this->expectException(DomainException::class);
@@ -188,6 +192,29 @@ class SalesPrefacturationTest extends TestCase
         $document = \App\Models\SalesDocument::query()->firstOrFail();
         $this->assertSame(350000.0, (float) $document->net_amount);
         $this->assertSame(416500.0, (float) $document->gross_amount);
+    }
+
+    public function test_hh_requires_project_commercial_rate_and_rejects_closed_projects(): void
+    {
+        $this->project->update(['contracted_hourly_rate' => null]);
+        $assignment = $this->assignment(['hourly_value' => 99999]);
+        $this->entry($assignment, 10, $this->approvedId);
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('tarifa comercial HH del proyecto');
+        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+    }
+
+    public function test_closed_project_cannot_use_hh_prefacturation(): void
+    {
+        $contractType = ContractType::query()->create(['company_id' => $this->company->id, 'domain' => 'commercial', 'code' => 'PROYECTO_CERRADO', 'name' => 'Proyecto cerrado', 'active' => true]);
+        $this->project->update(['contract_type_id' => $contractType->id, 'contracted_hourly_rate' => 35000]);
+        $assignment = $this->assignment();
+        $this->entry($assignment, 10, $this->approvedId);
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('Plan de facturación / hitos');
+        app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
     }
 
     private function assignment(array $overrides = []): ProjectAssignment
