@@ -168,6 +168,26 @@ Archivos relevantes: `app/Services/SalesPrefacturationService.php`, `app/Service
 
 Pasos mínimos posteriores de deploy: aplicar la migración de hitos antes del código, desplegar los archivos relevantes, limpiar cache de configuración/rutas/vistas y ejecutar smoke de hitos/HH. No se ejecutó deploy.
 
+## Checkpoint productivo de hitos — 2026-09-06
+
+Estado actual autoritativo para esta release:
+- código funcional aprobado en `7d716b24e27b09a122d8a28d0a77656ce5f80532`;
+- usuario confirmó upload manual a `APP_ROOT` de los archivos de aplicación y de `database/migrations/2026_09_06_000500_create_project_billing_milestones.php`;
+- BD productiva `tdatcons_flujo_stg` alineada manualmente por phpMyAdmin con la migración;
+- `project_billing_milestones` existe;
+- `sales_documents.project_billing_milestone_id` existe;
+- unique `(project_id, sequence)` presente;
+- índice `sales_docs_milestone_idx` presente;
+- FK `project_billing_milestones.company_id -> companies.id` con `ON DELETE CASCADE`: PASS;
+- FK `project_billing_milestones.project_id -> projects.id` con `ON DELETE CASCADE`: PASS;
+- FK `sales_documents.project_billing_milestone_id -> project_billing_milestones.id` con `ON DELETE SET NULL`: PASS;
+- migración `2026_09_06_000500_create_project_billing_milestones` registrada en `migrations` con `batch=4`;
+- `MAX(batch)=4`.
+
+Estado: **CÓDIGO + BD ALINEADOS / SMOKE FUNCIONAL PENDIENTE**.
+
+No ejecutar más DDL/SQL para esta migración. Próximo paso: smoke mínimo sobre `Alerta Matrículas`: abrir proyecto cerrado, validar Plan de facturación, crear hitos de prueba según escenario acordado y emitir solo lo necesario para confirmar que el monto contractual reemplaza la antigua prefacturación HH. Mantener datos QA hasta cerrar el smoke. Después actualizar este mismo HANDOFF y marcar la release como PASS.
+
 No repetir UAT, suite completa, QA de seguridad ni smoke ya cerrados. Reabrir solo ante incidente real, nueva release, cambio de esquema/código o evidencia nueva.
 
 Ante incidente: revisar primero `storage/logs`; comparar código contra la release productiva correspondiente.
