@@ -33,7 +33,28 @@
         $displayInputValue = $inputValue !== null && is_numeric($inputValue)
             ? \App\Support\UiFormatter::formatNumber($inputValue)
             : ($value !== null ? (string) $value : '');
-        $renderedFieldInput = '<input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-money-input="true" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'">';
+
+        $moneyCurrency = $definition['currency'] ?? null;
+        if ($moneyCurrency === null && isset($definition['currency_relation'])) {
+            $moneyCurrency = data_get($item, $definition['currency_relation']);
+        }
+        if ($moneyCurrency === null && isset($definition['currency_field'])) {
+            $moneyCurrency = data_get($item, $definition['currency_field']);
+        }
+        $moneyCurrency ??= 'CLP';
+
+        $moneyCurrencyCode = \App\Support\UiFormatter::currencyCode($moneyCurrency);
+        $moneyCurrencySymbol = $moneyCurrency instanceof \App\Models\Currency
+            ? ($moneyCurrency->symbol ?: $moneyCurrencyCode)
+            : match ($moneyCurrencyCode) {
+                'CLP' => '$',
+                'USD' => 'US$',
+                'EUR' => '€',
+                'UF' => 'UF',
+                default => $moneyCurrencyCode,
+            };
+
+        $renderedFieldInput = '<div class="input-group"><span class="input-group-text" data-money-currency-prefix="true">'.e($moneyCurrencySymbol).'</span><input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-money-input="true" data-money-currency-code="'.e($moneyCurrencyCode).'" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'"></div>';
     } elseif (($definition['presentation'] ?? null) === 'percent') {
         $inputValue = $rawNumericValue($value);
         $displayInputValue = $inputValue !== null && is_numeric($inputValue)
