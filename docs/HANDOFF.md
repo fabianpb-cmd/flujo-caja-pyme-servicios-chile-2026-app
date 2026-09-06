@@ -106,6 +106,19 @@ Diseño técnico mínimo recomendado:
 - servicio dedicado pequeño para plan/hitos + rama `PROJECT_MILESTONE` en `SalesPrefacturationService`;
 - UI aislada en detalle de Proyecto (`Plan de facturación`) para no complejizar el CRUD genérico.
 
+## Implementación de hitos de facturación — 2026-09-06
+
+Implementado localmente, pendiente de revisión y deploy (no se tocó producción):
+- migración `2026_09_06_000500_create_project_billing_milestones` y FK opcional desde `sales_documents`;
+- `ProjectBillingMilestoneService` concentra porcentajes, inmutabilidad, conversión/snapshot contractual, reemisión posterior a anulación y la alerta acumulada de cobertura;
+- `Plan de facturación` aislado en el detalle del Proyecto: alta, edición, eliminación, porcentaje pendiente y emisión de borrador;
+- la emisión por hito no crea enlaces a HH; el snapshot conserva monto/moneda contractual, porcentaje, tasa, fecha y cobertura;
+- el cambio de venta neta o moneda queda bloqueado cuando hay hitos con factura activa;
+- la prefacturación por HH ahora resuelve exclusivamente la tarifa comercial del proyecto (`contracted_hourly_rate` + moneda de venta), no la tarifa de costeo de asignación;
+- se conserva la ruta de costeo asignación/persona solo para el warning, aun sin Payroll confirmado.
+
+Validación dirigida ejecutada: sintaxis PHP, rutas de hitos, `SalesPrefacturationTest` (8 PASS) y pruebas HH de `FinancialCoreTest` (4 PASS). No se ejecutó la suite completa. La caché de resultados de PHPUnit no pudo persistirse por permisos del entorno, sin afectar los resultados.
+
 Pruebas dirigidas suficientes, sin suite completa:
 1. UF 180 con hitos 30/40/30 => UF 54/72/54 y 100% total;
 2. impedir suma >100%;

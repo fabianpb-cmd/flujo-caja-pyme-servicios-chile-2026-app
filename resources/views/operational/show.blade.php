@@ -180,6 +180,21 @@
         </div>
     @endif
 
+    @if ($resource === 'projects' && ! empty($billingPlan))
+        @php($billingCurrency = $item->salesCurrency ?: 'CLP')
+        <div class="app-panel p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2"><div><div class="section-title mb-0">Plan de facturación</div><div class="small text-muted">{{ \App\Support\UiFormatter::formatPercent($billingPlan['scheduled_percentage'] / 100, 2) }} programado · {{ \App\Support\UiFormatter::formatPercent($billingPlan['remaining_percentage'] / 100, 2) }} pendiente por programar</div></div></div>
+            @foreach ($billingPlan['milestones'] as $row)
+                @php($milestone = $row['model'])
+                <div class="border rounded p-2 mb-2">
+                    <div class="d-flex flex-wrap justify-content-between gap-2"><div><strong>{{ $milestone->sequence }}. {{ $milestone->name }}</strong><div class="small text-muted">{{ \App\Support\UiFormatter::formatPercent($milestone->percentage / 100, 2) }} · {{ \App\Support\UiFormatter::formatMoney($row['amount'], $billingCurrency) }} · {{ $milestone->planned_invoice_date ? \App\Support\UiFormatter::formatDate($milestone->planned_invoice_date) : 'Sin fecha prevista' }}</div></div><div>@if($row['invoiced']) <span class="badge text-bg-success">Facturado</span> @else <form method="POST" action="{{ route('projects.milestones.issue', [$item, $milestone]) }}" class="d-inline">@csrf<input type="hidden" name="issue_date" value="{{ now()->toDateString() }}"><input type="hidden" name="taxable" value="1"><button class="btn btn-sm btn-success">Facturar</button></form> <form method="POST" action="{{ route('projects.milestones.destroy', [$item, $milestone]) }}" class="d-inline">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Eliminar</button></form> @endif</div></div>
+                    @if (! $row['invoiced'])<form method="POST" action="{{ route('projects.milestones.update', [$item, $milestone]) }}" class="row g-2 mt-1">@csrf @method('PUT')<div class="col-md-1"><input class="form-control form-control-sm" name="sequence" value="{{ $milestone->sequence }}"></div><div class="col-md-4"><input class="form-control form-control-sm" name="name" value="{{ $milestone->name }}"></div><div class="col-md-3"><input class="form-control form-control-sm" name="planned_invoice_date" type="date" value="{{ optional($milestone->planned_invoice_date)->toDateString() }}"></div><div class="col-md-2"><input class="form-control form-control-sm" name="percentage" value="{{ $milestone->percentage }}"></div><div class="col-md-2"><button class="btn btn-sm btn-outline-primary">Guardar</button></div><input type="hidden" name="notes" value="{{ $milestone->notes }}"></form>@endif
+                </div>
+            @endforeach
+            <form method="POST" action="{{ route('projects.milestones.store', $item) }}" class="row g-2 border-top pt-3 mt-3">@csrf <div class="col-md-1"><input required class="form-control" name="sequence" type="number" min="1" placeholder="#"></div><div class="col-md-4"><input required class="form-control" name="name" placeholder="Nombre del hito"></div><div class="col-md-3"><input class="form-control" name="planned_invoice_date" type="date"></div><div class="col-md-2"><input required class="form-control" name="percentage" type="number" min="0.01" max="100" step="0.01" placeholder="%"></div><div class="col-md-2"><button class="btn btn-primary">Agregar hito</button></div><input type="hidden" name="notes" value=""></form>
+        </div>
+    @endif
+
     @if ($isTimeEntryBatch)
         <div class="section-title">Carga de horas</div>
         <div class="row g-3">

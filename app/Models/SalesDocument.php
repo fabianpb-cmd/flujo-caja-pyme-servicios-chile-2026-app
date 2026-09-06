@@ -56,6 +56,11 @@ class SalesDocument extends Model
         return $this->belongsTo(DocumentType::class);
     }
 
+    public function billingMilestone(): BelongsTo
+    {
+        return $this->belongsTo(ProjectBillingMilestone::class, 'project_billing_milestone_id');
+    }
+
     public function timeEntryLinks(): HasMany
     {
         return $this->hasMany(SalesDocumentTimeEntry::class);

@@ -88,6 +88,26 @@ class SalesPrefacturationService
     public function documentBreakdown(SalesDocument $document): array
     {
         $snapshot = is_array($document->billing_snapshot ?? null) ? $document->billing_snapshot : [];
+        if (($snapshot['source'] ?? null) === 'PROJECT_MILESTONE') {
+            $coverage = $snapshot['coverage'] ?? [];
+            return [
+                'result' => ['label' => 'Factura por hito', 'value' => UiFormatter::formatMoney($document->gross_amount), 'note' => 'Monto contractual del hito; no consume HH.'],
+                'warnings' => array_values(array_filter([$coverage['warning'] ?? null])),
+                'sections' => [[
+                    'title' => 'Hito contractual',
+                    'rows' => [
+                        ['label' => 'Hito', 'value' => ($snapshot['sequence'] ?? '').'. '.($snapshot['name'] ?? '')],
+                        ['label' => 'Porcentaje', 'value' => UiFormatter::formatPercent(((float) ($snapshot['percentage'] ?? 0)) / 100, 2)],
+                        ['label' => 'Monto contractual', 'value' => UiFormatter::formatMoney($snapshot['contractual_amount'] ?? 0, $snapshot['contractual_currency'] ?? 'CLP')],
+                        ['label' => 'Neto facturado (CLP)', 'value' => UiFormatter::formatMoney($document->net_amount)],
+                        ['label' => 'Facturación acumulada (CLP)', 'value' => UiFormatter::formatMoney($coverage['contractual_clp'] ?? 0)],
+                        ['label' => 'Costo HH aprobado acumulado', 'value' => UiFormatter::formatMoney($coverage['approved_cost_clp'] ?? 0)],
+                        ['label' => 'Brecha temporal', 'value' => UiFormatter::formatMoney($coverage['gap_clp'] ?? 0)],
+                    ],
+                ]],
+                'parameters' => [['label' => 'Conversión', 'value' => (string) data_get($snapshot, 'conversion.exchange_rate', 1), 'validity' => $snapshot['issue_date'] ?? null, 'source' => $snapshot['contractual_currency'] ?? 'CLP']],
+            ];
+        }
         $commercialCurrency = $snapshot['commercial_currency'] ?? 'CLP';
         $commercialNetAmount = (float) ($snapshot['commercial_net_amount'] ?? $document->net_amount);
         $commercialVatAmount = (float) ($snapshot['commercial_vat_amount'] ?? $document->vat_amount);

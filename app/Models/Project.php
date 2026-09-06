@@ -7,6 +7,7 @@ use App\Models\Concerns\GuardsSensitiveAttributes;
 use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Project extends Model
 {
@@ -86,6 +87,11 @@ class Project extends Model
     public function paymentTerm(): BelongsTo
     {
         return $this->belongsTo(PaymentTerm::class);
+    }
+
+    public function billingMilestones(): HasMany
+    {
+        return $this->hasMany(ProjectBillingMilestone::class)->orderBy('sequence');
     }
 
     public function getSalesCurrencyDisplayCurrencyAttribute(): mixed

@@ -238,8 +238,9 @@ class OperationalCrudController extends Controller
         }
 
         $projectCommitment = $resource === 'projects' ? $this->commitments->summarizeProject($item) : null;
+        $billingPlan = $resource === 'projects' ? app(\App\Services\ProjectBillingMilestoneService::class)->plan($item) : null;
 
-        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment'));
+        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment', 'billingPlan'));
     }
 
     public function edit(Request $request, string $resource, int $record): View|RedirectResponse
@@ -441,6 +442,11 @@ class OperationalCrudController extends Controller
         }
 
         $validated = $request->validated();
+        if ($resource === 'projects' && $item instanceof Project
+            && (($item->sale_net != ($validated['sale_net'] ?? $item->sale_net)) || ((int) $item->sales_currency_id !== (int) ($validated['sales_currency_id'] ?? $item->sales_currency_id)))
+            && SalesDocument::query()->where('project_id', $item->id)->whereNotNull('project_billing_milestone_id')->where('is_voided', false)->where('status', '!=', 'Anulado')->exists()) {
+            return back()->withInput()->withErrors(['sale_net' => 'No se puede cambiar la venta neta ni la moneda mientras existan hitos facturados activos.']);
+        }
         try {
             $this->financialDocuments->assertUpdateAllowed($item, $validated);
         } catch (DomainException $exception) {

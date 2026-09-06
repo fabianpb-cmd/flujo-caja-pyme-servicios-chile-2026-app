@@ -142,10 +142,6 @@ class HourlyRateService
     {
         $assignment = $this->assignmentFor($person->company_id, $person->id, $project->id, $date);
 
-        if ($assignment && (float) $assignment->hourly_value > 0) {
-            return $this->detailsFromAssignment($assignment, $date);
-        }
-
         if ((float) ($project->contracted_hourly_rate ?? 0) > 0) {
             return $this->detailsFromProject($project, $date, $assignment);
         }
@@ -161,6 +157,20 @@ class HourlyRateService
             'assignment_id' => $assignment?->id,
             'effective_date' => $this->dateString($date),
         ];
+    }
+
+    /** Cost in CLP for an approved entry; intentionally independent from payroll state. */
+    public function costingClpForEntry(TimeEntry $entry): float
+    {
+        $details = $this->resolveCostingForEntry($entry);
+
+        return $this->resolve(
+            $entry->company_id,
+            $details['amount'] ?? null,
+            $details['unit_type'] ?? null,
+            $details['currency'] ?? null,
+            $entry->entry_date ?? now(),
+        );
     }
 
     public function resolveForEntry(TimeEntry $entry): array

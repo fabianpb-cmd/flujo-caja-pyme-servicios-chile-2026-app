@@ -6,6 +6,7 @@ use App\Http\Controllers\GeographyController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\OperationalCrudController;
 use App\Http\Controllers\PayrollBatchController;
+use App\Http\Controllers\ProjectBillingMilestoneController;
 use App\Http\Controllers\SalesPrefacturationController;
 use App\Http\Controllers\TwoFactorChallengeController;
 use App\Http\Controllers\UserManagementController;
@@ -57,6 +58,10 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])->prefix('a
 });
 
 Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->group(function (): void {
+    Route::post('/proyectos/{project}/hitos', [ProjectBillingMilestoneController::class, 'store'])->name('projects.milestones.store');
+    Route::put('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'update'])->name('projects.milestones.update');
+    Route::delete('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'destroy'])->name('projects.milestones.destroy');
+    Route::post('/proyectos/{project}/hitos/{milestone}/facturar', [ProjectBillingMilestoneController::class, 'issue'])->name('projects.milestones.issue');
     Route::get('/geografia/regiones/{region}/comunas', [GeographyController::class, 'communes'])->name('geography.regions.communes');
     Route::post('/operacion/payroll-records/generar-periodo', [PayrollBatchController::class, 'generate'])->name('payroll.generate-period');
     Route::post('/operacion/payroll-records/recalcular-borradores', [PayrollBatchController::class, 'recalculateDrafts'])->name('payroll.recalculate-drafts');
