@@ -16,6 +16,7 @@ use App\Models\SalesDocument;
 use App\Models\TimeEntry;
 use App\Policies\CompanyOwnedPolicy;
 use App\Services\AuditService;
+use App\Services\BillingStrategyService;
 use App\Services\CashMovementService;
 use App\Services\FinancialDocumentGuard;
 use App\Services\CatalogService;
@@ -62,6 +63,7 @@ class OperationalCrudController extends Controller
         private readonly TimeEntryPeriodService $timeEntryPeriods,
         private readonly AuditService $audit,
         private readonly FinancialDocumentGuard $financialDocuments,
+        private readonly BillingStrategyService $billingStrategies,
     ) {
     }
 
@@ -191,8 +193,16 @@ class OperationalCrudController extends Controller
             }
         } else {
             try {
-                $model = DB::transaction(function () use ($config, $data) {
+                $billingRows = $resource === 'projects' ? $request->input('billing_milestones', []) : [];
+                $model = DB::transaction(function () use ($config, $data, $billingRows) {
                     $model = MassAssignment::create($config['model'], $data);
+
+                    if ($model instanceof Project) {
+                        $this->billingStrategies->validateProject($model->load(['contractType', 'projectStatus']), $billingRows);
+                        if ($this->billingStrategies->forProject($model) === BillingStrategyService::CLOSED_PROJECT) {
+                            $this->billingStrategies->syncMilestones($model, $billingRows);
+                        }
+                    }
 
                     if ($model instanceof PayrollRecord) {
                         $this->payroll->syncHourlyTimeEntryTrace($model->refresh());
@@ -239,9 +249,10 @@ class OperationalCrudController extends Controller
 
         $projectCommitment = $resource === 'projects' ? $this->commitments->summarizeProject($item) : null;
         $billingService = app(\App\Services\ProjectBillingMilestoneService::class);
-        $billingPlan = $resource === 'projects' && $billingService->isClosedContract($item) ? $billingService->plan($item) : null;
+        $billingStrategy = $resource === 'projects' ? $this->billingStrategies->forProject($item) : null;
+        $billingPlan = $resource === 'projects' && $billingStrategy === BillingStrategyService::CLOSED_PROJECT ? $billingService->plan($item) : null;
 
-        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment', 'billingPlan'));
+        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment', 'billingPlan', 'billingStrategy'));
     }
 
     public function edit(Request $request, string $resource, int $record): View|RedirectResponse
@@ -474,8 +485,19 @@ class OperationalCrudController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($item, $data): void {
+            $billingRows = $resource === 'projects' ? $request->input('billing_milestones', []) : [];
+            DB::transaction(function () use ($item, $data, $billingRows): void {
                 MassAssignment::fillAndSave($item, $data);
+
+                if ($item instanceof Project) {
+                    $project = $item->refresh()->load(['contractType', 'projectStatus']);
+                    $this->billingStrategies->validateProject($project, $billingRows);
+                    if ($this->billingStrategies->forProject($project) === BillingStrategyService::CLOSED_PROJECT) {
+                        $this->billingStrategies->syncMilestones($project, $billingRows);
+                    } elseif ($project->billingMilestones()->exists()) {
+                        throw new DomainException('Elimine primero los hitos de facturación existentes antes de cambiar el tipo de contrato.');
+                    }
+                }
 
                 if ($item instanceof PayrollRecord) {
                     $this->payroll->syncHourlyTimeEntryTrace($item->refresh());
@@ -1100,13 +1122,16 @@ class OperationalCrudController extends Controller
 
             $records = $query->orderBy($definition['display'])->get();
 
-            $options[$field] = $records->mapWithKeys(function ($record) use ($definition, $config, $field, $resource, $effectiveDate, $selectedId) {
+            $options[$field] = collect($records)->mapWithKeys(function ($record) use ($definition, $config, $field, $resource, $effectiveDate, $selectedId) {
                 $label = $record->{$definition['display']};
                 if ((string) $record->getKey() === (string) $selectedId && ! $this->isVigentRecord($record, $resource, $field, $effectiveDate)) {
                     $label .= ' (No vigente)';
                 }
 
                 $payload = ['id' => $record->id, 'label' => $label];
+                if ($record instanceof \App\Models\ContractType) {
+                    $payload['code'] = $record->code;
+                }
 
                 if (isset($definition['option_parent_key'])) {
                     $payload['parent_id'] = $record->{$definition['option_parent_key']};

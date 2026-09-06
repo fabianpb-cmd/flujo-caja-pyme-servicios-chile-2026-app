@@ -193,3 +193,34 @@ No repetir UAT, suite completa, QA de seguridad ni smoke ya cerrados. Reabrir so
 Ante incidente: revisar primero `storage/logs`; comparar código contra la release productiva correspondiente.
 Antes de cualquier nueva release o DDL: backup fresco de BD y archivos afectados.
 Para continuidad en otra cuenta: `Lee docs/HANDOFF.md y continúa desde el estado actual. No repitas tareas ya completadas.`
+
+## Estrategia de facturación de proyectos — patch local 2026-09-06
+
+Implementado localmente, **NO DESPLEGADO / PRODUCCIÓN NO TOCADA**:
+- `BillingStrategyService` centraliza `CLOSED_PROJECT`, `HOURLY` y `UNSUPPORTED` usando el catálogo comercial real.
+- Todo proyecto requiere estrategia reconocida; Proyecto cerrado usa hitos y Por Hora usa HH aprobadas con `contracted_hourly_rate` comercial.
+- El formulario de Proyecto muestra siempre Plan de facturación; los hitos se habilitan solo para Proyecto cerrado y la tarifa HH comercial se mantiene separada del costo de Persona/Asignación.
+- La creación/edición sincroniza Proyecto + hitos en una transacción, valida pertenencia, secuencia, porcentajes, mínimo de hitos y protege hitos facturados.
+- Prefacturación HH usa la tarifa comercial y convierte todas las líneas con la tasa de `issue_date`, preservando snapshot comercial.
+
+Tests ejecutados exactamente:
+- `php artisan test tests/Feature/ProjectBillingMilestoneServiceTest.php tests/Feature/SalesPrefacturationTest.php` — PASS, 17 tests, 50 assertions.
+- `git diff --check` — PASS.
+
+Sin migraciones nuevas. Este patch queda pendiente de revisión/commit y deploy posterior; producción conserva la versión anterior.
+
+## Corrección de detalle del Plan de facturación — 2026-09-06
+
+En el commit local enmendado, `show.blade.php` queda exclusivamente para consultar y facturar: se eliminaron los formularios inline de crear/editar/eliminar hitos y se agregó `Editar plan` hacia la edición del Proyecto. Proyecto cerrado conserva resumen, fecha de emisión y Facturar; Por Hora muestra solo su estrategia, tarifa, moneda, periodicidad y condición de pago.
+
+Validación focalizada: `ProjectBillingMilestoneServiceTest` y `SalesPrefacturationTest` PASS (18 tests, 54 assertions). El filtro amplio de `OperationalUiTest` no se considera válido para esta corrección por fallos históricos `all()` sobre arrays y una expectativa legacy de proyecto sin estrategia.
+
+No se agregaron migraciones. **NO DESPLEGADO / PRODUCCIÓN NO TOCADA**.
+
+## Cobertura HTTP de planes — 2026-09-06
+
+Agregado `tests/Feature/ProjectBillingPlanHttpTest.php` para atravesar las rutas HTTP de creación y actualización de proyectos con hitos, incluyendo rollback de plan inválido y sincronización de hitos no facturados.
+
+Corrección mínima aplicada en `OperationalCrudController`: se normaliza como `Collection` el conjunto de opciones antes de `mapWithKeys`, evitando llamar `->all()` sobre un array.
+
+Resultado: `ProjectBillingPlanHttpTest` PASS, 2 tests y 14 assertions. CREATE Proyecto cerrado + hitos PASS; rollback de plan >100% PASS; UPDATE/sync de hitos no facturados PASS. No se creó migración. Producción no fue tocada.

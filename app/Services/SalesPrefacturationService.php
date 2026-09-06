@@ -22,6 +22,7 @@ class SalesPrefacturationService
         private readonly CurrencyConversionService $conversions,
         private readonly ReceivablesService $receivables,
         private readonly HourlyRateService $hourlyRates,
+        private readonly BillingStrategyService $billingStrategies,
     ) {
     }
 
@@ -38,7 +39,8 @@ class SalesPrefacturationService
         $period = Carbon::parse($periodDate)->startOfMonth();
         $periodEnd = $period->copy()->endOfMonth();
         $issue = Carbon::parse($issueDate);
-        if ($this->isClosedContract($project)) {
+        $strategy = $this->billingStrategies->assertSupported($project);
+        if ($strategy === BillingStrategyService::CLOSED_PROJECT) {
             throw new DomainException('Los proyectos Proyecto cerrado deben facturarse mediante su Plan de facturación / hitos.');
         }
 
@@ -49,7 +51,7 @@ class SalesPrefacturationService
             throw new DomainException('No existen HH aprobadas facturables para el proyecto y período seleccionados.');
         }
 
-        $lines = $entries->map(fn (TimeEntry $entry): array => $this->lineForEntry($entry, $commercialCurrency));
+        $lines = $entries->map(fn (TimeEntry $entry): array => $this->lineForEntry($entry, $commercialCurrency, $issue));
         $netBeforeAdjustment = round($lines->sum('subtotal_clp'), 0, PHP_ROUND_HALF_UP);
         $adjustment = round((float) $adjustmentAmount, 0, PHP_ROUND_HALF_UP);
 
@@ -220,12 +222,13 @@ class SalesPrefacturationService
             ->values();
     }
 
-    private function lineForEntry(TimeEntry $entry, mixed $commercialCurrency = 'CLP'): array
+    private function lineForEntry(TimeEntry $entry, mixed $commercialCurrency = 'CLP', CarbonInterface|string|null $issueDate = null): array
     {
         $assignment = $this->assignmentForEntry($entry);
         $project = $entry->project?->loadMissing('salesCurrency');
         $hours = (float) $entry->hours_approved;
         $entryDate = $entry->entry_date;
+        $conversionDate = Carbon::parse($issueDate ?: $entryDate);
         $rate = (float) ($project?->contracted_hourly_rate ?? 0);
 
         if ($rate <= 0) {
@@ -240,17 +243,17 @@ class SalesPrefacturationService
         $rawClp = $subtotalOriginal;
 
         if ($unit === 'UF') {
-            $conversionRate = (float) $this->legalParameters->ufValue($entry->company_id, $entryDate);
+            $conversionRate = (float) $this->legalParameters->ufValue($entry->company_id, $conversionDate);
             $rawClp = $subtotalOriginal * $conversionRate;
         } elseif ($currencyCode !== 'CLP') {
             if (! $currency instanceof Currency) {
                 throw new DomainException("Falta moneda para la hora {$entry->code}.");
             }
-            $conversionRate = (float) $this->legalParameters->exchangeRate($entry->company_id, $currency->id, $entryDate);
-            $rawClp = $this->conversions->convert($subtotalOriginal, $currency, 'CLP', $conversionRate, $entryDate)['raw_converted_amount'];
+            $conversionRate = (float) $this->legalParameters->exchangeRate($entry->company_id, $currency->id, $conversionDate);
+            $rawClp = $this->conversions->convert($subtotalOriginal, $currency, 'CLP', $conversionRate, $conversionDate)['raw_converted_amount'];
         }
 
-        $commercial = $this->convertClpAmount((float) UiFormatter::roundAmount($rawClp, 'CLP'), $commercialCurrency, $entry->company_id, $entryDate);
+        $commercial = $this->convertClpAmount((float) UiFormatter::roundAmount($rawClp, 'CLP'), $commercialCurrency, $entry->company_id, $conversionDate);
 
         return [
             'time_entry_id' => $entry->id,
@@ -265,17 +268,12 @@ class SalesPrefacturationService
             'currency_id' => $currency instanceof Currency ? $currency->id : null,
             'subtotal_original' => round($subtotalOriginal, 6),
             'conversion_rate' => $conversionRate,
-            'conversion_date' => $entryDate?->toDateString(),
+            'conversion_date' => $conversionDate->toDateString(),
             'raw_clp' => $rawClp,
             'subtotal_clp' => UiFormatter::roundAmount($rawClp, 'CLP'),
             'commercial_currency_code' => UiFormatter::currencyCode($commercialCurrency),
             'subtotal_commercial' => (float) $commercial['converted_amount'],
         ];
-    }
-
-    private function isClosedContract(Project $project): bool
-    {
-        return strcasecmp(trim((string) ($project->contractType?->name ?? '')), 'Proyecto cerrado') === 0;
     }
 
     private function convertClpAmount(float $amount, mixed $currency, int $companyId, CarbonInterface|string $date): array
@@ -366,6 +364,10 @@ class SalesPrefacturationService
             'issue_date' => $calculation['issue_date'],
             'taxable' => $calculation['taxable'],
             'hours_total' => $calculation['hours_total'],
+            'contracted_hourly_rate' => (float) ($calculation['project']->contracted_hourly_rate ?? 0),
+            'commercial_base_amount' => (float) $calculation['commercial_net_amount'],
+            'issue_date_conversion_rate' => data_get($calculation['lines'][0] ?? [], 'conversion_rate', 1),
+            'issue_date_conversion_date' => data_get($calculation['lines'][0] ?? [], 'conversion_date'),
             'net_amount' => $calculation['net_amount'],
             'vat_rate' => $calculation['vat_rate'],
             'vat_amount' => $calculation['vat_amount'],

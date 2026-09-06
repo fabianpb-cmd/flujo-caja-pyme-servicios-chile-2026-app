@@ -47,7 +47,8 @@ class SalesPrefacturationTest extends TestCase
             'active' => true,
         ]);
         $this->client = Client::query()->create(['company_id' => $this->company->id, 'code' => 'CLI-HH', 'legal_name' => 'Cliente HH']);
-        $this->project = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $this->client->id, 'code' => 'PRY-HH', 'name' => 'Proyecto HH', 'contracted_hourly_rate' => 35000]);
+        $hourlyContract = ContractType::query()->create(['company_id' => $this->company->id, 'domain' => 'commercial', 'code' => 'POR_HORA', 'name' => 'Por hora', 'active' => true]);
+        $this->project = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $this->client->id, 'code' => 'PRY-HH', 'name' => 'Proyecto HH', 'contract_type_id' => $hourlyContract->id, 'contracted_hourly_rate' => 35000]);
         $this->person = Person::query()->create(['company_id' => $this->company->id, 'code' => 'PER-HH', 'name' => 'Consultora HH', 'modality' => 'Honorarios mensual', 'status' => 'active']);
         $this->approvedId = ApprovalStatus::query()->create(['company_id' => $this->company->id, 'code' => 'approved', 'name' => 'Aprobado', 'active' => true])->id;
         $this->pendingId = ApprovalStatus::query()->create(['company_id' => $this->company->id, 'code' => 'pending', 'name' => 'Pendiente', 'active' => true])->id;
@@ -88,6 +89,25 @@ class SalesPrefacturationTest extends TestCase
 
         $this->assertSame(180.0, $calculation['lines'][0]['subtotal_original']);
         $this->assertSame(7352062.0, $calculation['net_amount']);
+    }
+
+    public function test_uf_hourly_billing_uses_issue_date_for_every_line(): void
+    {
+        $uf = $this->currency('UF', 'Unidad de fomento');
+        $this->project->update(['sales_currency_id' => $uf->id, 'contracted_hourly_rate' => 1.2]);
+        UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-08-01', 'value' => 30000, 'active' => true]);
+        UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-08-02', 'value' => 35000, 'active' => true]);
+        UfValue::query()->where('company_id', $this->company->id)->whereDate('value_date', '2026-08-09')->update(['value' => 40000, 'active' => true]);
+        $assignment = $this->assignment(['hourly_value' => 99, 'hourly_rate_unit_type' => 'UF']);
+        $this->entry($assignment, 2, $this->approvedId, '2026-08-01');
+        $this->entry($assignment, 3, $this->approvedId, '2026-08-02');
+
+        $calculation = app(SalesPrefacturationService::class)->calculate($this->company->id, $this->project->id, '2026-08-01', '2026-08-09');
+
+        $this->assertSame(240000.0, $calculation['net_before_adjustment']);
+        $this->assertSame(2, collect($calculation['lines'])->where('conversion_date', '2026-08-09')->count());
+        $this->assertSame(40000.0, $calculation['lines'][0]['conversion_rate']);
+        $this->assertSame(40000.0, $calculation['lines'][1]['conversion_rate']);
     }
 
     public function test_clp_rate_and_exempt_document_skip_vat(): void
@@ -232,7 +252,7 @@ class SalesPrefacturationTest extends TestCase
         ], $overrides));
     }
 
-    private function entry(ProjectAssignment $assignment, float $hours, int $approvalStatusId): TimeEntry
+    private function entry(ProjectAssignment $assignment, float $hours, int $approvalStatusId, string $date = '2026-08-09'): TimeEntry
     {
         return TimeEntry::query()->create([
             'company_id' => $this->company->id,
@@ -241,7 +261,7 @@ class SalesPrefacturationTest extends TestCase
             'client_id' => $this->client->id,
             'project_id' => $this->project->id,
             'assignment_id' => $assignment->id,
-            'entry_date' => '2026-08-09',
+            'entry_date' => $date,
             'activity' => 'Consultoría',
             'hours_worked' => $hours,
             'hours_approved' => $hours,

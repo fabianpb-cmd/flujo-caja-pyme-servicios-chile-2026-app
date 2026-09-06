@@ -1455,7 +1455,37 @@
                 {{ filled($item->calculation_notes) ? $item->calculation_notes : '—' }}
             </div>
         </div>
-    @else
+@else
+        @if ($resource === 'projects')
+            @php($projectContractTypes = collect($options['contract_type_id'] ?? []))
+            @php($projectSelectedContract = old('contract_type_id', $item->contract_type_id ?? null))
+            @php($projectSelectedContractData = $projectSelectedContract ? ($projectContractTypes[$projectSelectedContract] ?? null) : null)
+            @php($projectIsClosed = is_array($projectSelectedContractData) && (strtoupper((string) ($projectSelectedContractData['code'] ?? '')) === 'PROYECTO_CERRADO' || mb_strtolower((string) ($projectSelectedContractData['label'] ?? '')) === 'proyecto cerrado'))
+            @php($projectMilestoneRows = old('billing_milestones', $item->exists ? $item->billingMilestones->map(fn ($m) => ['id' => $m->id, 'sequence' => $m->sequence, 'name' => $m->name, 'planned_invoice_date' => optional($m->planned_invoice_date)->toDateString(), 'percentage' => $m->percentage, 'notes' => $m->notes])->all() : [['sequence' => 1, 'name' => '', 'planned_invoice_date' => '', 'percentage' => '', 'notes' => '']]))
+            <div class="app-panel p-3 mb-4" data-project-billing-plan data-closed="{{ $projectIsClosed ? '1' : '0' }}">
+                <div class="section-title mb-2">PLAN DE FACTURACIÓN</div>
+                <div data-project-billing-hourly class="small text-muted {{ $projectIsClosed ? 'd-none' : '' }}">Modalidad: Facturación por HH aprobadas · Periodicidad actual: Mensual · Base: HH aprobadas no facturadas del período.<br>La tarifa cobrada al cliente por cada HH aprobada se configura como Tarifa comercial HH. No corresponde al costo del consultor.</div>
+                <div data-project-billing-unsupported class="alert alert-warning py-2 {{ $projectIsClosed || $projectSelectedContract ? 'd-none' : '' }}">Este tipo de contrato no tiene una estrategia de facturación configurada.</div>
+                <div data-project-billing-milestones class="{{ $projectIsClosed ? '' : 'd-none' }}">
+                    @foreach ($projectMilestoneRows as $index => $row)
+                        <div class="row g-2 mb-2" data-project-milestone-row>
+                            @if (!empty($row['id']))<input type="hidden" name="billing_milestones[{{ $index }}][id]" value="{{ $row['id'] }}">@endif
+                            <div class="col-1"><input required class="form-control" name="billing_milestones[{{ $index }}][sequence]" type="number" min="1" value="{{ $row['sequence'] ?? '' }}" placeholder="#"></div>
+                            <div class="col-3"><input required class="form-control" name="billing_milestones[{{ $index }}][name]" value="{{ $row['name'] ?? '' }}" placeholder="Nombre del hito"></div>
+                            <div class="col-3"><input class="form-control" name="billing_milestones[{{ $index }}][planned_invoice_date]" type="date" value="{{ $row['planned_invoice_date'] ?? '' }}"></div>
+                            <div class="col-2"><input required class="form-control" name="billing_milestones[{{ $index }}][percentage]" type="number" min="0.01" max="100" step="0.01" value="{{ $row['percentage'] ?? '' }}" placeholder="%"></div>
+                            <div class="col-3"><input class="form-control" name="billing_milestones[{{ $index }}][notes]" value="{{ $row['notes'] ?? '' }}" placeholder="Notas"></div>
+                        </div>
+                    @endforeach
+                    <div class="small text-muted">Total programado: <span data-project-billing-total>0</span>% · Pendiente por programar: <span data-project-billing-remaining>0</span>%</div>
+                </div>
+            </div>
+            @push('scripts')
+                <script>
+                    (() => { const panel = document.querySelector('[data-project-billing-plan]'); const select = document.getElementById('contract_type_id'); if (!panel || !select) return; const sync = () => { const option = select.options[select.selectedIndex]; const code = (option?.dataset?.code || '').toUpperCase(); const label = (option?.textContent || '').trim().toLowerCase(); const closed = code === 'PROYECTO_CERRADO' || label === 'proyecto cerrado'; const supportedHourly = ['POR_HORA', 'POR_HORAS', 'HOURLY'].includes(code) || ['por hora', 'por horas'].includes(label); panel.dataset.closed = closed ? '1' : '0'; panel.querySelector('[data-project-billing-milestones]')?.classList.toggle('d-none', !closed); panel.querySelector('[data-project-billing-milestones]')?.querySelectorAll('input').forEach(input => input.disabled = !closed); panel.querySelector('[data-project-billing-hourly]')?.classList.toggle('d-none', closed); panel.querySelector('[data-project-billing-unsupported]')?.classList.toggle('d-none', closed || supportedHourly); }; select.addEventListener('change', sync); sync(); })();
+                </script>
+            @endpush
+        @endif
         @if (! ($resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit)))
         <div>
         <div class="row g-3">

@@ -52,6 +52,26 @@ class ProjectBillingMilestoneService
         MassAssignment::fillAndSave($milestone, $payload); return $milestone->refresh();
     }
 
+    public function syncPlan(Project $project, array $rows): void
+    {
+        $existing = $project->billingMilestones()->get()->keyBy('id');
+        $ids = collect($rows)->pluck('id')->filter()->map(fn ($id) => (int) $id)->toArray();
+        foreach ($rows as $row) {
+            $milestone = isset($row['id']) ? $existing[(int) $row['id']] ?? null : null;
+            if (isset($row['id']) && ! $milestone) throw new DomainException('El hito indicado no pertenece al proyecto o empresa.');
+            if ($milestone && $this->isInvoiced($milestone)) {
+                $unchanged = collect(['sequence', 'name', 'planned_invoice_date', 'percentage', 'notes'])->every(fn ($field) => (string) ($milestone->{$field} ?? '') === (string) ($row[$field] ?? ''));
+                if (! $unchanged) throw new DomainException('Un hito facturado no se puede editar.');
+            }
+        }
+        foreach ($rows as $row) {
+            $milestone = isset($row['id']) ? $existing[(int) $row['id']] ?? null : null;
+            $payload = ['sequence' => (int) $row['sequence'], 'name' => trim($row['name']), 'planned_invoice_date' => $row['planned_invoice_date'] ?? null, 'percentage' => (float) $row['percentage'], 'notes' => $row['notes'] ?? null];
+            if ($milestone) MassAssignment::fillAndSave($milestone, $payload); else MassAssignment::create(ProjectBillingMilestone::class, ['company_id' => $project->company_id, 'project_id' => $project->id] + $payload);
+        }
+        foreach ($existing as $milestone) if (! in_array($milestone->id, $ids, true)) { if ($this->isInvoiced($milestone)) throw new DomainException('Un hito facturado no se puede eliminar.'); $milestone->delete(); }
+    }
+
     public function delete(ProjectBillingMilestone $milestone): void
     {
         if ($this->isInvoiced($milestone)) throw new DomainException('Un hito facturado no se puede eliminar.');

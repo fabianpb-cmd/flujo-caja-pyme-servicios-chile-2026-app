@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Company;
+use App\Models\ContractType;
 use App\Models\Activity;
 use App\Models\ApprovalStatus;
 use App\Models\Currency;
@@ -3968,6 +3969,7 @@ class OperationalUiTest extends TestCase
         ]);
 
         $usd = $this->currency($company->id, 'USD', 'Dólar de prueba');
+        $hourlyContract = ContractType::query()->where('company_id', $company->id)->where('domain', 'commercial')->whereIn('code', ['POR_HORA', 'POR_HORAS'])->firstOrFail();
 
         $form = $this->actingAs($admin)->get(route('operational.create', 'projects'));
         $form->assertOk();
@@ -3981,6 +3983,8 @@ class OperationalUiTest extends TestCase
             'client_id' => $client->id,
             'sales_currency_id' => $this->currency($company->id, 'CLP', 'Peso chileno')->id,
             'name' => 'Proyecto CLP',
+            'contract_type_id' => $hourlyContract->id,
+            'contracted_hourly_rate' => 35000,
             'project_status_id' => $this->statusId($company->id, 'project', 'active'),
             'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
             'sale_net' => 1250,
@@ -3992,6 +3996,8 @@ class OperationalUiTest extends TestCase
             'client_id' => $client->id,
             'sales_currency_id' => $usd->id,
             'name' => 'Proyecto USD',
+            'contract_type_id' => $hourlyContract->id,
+            'contracted_hourly_rate' => 35,
             'project_status_id' => $this->statusId($company->id, 'project', 'active'),
             'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
             'sale_net' => 1250.50,
