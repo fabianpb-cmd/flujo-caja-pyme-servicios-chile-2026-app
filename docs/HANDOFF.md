@@ -241,3 +241,5 @@ Usuario confirmó upload manual a `APP_ROOT` de los 7 archivos productivos de es
 No se subieron tests, documentación, `.env`, `vendor/`, `storage/`, `public/` ni migraciones. La BD ya estaba alineada con hitos (`batch=4`) y este patch no requiere SQL ni migraciones nuevas.
 
 Estado actual: **ARCHIVOS SUBIDOS / SMOKE PRODUCTIVO PENDIENTE**. Antes del smoke, confirmar si existe `bootstrap/cache/config.php`; no borrar caches sin evidencia. Después ejecutar smoke mínimo de Proyecto cerrado + Por Hora, sin repetir suites ni UAT amplio.
+
+Confirmación cPanel: `bootstrap/cache/config.php` **no existe** en `APP_ROOT`; no se requiere acción sobre cache de configuración antes del smoke. No se borró ningún cache.
