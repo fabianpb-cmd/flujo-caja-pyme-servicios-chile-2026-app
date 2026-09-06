@@ -80,24 +80,29 @@ Estado: **PRODUCCIÓN LIMPIA / PARÁMETROS Y CONFIGURACIÓN BASE PRESERVADOS / P
 
 ## Ajuste UX posterior — formato de montos y porcentajes editables (2026-09-05)
 
-Hallazgos visuales en producción:
-- campos monetarios editables del CRUD genérico se mostraban sin separador de miles, por ejemplo `306688,00` en `Neto`, mientras los calculados mostraban `$ 58.271` / `$ 364.959`;
-- campos porcentuales editables se mostraban como fracción cruda, por ejemplo `1.000000` en `Probabilidad`, pese a que funcionalmente `1` equivale a `100 %`.
+Hallazgos visuales:
+- campos monetarios editables mostraban valor crudo/local, por ejemplo `306688,00`;
+- campos porcentuales editables mostraban fracción cruda, por ejemplo `1.000000` para una probabilidad del 100%;
+- los inputs monetarios editables no mostraban explícitamente la unidad/símbolo monetario.
 
-Corrección implementada en `main`, aún pendiente de deploy:
-- `resources/views/operational/partials/field-input.blade.php` renderiza `type => money` editables como texto localizado `es-CL`, con separador de miles visible (ej. `306.688`).
-- Los campos editables con `presentation => percent` muestran el porcentaje humano (ej. valor persistido `1` se muestra `100 %`).
-- Al enviar el formulario, dinero se normaliza a número crudo y porcentaje vuelve a fracción (`100` visible -> `1` enviado), preservando reglas actuales, servicios, persistencia y BD.
-- No se modificaron cálculos financieros, servicios ni esquema BD.
+Corrección implementada en `main`, pendiente de deploy final de esta revisión:
+- `resources/views/operational/partials/field-input.blade.php` muestra montos editables con formato `es-CL`.
+- Los money editables muestran prefijo de moneda/unidad en un `input-group`: `$`, `US$`, `€`, `UF` o el código correspondiente.
+- La moneda se resuelve desde la definición del campo (`currency`, `currency_relation`, `currency_field`) y, si no existe configuración específica, usa CLP.
+- Los campos `presentation => percent` muestran porcentaje humano (`1` persistido -> `100 %`) y vuelven a fracción antes del submit.
+- Dinero se normaliza a número crudo antes del submit; no cambia persistencia, reglas, servicios ni BD.
+- En `sales-documents`, `net_amount` no tiene hoy una relación de moneda propia y el modelo/servicio guardan ese monto operativo en CLP, por lo que el prefijo correcto para ese campo actualmente es `$`.
+- En campos configurados con moneda dinámica, como `projects.sale_net`, el prefijo toma la moneda configurada del proyecto.
 
 Commits principales del ajuste:
 - money inicial: `ab378a1326dc6f4b6cffb771b8068ef38ffb1d9a`
 - normalización money: `dd8aee22550bd8d157be784a28056a7b233c06f8`
-- money + percent definitivo: `186a21c3782bb1387b386b5897efaba5de1aca55`
+- money + percent: `186a21c3782bb1387b386b5897efaba5de1aca55`
+- prefijo/unidad monetaria en money editable: `a085f2f1d187c2b15b79f6ce528cf045f0e8ef43`
 
-Validación: revisión estática dirigida del componente común y de la definición de `sales-documents` (`payment_probability` rango 0..1 y `net_amount` money). No suite completa para ahorrar créditos.
+Validación: revisión estática dirigida del componente común, `UiFormatter`, configuración de `projects` y `sales-documents`, y modelo/servicio de prefacturación. No suite completa para ahorrar créditos.
 
-Próximo paso: desplegar SOLO la versión actual de `resources/views/operational/partials/field-input.blade.php` y hacer smoke visual en Factura/Ingreso: `Neto` debe verse `306.688`; `Probabilidad` debe verse `100 %`. No guardar datos solo para probar.
+Próximo paso: `git pull origin main`, subir SOLO la versión actual de `resources/views/operational/partials/field-input.blade.php` a cPanel y hacer smoke visual. En la factura mostrada: `Neto` debe verse con prefijo `$` y miles formateados; `Probabilidad` debe verse `100 %`. No guardar datos solo para probar.
 
 ## Operación mínima
 
