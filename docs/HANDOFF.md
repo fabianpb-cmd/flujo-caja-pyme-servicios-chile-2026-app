@@ -108,28 +108,36 @@ Diseño técnico mínimo recomendado:
 
 ## Implementación de hitos de facturación — 2026-09-06
 
-Implementado localmente, pendiente de revisión y deploy (no se tocó producción):
+Implementado y pusheado a `main`, **NO desplegado a producción**:
+- `e6f5d77` — `feat: add closed-project billing milestones`;
+- `829fb4e` — `fix: scope milestone actions to company`.
+
+Incluye:
 - migración `2026_09_06_000500_create_project_billing_milestones` y FK opcional desde `sales_documents`;
-- `ProjectBillingMilestoneService` concentra porcentajes, inmutabilidad, conversión/snapshot contractual, reemisión posterior a anulación y la alerta acumulada de cobertura;
-- `Plan de facturación` aislado en el detalle del Proyecto: alta, edición, eliminación, porcentaje pendiente y emisión de borrador;
-- la emisión por hito no crea enlaces a HH; el snapshot conserva monto/moneda contractual, porcentaje, tasa, fecha y cobertura;
-- el cambio de venta neta o moneda queda bloqueado cuando hay hitos con factura activa;
-- la prefacturación por HH ahora resuelve exclusivamente la tarifa comercial del proyecto (`contracted_hourly_rate` + moneda de venta), no la tarifa de costeo de asignación;
-- se conserva la ruta de costeo asignación/persona solo para el warning, aun sin Payroll confirmado.
+- `ProjectBillingMilestoneService` para porcentajes, inmutabilidad, conversión/snapshot contractual, reemisión y cobertura;
+- `Plan de facturación` aislado en detalle del Proyecto;
+- emisión por hito sin enlaces a HH;
+- protección de venta neta/moneda con factura activa de hito;
+- rutas de hitos con control de pertenencia a empresa.
 
-Validación dirigida ejecutada: sintaxis PHP, rutas de hitos, `SalesPrefacturationTest` (8 PASS) y pruebas HH de `FinancialCoreTest` (4 PASS). No se ejecutó la suite completa. La caché de resultados de PHPUnit no pudo persistirse por permisos del entorno, sin afectar los resultados.
+Validación local reportada por Work/Codex: sintaxis PHP, migración en simulación, rutas, `SalesPrefacturationTest` (8 PASS) y pruebas HH focalizadas de `FinancialCoreTest` (4 PASS). No se ejecutó suite completa.
 
-Pruebas dirigidas suficientes, sin suite completa:
-1. UF 180 con hitos 30/40/30 => UF 54/72/54 y 100% total;
-2. impedir suma >100%;
-3. factura de hito 30% usa UF 54 convertido a CLP a fecha de emisión, no `9,75h x 0,77UF`;
-4. hito no consume horas;
-5. warning acumulado aparece si ingreso acumulado < costo HH aprobado acumulado y NO bloquea;
-6. no warning cuando cobertura acumulada >= costo;
-7. hito facturado y venta/moneda contractual quedan protegidos;
-8. flujo por HH usa `contracted_hourly_rate`, no tarifa de costeo.
+## Revisión post-push — BLOQUEADORES ANTES DE DEPLOY (2026-09-06)
 
-Mantener los datos QA actuales para reproducir este caso hasta validar el fix. Implementar todo este bloque en una sola iteración antes de deploy.
+Revisión estática de `main` tras `829fb4e`: **NO desplegar todavía**. Se requiere una corrección final pequeña y focalizada.
+
+1. **La facturación HH aún puede reutilizar tarifa de costeo.** Aunque `HourlyRateService::resolveForTimeEntry()` dejó de priorizar la asignación, `SalesPrefacturationService::lineForEntry()` conserva fallback a `$assignment->hourly_value` / `$entry->hourly_value` cuando no existe `projects.contracted_hourly_rate`. Esto viola la separación comercial/costo y hace que los 8 tests existentes sigan pasando con la lógica antigua. Debe eliminarse ese fallback y exigir tarifa comercial del proyecto para facturación HH.
+2. **Proyecto cerrado aún puede entrar al flujo de prefacturación por HH.** `SalesPrefacturationService::calculate()` no bloquea contratos cerrados. Debe rechazar de forma controlada un Proyecto cerrado e indicar que se factura mediante hitos.
+3. **Cobertura acumulada sobreestima ingresos si hay hitos anteriores programados pero no facturados.** `coverage()` suma todos los hitos con `sequence <= actual` reconvertidos a la fecha actual. Debe sumar netos CLP de facturas de hitos activas ya emitidas + el hito que se está emitiendo, respetando snapshots históricos. No asumir que un hito programado está facturado ni revalorizar facturas anteriores con UF/tasa actual.
+4. **Riesgo de doble factura concurrente del mismo hito.** `isInvoiced()` se valida antes de abrir la transacción. Dos solicitudes simultáneas podrían pasar el check. En `issue()` se debe abrir transacción, bloquear el hito (`lockForUpdate`), recargar/revalidar factura activa y recién crear el documento.
+5. **Fecha de emisión no seleccionable en UI.** El botón `Facturar` envía `issue_date = now()` oculto. Como la fecha determina UF/tasa, la UI debe mostrar un campo de fecha explícito (por defecto fecha prevista si corresponde o hoy) antes de emitir.
+6. **Secuencia duplicada puede terminar en error SQL/500.** Existe unique `(project_id, sequence)`, pero falta validación/control antes de guardar. Validar unicidad por proyecto excluyendo el hito actual y devolver error funcional.
+7. **Plan visible en proyectos no cerrados.** El detalle renderiza el plan para todo proyecto aunque el servicio rechaza guardar. Mostrar `Plan de facturación` solo cuando el contrato sea Proyecto cerrado.
+8. **Las pruebas reportadas no prueban los hitos.** No se agregó ningún test nuevo en los dos commits. `SalesPrefacturationTest` existente todavía espera facturación desde `assignment.hourly_value`, lo que confirma que la separación HH no quedó cubierta. Agregar SOLO pruebas focalizadas para: hito UF 180 30/40/30; >100%; emisión UF54 sin HH; cobertura basada en facturas reales + actual; no consumo HH; reemisión tras anulación; doble emisión serializada/revalidada; proyecto cerrado bloqueado en prefacturación HH; contrato HH exige `contracted_hourly_rate` y nunca usa costeo.
+
+Recomendación de costo mínimo: una sola iteración correctiva sobre estos puntos, ejecutar únicamente el nuevo test de hitos + tests HH actualizados. No suite completa, no UAT amplio, no deploy. Tras PASS, revisar diff final una vez y desplegar migración + archivos afectados.
+
+Mantener los datos QA actuales (`Alerta Matrículas` / Jaime Soriano / UF 180) hasta validar el fix final.
 
 ## Política de pruebas / continuidad
 
