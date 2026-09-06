@@ -243,3 +243,13 @@ No se subieron tests, documentación, `.env`, `vendor/`, `storage/`, `public/` n
 Estado actual: **ARCHIVOS SUBIDOS / SMOKE PRODUCTIVO PENDIENTE**. Antes del smoke, confirmar si existe `bootstrap/cache/config.php`; no borrar caches sin evidencia. Después ejecutar smoke mínimo de Proyecto cerrado + Por Hora, sin repetir suites ni UAT amplio.
 
 Confirmación cPanel: `bootstrap/cache/config.php` **no existe** en `APP_ROOT`; no se requiere acción sobre cache de configuración antes del smoke. No se borró ningún cache.
+
+## Ajuste UX porcentajes de hitos — deploy manual 2026-09-06
+
+Commit funcional pusheado: `4eac04d0b4f23c1d26840c67d313a73c96b0824c` (`fix: improve billing milestone percentage feedback`). Solo modifica `resources/views/operational/form.blade.php`.
+
+Validación local previa: `ProjectBillingPlanHttpTest` PASS (2 tests, 14 assertions), `ProjectBillingMilestoneServiceTest` PASS (7 tests, 22 assertions) y `git diff --check` PASS.
+
+Usuario confirmó upload manual del `form.blade.php` actualizado a producción. El formulario ahora debe mostrar porcentajes humanos, total/pendiente en vivo, warning cuando el total supera 100% y deshabilitar Guardar mientras exista exceso. Backend mantiene su validación autoritativa.
+
+Estado: **AJUSTE UX SUBIDO / SMOKE VISUAL PENDIENTE**. Próximo smoke mínimo: validar 30/40/30 => total 100%, pendiente 0%; luego alterar temporalmente a 30/40/40 => total 110%, warning de exceso 10% y Guardar deshabilitado; restaurar 30/40/30 sin persistir el escenario inválido.
