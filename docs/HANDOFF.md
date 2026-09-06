@@ -50,7 +50,34 @@ Validación productiva:
 
 Estado del ajuste: **CERRADO / PASS**.
 
-Pendiente administrativo: limpiar los datos operacionales QA creados para esta última revisión y verificar nuevamente las tablas operacionales principales en `0`, preservando parámetros/configuración base.
+## Hallazgo crítico pendiente — base de prefacturación en proyecto cerrado (2026-09-06)
+
+Caso QA observado:
+- proyecto `Alerta Matrículas`, tipo de contrato `Proyecto cerrado`;
+- venta neta contractual: `UF 180` (aprox. CLP 7,36 MM según UF de referencia mostrada por la aplicación);
+- persona/asignación con tarifa de costeo cercana a `UF 0,77 / HH`;
+- 9,75 h aprobadas del período;
+- factura generada `ING-000006` con neto aproximado `CLP 306.688`.
+
+Causa raíz confirmada por revisión de código:
+- `SalesPrefacturationService::calculate()` construye el neto sumando líneas de horas aprobadas (`subtotal_clp`) y no usa `projects.sale_net` como base contractual.
+- `SalesPrefacturationService::lineForEntry()` obtiene la tarifa mediante `HourlyRateService::resolveForEntry()`.
+- `HourlyRateService::resolveForTimeEntry()` prioriza `project_assignments.hourly_value` cuando es > 0; solo si no existe usa `projects.contracted_hourly_rate`.
+- Ese `project_assignments.hourly_value` es presentado en UI como tarifa/valor HH de costeo, por lo que hoy puede terminar reutilizado como tarifa de facturación.
+- Para UF, cada línea de hora se convierte usando la UF de la fecha de la hora, lo que explica que el neto resultante sea del orden de `9,75 h x 0,77 UF/h x UF histórica ≈ CLP 306 mil`.
+
+Conclusión funcional: para un contrato `Proyecto cerrado`, la facturación no debería derivarse del costo HH de la persona/asignación. Debe usar la venta contractual del proyecto (`sale_net`) y/o un esquema explícito de hitos/porcentajes/saldo por facturar. En contratos por hora, la tarifa de venta debe estar separada de la tarifa de costeo.
+
+Estado: **BUG DE LÓGICA DE NEGOCIO CONFIRMADO / NO CERRAR PROYECTO TODAVÍA**.
+
+Próximo bloque recomendado, sin suite completa:
+1. separar base de facturación por tipo de contrato;
+2. `Proyecto cerrado`: facturar contra `sale_net`, controlando saldo ya facturado e hitos/parcialidades;
+3. contratos por hora: usar tarifa comercial del proyecto/asignación, nunca tarifa de costeo;
+4. prueba dirigida con el caso `UF 180` y una prueba de facturación por HH;
+5. desplegar solo después de PASS dirigido.
+
+No limpiar todavía los datos QA de este caso: son útiles para reproducir y validar el fix.
 
 ## Política de pruebas / continuidad
 
