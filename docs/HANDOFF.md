@@ -224,3 +224,20 @@ Agregado `tests/Feature/ProjectBillingPlanHttpTest.php` para atravesar las rutas
 Corrección mínima aplicada en `OperationalCrudController`: se normaliza como `Collection` el conjunto de opciones antes de `mapWithKeys`, evitando llamar `->all()` sobre un array.
 
 Resultado: `ProjectBillingPlanHttpTest` PASS, 2 tests y 14 assertions. CREATE Proyecto cerrado + hitos PASS; rollback de plan >100% PASS; UPDATE/sync de hitos no facturados PASS. No se creó migración. Producción no fue tocada.
+
+## Deploy manual de estrategia de facturación — 2026-09-06
+
+Commit funcional aprobado y pusheado: `fe7a358d6c5e2ef2d16a76472fef45c3e34469d4` (`feat: centralize project billing strategies`).
+
+Usuario confirmó upload manual a `APP_ROOT` de los 7 archivos productivos de este patch:
+- `app/Http/Controllers/OperationalCrudController.php`
+- `app/Services/BillingStrategyService.php`
+- `app/Services/ProjectBillingMilestoneService.php`
+- `app/Services/SalesPrefacturationService.php`
+- `config/operational.php`
+- `resources/views/operational/form.blade.php`
+- `resources/views/operational/show.blade.php`
+
+No se subieron tests, documentación, `.env`, `vendor/`, `storage/`, `public/` ni migraciones. La BD ya estaba alineada con hitos (`batch=4`) y este patch no requiere SQL ni migraciones nuevas.
+
+Estado actual: **ARCHIVOS SUBIDOS / SMOKE PRODUCTIVO PENDIENTE**. Antes del smoke, confirmar si existe `bootstrap/cache/config.php`; no borrar caches sin evidencia. Después ejecutar smoke mínimo de Proyecto cerrado + Por Hora, sin repetir suites ni UAT amplio.
