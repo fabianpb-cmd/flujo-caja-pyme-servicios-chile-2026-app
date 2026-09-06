@@ -87,9 +87,12 @@ class ProjectBillingMilestoneService
         $contractualClp += SalesDocument::query()
             ->where('company_id', $project->company_id)
             ->where('project_id', $project->id)
+            ->whereNotNull('project_billing_milestone_id')
+            ->where('project_billing_milestone_id', '!=', $milestone->id)
             ->where('is_voided', false)
             ->where('status', '!=', 'Anulado')
-            ->whereHas('billingMilestone', fn ($query) => $query->where('project_id', $project->id)->where('sequence', '<', $milestone->sequence))
+            ->whereDate('issue_date', '<=', $through->toDateString())
+            ->whereHas('billingMilestone', fn ($query) => $query->where('project_id', $project->id))
             ->sum('net_amount');
         $cost = TimeEntry::query()->forCompany($project->company_id)->with(['person.hourlyRateCurrency', 'project.salesCurrency', 'assignment.hourlyRateCurrency', 'assignment.assignmentStatus'])->where('project_id', $project->id)->whereDate('entry_date', '<=', $through->toDateString())->where('hours_approved', '>', 0)->get()->filter(fn ($e) => in_array(strtolower((string) ($e->approvalStatus?->code ?: $e->approval_status)), ['approved','aprobado'], true))->sum(fn ($e) => (float) $e->hours_approved * $this->hourlyRates->costingClpForEntry($e));
         $gap = round($contractualClp - $cost, 0); return ['contractual_clp' => round($contractualClp, 0), 'approved_cost_clp' => round($cost, 0), 'gap_clp' => $gap, 'warning' => $gap < 0 ? 'Cobertura temporal insuficiente: facturación acumulada '.UiFormatter::formatMoney($contractualClp).' frente a costo HH aprobado acumulado '.UiFormatter::formatMoney($cost).', brecha '.UiFormatter::formatMoney(abs($gap)).'. Puede requerir financiar temporalmente al consultor hasta hitos futuros; este warning no bloquea.' : null];

@@ -39,6 +39,7 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $this->project = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $client->id, 'code' => 'PRY-MILESTONE', 'name' => 'Proyecto cerrado QA', 'contract_type_id' => $contract->id, 'sales_currency_id' => $this->uf->id, 'sale_net' => 180]);
         UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-09-01', 'value' => 40000, 'active' => true]);
         UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-09-02', 'value' => 50000, 'active' => true]);
+        UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-09-03', 'value' => 60000, 'active' => true]);
         LegalParameter::query()->create(['company_id' => $this->company->id, 'parameter_code' => 'IVA', 'parameter_name' => 'IVA', 'valid_from' => '2026-01-01', 'value' => 0.19, 'unit' => '%', 'active' => true]);
         $this->service = app(ProjectBillingMilestoneService::class);
     }
@@ -67,19 +68,22 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $third = $this->milestone(3, 30);
         $this->addApprovedCost(100, 1.5);
 
-        $document = $this->service->issue($first, '2026-09-01', false);
-        $this->assertSame(2160000.0, (float) $document->net_amount);
-        $this->assertSame(0, $document->timeEntryLinks()->count());
+        $thirdDocument = $this->service->issue($third, '2026-09-01', false);
+        $this->assertSame(2160000.0, (float) $thirdDocument->net_amount);
+        $this->assertSame(0, $thirdDocument->timeEntryLinks()->count());
+        $this->assertSame(40000.0, (float) data_get($thirdDocument->billing_snapshot, 'conversion.exchange_rate'));
 
-        $coverage = $this->service->coverage($third, now()->setDate(2026, 9, 2));
-        $this->assertSame(2160000.0 + 2700000.0, (float) $coverage['contractual_clp']);
+        $futureDocument = $this->service->issue($first, '2026-09-03', false);
+        $this->assertSame(3240000.0, (float) $futureDocument->net_amount);
+
+        $coverage = $this->service->coverage($second, now()->setDate(2026, 9, 2));
+        $this->assertSame(2160000.0 + 3600000.0, (float) $coverage['contractual_clp']);
         $this->assertNotNull($coverage['warning']);
 
         $secondDocument = $this->service->issue($second, '2026-09-02', false);
-        $coverageAfter = $this->service->coverage($third, now()->setDate(2026, 9, 2));
-        $this->assertSame((float) $document->net_amount + (float) $secondDocument->net_amount + 2700000.0, (float) $coverageAfter['contractual_clp']);
-        $this->assertNull($coverageAfter['warning']);
-        $this->assertSame(0, SalesDocument::query()->where('project_billing_milestone_id', $third->id)->count());
+        $coverageAfter = $this->service->coverage($second, now()->setDate(2026, 9, 2));
+        $this->assertSame(2160000.0 + 3600000.0, (float) $coverageAfter['contractual_clp']);
+        $this->assertSame(1, SalesDocument::query()->where('project_billing_milestone_id', $second->id)->count());
     }
 
     public function test_plan_rejects_percentage_above_one_hundred(): void

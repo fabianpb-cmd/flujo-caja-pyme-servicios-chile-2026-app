@@ -141,6 +141,14 @@ Mantener los datos QA actuales (`Alerta Matrículas` / Jaime Soriano / UF 180) h
 
 ## Política de pruebas / continuidad
 
+## Corrección final de cobertura de hitos — 2026-09-06
+
+`ProjectBillingMilestoneService::coverage()` ya no usa `sequence` para determinar la cobertura. Suma únicamente facturas de hitos activas del mismo proyecto/empresa con `issue_date <= through`, excluye el hito actual y agrega una sola vez su monto convertido a CLP. Los documentos históricos conservan su `net_amount` persistido y no se reconvierten.
+
+Test focalizado ejecutado: `php artisan test tests/Feature/ProjectBillingMilestoneServiceTest.php` — PASS. Validación adicional: `git diff --check` — PASS.
+
+Corrección final **NO DESPLEGADA / PRODUCCIÓN NO TOCADA**. No se realizó push. Deploy posterior: desplegar el código, limpiar cache de vistas/rutas/configuración si corresponde y ejecutar el smoke de hitos.
+
 ## Corrección de bloqueadores de prefacturación — 2026-09-06
 
 Implementada localmente y **NO DESPLEGADA / PRODUCCIÓN NO TOCADA**:
