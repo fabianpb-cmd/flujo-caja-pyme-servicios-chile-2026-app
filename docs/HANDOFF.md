@@ -1,6 +1,6 @@
 # HANDOFF — Flujo Caja PyME Servicios Chile 2026
 
-Última actualización: 2026-09-06.
+Última actualización: 2026-09-07.
 
 ÚNICA fuente de continuidad. No crear otro handoff. No repetir tareas cerradas salvo incidente, nueva release o evidencia nueva.
 
@@ -197,6 +197,7 @@ Hallazgo: `BillingStrategyService::validateProject()` comprueba la cronología d
 El set `BillingDateRulesTest` actual no cubre explícitamente payloads con filas desordenadas por `sequence`.
 
 Estado: **NO DESPLEGAR `f0096a7` TODAVÍA**. Corrección mínima requerida: validar fechas sobre una copia de los hitos ordenada por `sequence` y agregar tests focalizados que cubran (a) payload desordenado pero cronología válida por secuencia => PASS y (b) payload desordenado con cronología inválida por secuencia => rechazo controlado. No repetir suite completa; ejecutar solo `BillingDateRulesTest`, y por seguridad `ProjectBillingMilestoneServiceTest` si cambia la validación compartida. Sin migraciones.
+
 ## Corrección orden cronológico de hitos — 2026-09-06
 
 Corregido el bloqueador detectado en BillingStrategyService::validateProject().
@@ -215,3 +216,17 @@ Validación:
 - Producción todavía NO contiene este patch.
 
 Estado: **BLOQUEADOR DE ORDEN DE FECHAS CORREGIDO / PUSH Y DEPLOY PENDIENTES**.
+
+## Deploy productivo patch de fechas — 2026-09-07
+
+Commit funcional acumulado en `main`: `2601bd1631888b3ec08890a77abf28a2ccdf22e4`.
+
+Usuario confirmó upload manual a producción de exactamente estos 4 archivos:
+- `app/Services/BillingStrategyService.php`
+- `app/Services/ProjectBillingMilestoneService.php`
+- `app/Services/SalesPrefacturationService.php`
+- `resources/views/operational/show.blade.php`
+
+No se subieron tests ni documentación; no hay migraciones ni SQL para este patch. Producción queda con las reglas de fecha y orden cronológico desplegadas.
+
+Estado: **PATCH DE FECHAS SUBIDO / SMOKE PRODUCTIVO NO DESTRUCTIVO PENDIENTE**. No emitir facturas hasta completar este smoke. Verificar primero en `Alerta Matrículas`: (1) detalle muestra `Fecha prevista:` separada de fecha de emisión; (2) el input de emisión precarga la fecha actual; (3) al intentar guardar el plan existente con fechas cronológicamente inconsistentes se obtiene error controlado y no se persiste ningún cambio. Después corregir las fechas previstas usando el calendario comercial real, no fechas inventadas, antes de retomar la emisión controlada.
