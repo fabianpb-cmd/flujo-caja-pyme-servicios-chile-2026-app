@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Project;
 use App\Models\ProjectBillingMilestone;
+use App\Models\DocumentType;
 use App\Models\SalesDocument;
 use App\Models\TimeEntry;
 use App\Support\MassAssignment;
@@ -92,8 +93,10 @@ class ProjectBillingMilestoneService
             $conversion = $this->toClp($project, $contractual, $issue); $amounts = $this->receivables->amountsWithVat($project->company_id, $conversion['converted_amount'], $issue);
             $coverage = $this->coverage($locked, $issue);
             $dueDate = $this->dueDate($project, $issue);
+            $documentType = DocumentType::query()->where('company_id', $project->company_id)->where('domain', 'sales')->where('code', 'FACTURA')->where('active', true)->first();
+            if (! $documentType) throw new DomainException('No existe el tipo de documento de ventas FACTURA activo para la empresa.');
             return MassAssignment::create(SalesDocument::class, [
-                'company_id' => $project->company_id, 'client_id' => $project->client_id, 'project_id' => $project->id, 'project_billing_milestone_id' => $locked->id,
+                'company_id' => $project->company_id, 'client_id' => $project->client_id, 'project_id' => $project->id, 'project_billing_milestone_id' => $locked->id, 'document_type_id' => $documentType->id,
                 'document_type' => 'Factura hito', 'issue_date' => $issue->toDateString(), 'net_amount' => $amounts['net_amount'], 'vat_rate' => $taxable ? $amounts['vat_rate'] : 0,
                 'due_date' => $dueDate?->toDateString(), 'projected_collection_date' => $dueDate?->toDateString(),
                 'vat_amount' => $taxable ? $amounts['vat_amount'] : 0, 'gross_amount' => $taxable ? $amounts['gross_amount'] : $amounts['net_amount'], 'collected_amount' => 0,

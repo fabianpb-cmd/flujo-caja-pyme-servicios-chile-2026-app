@@ -288,3 +288,19 @@ La conversión observada equivale exactamente a UF 54,00 × `$40.883,00` por UF,
 **Nuevo hallazgo bloqueador antes de continuar:** `Tipo de documento` aparece vacío. La causa de código es consistente con una desalineación entre el campo legacy y el catálogo: `ProjectBillingMilestoneService::issue()` escribe `document_type = 'Factura hito'`, pero la ficha de Facturas/Ingresos muestra y exige `document_type_id`; el catálogo de ventas contiene `FACTURA` / `Factura`. La tabla conserva ambos campos (`document_type` y `document_type_id`).
 
 Estado: **BORRADOR ING-000007 CREADO / IMPORTES Y FECHAS PASS / TIPO DE DOCUMENTO CATALOGADO PENDIENTE**. No editar, cobrar, anular ni emitir otro hito hasta corregir y validar `document_type_id`. El vínculo al hito y la ausencia de consumo HH aún deben verificarse como parte del cierre de este smoke.
+## Corrección tipo de documento en facturación por hito — 2026-09-07
+
+Se corrigió la emisión automática por hito para asignar el catálogo de ventas
+FACTURA en document_type_id, manteniendo compatibilidad con el campo legacy.
+
+Si el catálogo FACTURA de ventas no existe, la emisión falla controladamente y
+no crea el documento.
+
+Validación:
+- ProjectBillingMilestoneServiceTest: 9 tests / 26 assertions — PASS.
+- git diff --check: PASS.
+- Sin migraciones nuevas.
+- ING-000007 productivo permanece intacto.
+- Producción todavía NO contiene esta corrección.
+
+Estado: **FIX DOCUMENT_TYPE VALIDADO LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.

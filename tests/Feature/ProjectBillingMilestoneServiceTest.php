@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ApprovalStatus;
 use App\Models\Client;
+use App\Models\DocumentType;
 use App\Models\Company;
 use App\Models\ContractType;
 use App\Models\Currency;
@@ -36,6 +37,7 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $client = Client::query()->create(['company_id' => $this->company->id, 'code' => 'CLI-MILESTONE', 'legal_name' => 'Cliente Hitos']);
         $this->uf = Currency::query()->create(['company_id' => $this->company->id, 'code' => 'UF', 'name' => 'Unidad de fomento', 'symbol' => 'UF', 'minor_units' => 2, 'active' => true]);
         $contract = ContractType::query()->create(['company_id' => $this->company->id, 'domain' => 'commercial', 'code' => 'PROYECTO_CERRADO', 'name' => 'Proyecto cerrado', 'active' => true]);
+        DocumentType::query()->create(['company_id' => $this->company->id, 'domain' => 'sales', 'code' => 'FACTURA', 'name' => 'Factura', 'active' => true]);
         $this->project = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $client->id, 'code' => 'PRY-MILESTONE', 'name' => 'Proyecto cerrado QA', 'contract_type_id' => $contract->id, 'sales_currency_id' => $this->uf->id, 'sale_net' => 180]);
         UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-09-01', 'value' => 40000, 'active' => true]);
         UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-09-02', 'value' => 50000, 'active' => true]);
@@ -84,6 +86,27 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $coverageAfter = $this->service->coverage($second, now()->setDate(2026, 9, 2));
         $this->assertSame(2160000.0 + 3600000.0, (float) $coverageAfter['contractual_clp']);
         $this->assertSame(1, SalesDocument::query()->where('project_billing_milestone_id', $second->id)->count());
+    }
+
+    public function test_issue_assigns_sales_invoice_document_type(): void
+    {
+        $type = DocumentType::query()->where('company_id', $this->company->id)->where('domain', 'sales')->where('code', 'FACTURA')->firstOrFail();
+        $document = $this->service->issue($this->milestone(1, 100), '2026-09-01', false);
+
+        $this->assertSame($type->id, $document->document_type_id);
+    }
+
+    public function test_issue_fails_without_active_sales_invoice_document_type(): void
+    {
+        DocumentType::query()->where('company_id', $this->company->id)->where('domain', 'sales')->where('code', 'FACTURA')->delete();
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('FACTURA activo');
+        try {
+            $this->service->issue($this->milestone(1, 100), '2026-09-01', false);
+        } finally {
+            $this->assertSame(0, SalesDocument::query()->count());
+        }
     }
 
     public function test_plan_rejects_percentage_above_one_hundred(): void
