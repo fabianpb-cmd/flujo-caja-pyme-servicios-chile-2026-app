@@ -265,3 +265,26 @@ No hubo migraciones ni SQL. No se subieron tests ni documentación a producción
 Estado: **PATCH DE FECHAS + FIX CSP DESPLEGADOS / SMOKE NO DESTRUCTIVO CERRADO PASS**.
 
 Próximo paso autorizado técnicamente: retomar una emisión controlada del Hito 1 de `Alerta Matrículas`. Al crear el borrador, verificar antes de avanzar que monto contractual, conversión a CLP, `issue_date`, `due_date`, `projected_collection_date`, IVA y vínculo al hito sean coherentes; confirmar además que no se consumieron HH por tratarse de `Proyecto cerrado`. No ejecutar acciones adicionales irreversibles sin validación.
+
+## Emisión controlada Hito 1 — checkpoint 2026-09-07
+
+Se generó en producción el borrador `ING-000007` desde el Hito 1 de `Alerta Matrículas` con fecha de emisión `07/09/2026`.
+
+Valores observados en pantalla:
+- cliente DuocUC;
+- proyecto `Alerta Matrículas`;
+- emisión `07/09/2026`;
+- vencimiento `07/10/2026`;
+- cobro proyectado `07/10/2026`;
+- neto `$ 2.207.682`;
+- IVA `19%`, monto IVA `$ 419.460`;
+- total `$ 2.627.142`;
+- estado `Borrador`;
+- anulado `No`;
+- N° documento vacío, esperado mientras es borrador.
+
+La conversión observada equivale exactamente a UF 54,00 × `$40.883,00` por UF, consistente con el valor UF del `07/09/2026`.
+
+**Nuevo hallazgo bloqueador antes de continuar:** `Tipo de documento` aparece vacío. La causa de código es consistente con una desalineación entre el campo legacy y el catálogo: `ProjectBillingMilestoneService::issue()` escribe `document_type = 'Factura hito'`, pero la ficha de Facturas/Ingresos muestra y exige `document_type_id`; el catálogo de ventas contiene `FACTURA` / `Factura`. La tabla conserva ambos campos (`document_type` y `document_type_id`).
+
+Estado: **BORRADOR ING-000007 CREADO / IMPORTES Y FECHAS PASS / TIPO DE DOCUMENTO CATALOGADO PENDIENTE**. No editar, cobrar, anular ni emitir otro hito hasta corregir y validar `document_type_id`. El vínculo al hito y la ausencia de consumo HH aún deben verificarse como parte del cierre de este smoke.
