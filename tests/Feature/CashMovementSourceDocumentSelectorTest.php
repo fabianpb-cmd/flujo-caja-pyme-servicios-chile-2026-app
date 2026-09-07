@@ -31,6 +31,7 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
         [$client, $project] = $this->clientAndProject($company);
 
         $invoice = $this->salesDocument($company, $client, $project, 'ING-SEL-001', 388844);
+        $invoice->update(['document_number' => 'QA-0002']);
         $expense = $this->expenseDocument($company, $project, 'EGR-SEL-001', 210000);
         $payroll = $this->payrollRecord($company, $project, 'REM-SEL-001', 150000);
         $obligation = $this->legalObligation($company, 'OBL-SEL-001', 99000);
@@ -63,13 +64,15 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
         $response->assertSee('value="'.$invoice->code.'"', false);
         $response->assertSee('Clínica Los Andes');
         $response->assertSee('Kardex');
-        $response->assertSee('$ 388.844');
+        $this->assertStringContainsString('388.844', $html);
+        $response->assertSee('QA-0002');
         $response->assertSee('Pendiente');
         $this->assertStringContainsString('value="'.$invoice->code.'"', $html);
         $this->assertStringContainsString('data-source-document-type="sales_document"', $html);
         $this->assertStringContainsString('data-counterparty-name="Clínica Los Andes"', $html);
         $this->assertStringContainsString('data-project-id="'.$project->id.'"', $html);
         $this->assertStringContainsString('data-suggested-income="388844.00"', $html);
+        $this->assertStringContainsString('data-currency-minor-units="0"', $html);
         $response->assertSee('value="'.$expense->code.'"', false);
         $this->assertStringContainsString('data-source-document-type="expense_document"', $html);
         $response->assertSee('value="'.$payroll->code.'"', false);
@@ -83,6 +86,7 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
         $this->assertStringContainsString("cashSourceDocumentOtherInput.name = isOther ? 'source_document_code' : ''", $html);
         $this->assertStringContainsString('option.dataset.suggestedIncome', $html);
         $this->assertStringContainsString('option.dataset.suggestedExpense', $html);
+        $this->assertStringContainsString('option.dataset.currencyMinorUnits', $html);
     }
 
     public function test_cash_movements_use_functional_codes_allow_partial_and_total_payments_and_validate_invalid_documents(): void
@@ -155,6 +159,20 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
             ]);
         $this->assertSame(2, CashMovement::query()->where('source_document_code', 'ING-PAY-001')->count());
         $this->assertSame(0, CashMovement::query()->where('source_document_code', '1')->count());
+    }
+
+    public function test_sales_document_without_document_number_keeps_a_clean_selector_label(): void
+    {
+        [$company, $admin] = $this->companyWithAdmin('CMP-CASH-NO-NUMBER');
+        [$client, $project] = $this->clientAndProject($company);
+        $invoice = $this->salesDocument($company, $client, $project, 'ING-NO-NUMBER', 1000);
+        $invoice->update(['document_number' => null]);
+
+        $html = $this->actingAs($admin)->get(route('operational.create', 'cash-movements'))->getContent();
+
+        $this->assertStringContainsString('ING-NO-NUMBER', $html);
+        $this->assertStringNotContainsString('N° </option>', $html);
+        $this->assertStringNotContainsString(' ·  · ', $html);
     }
 
     public function test_other_keeps_a_free_reference_without_internal_document_validation(): void

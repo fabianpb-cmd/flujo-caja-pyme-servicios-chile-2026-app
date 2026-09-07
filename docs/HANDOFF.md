@@ -448,3 +448,7 @@ Se agregó `ProjectBillingMilestoneServiceTest::test_issue_hito_two_uses_its_con
 ## Validación generación borrador Hito 2 - 2026-09-07
 
 Se amplió `ProjectBillingMilestoneServiceTest::test_issue_hito_two_uses_its_contractual_amount_and_preserves_plan_integrity` con validación HTTP del detalle del SalesDocument generado. Confirma estado Borrador, document_number NULL permitido y visible en detalle, manteniendo issue/due/projected dates, trazabilidad del Hito 2, aislamiento de Hitos 1/3, ausencia de HH/CashMovements y billing_status_id. Resultado: 1 test / 24 assertions PASS. Sin producción, SQL ni migraciones; Hito 2 productivo sigue sin emitir.
+
+## UX selector de cobros y moneda - 2026-09-07
+
+Se corrigió la etiqueta de documentos origen para incluir código, N° documento cuando existe, cliente, proyecto, saldo y estado, omitiendo limpiamente el N° cuando es NULL. La precarga de Ingreso/Egreso usa metadata de moneda/minor_units del proyecto; CLP se presenta sin decimales y el valor se mantiene normalizable al backend. El residual 0,44 observado es presentación de un saldo CLP, no un cambio contable. CashMovementSourceDocumentSelectorTest: 5 tests / 72 assertions PASS; CashMovementUxTest: 1 test / 7 assertions PASS; git diff --check PASS. Sin migraciones ni SQL, producción no tocada.

@@ -1305,9 +1305,11 @@ class OperationalCrudController extends Controller
         $clientNames = \App\Models\Client::query()
             ->whereIn('id', $salesDocuments->pluck('client_id')->filter()->unique())
             ->pluck('legal_name', 'id');
-        $projectNames = Project::query()
+        $projects = Project::query()
             ->whereIn('id', $salesDocuments->pluck('project_id')->filter()->unique())
-            ->pluck('name', 'id');
+            ->with('salesCurrency')
+            ->get()
+            ->keyBy('id');
 
         foreach ($salesDocuments as $document) {
             $balance = $this->receivables->balance($document);
@@ -1316,15 +1318,18 @@ class OperationalCrudController extends Controller
             }
 
             $counterparty = (string) ($clientNames[$document->client_id] ?? 'Sin contraparte');
-            $project = (string) ($document->project_id ? ($projectNames[$document->project_id] ?? 'Sin proyecto') : 'Sin proyecto');
+            $projectRecord = $document->project_id ? ($projects[$document->project_id] ?? null) : null;
+            $project = (string) ($projectRecord?->name ?? 'Sin proyecto');
+            $currency = $projectRecord?->salesCurrency ?: 'CLP';
             $options[$document->code] = $this->cashMovementSourceDocumentOption(
                 'sales_document',
                 $document->code,
-                [$document->code, $counterparty, $project, UiFormatter::formatMoney($balance), $document->status],
+                [$document->code, filled($document->document_number) ? 'N° '.$document->document_number : null, $counterparty, $project, UiFormatter::formatMoney($balance, $currency), $document->status],
                 $counterparty,
                 $document->project_id,
                 $balance,
-                0
+                0,
+                $currency
             );
         }
 
@@ -1427,7 +1432,8 @@ class OperationalCrudController extends Controller
         string $counterparty,
         mixed $projectId,
         float $income,
-        float $expense
+        float $expense,
+        mixed $currency = 'CLP'
     ): array {
         return [
             'label' => implode(' - ', array_filter($labelParts, fn ($part): bool => filled($part))),
@@ -1437,6 +1443,8 @@ class OperationalCrudController extends Controller
             'project_id' => $projectId,
             'suggested_income' => $income > 0 ? number_format($income, 2, '.', '') : null,
             'suggested_expense' => $expense > 0 ? number_format($expense, 2, '.', '') : null,
+            'currency_code' => UiFormatter::currencyCode($currency),
+            'currency_minor_units' => UiFormatter::currencyMinorUnits($currency),
         ];
     }
 

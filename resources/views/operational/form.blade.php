@@ -2004,11 +2004,19 @@
                     cashProjectSelect.dispatchEvent(new Event('change', { bubbles: true }));
                 }
                 if (incomeInput) {
-                    incomeInput.value = option.dataset.suggestedIncome || '';
+                    incomeInput.value = option.dataset.suggestedIncome
+                        ? Number(option.dataset.suggestedIncome).toLocaleString('es-CL', { minimumFractionDigits: Number(option.dataset.currencyMinorUnits || 0), maximumFractionDigits: Number(option.dataset.currencyMinorUnits || 0) })
+                        : '';
                 }
                 if (expenseInput) {
-                    expenseInput.value = option.dataset.suggestedExpense || '';
+                    expenseInput.value = option.dataset.suggestedExpense
+                        ? Number(option.dataset.suggestedExpense).toLocaleString('es-CL', { minimumFractionDigits: Number(option.dataset.currencyMinorUnits || 0), maximumFractionDigits: Number(option.dataset.currencyMinorUnits || 0) })
+                        : '';
                 }
+                [incomeInput, expenseInput].filter(Boolean).forEach((input) => {
+                    input.dataset.moneyMinorUnits = option.dataset.currencyMinorUnits || '0';
+                    input.dataset.moneyCurrencyCode = option.dataset.currencyCode || 'CLP';
+                });
             };
 
             cashSourceTypeSelect.addEventListener('change', () => {
