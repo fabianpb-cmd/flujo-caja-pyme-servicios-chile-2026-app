@@ -28,6 +28,7 @@ use App\Services\PayablesService;
 use App\Services\PayrollService;
 use App\Services\ProjectCommitmentService;
 use App\Services\SalesPrefacturationService;
+use App\Services\SalesDocumentService;
 use App\Services\ReceivablesService;
 use App\Services\TimeEntryPeriodService;
 use App\Support\MassAssignment;
@@ -64,6 +65,7 @@ class OperationalCrudController extends Controller
         private readonly AuditService $audit,
         private readonly FinancialDocumentGuard $financialDocuments,
         private readonly BillingStrategyService $billingStrategies,
+        private readonly SalesDocumentService $salesDocuments,
     ) {
     }
 
@@ -400,6 +402,20 @@ class OperationalCrudController extends Controller
             ->with('status', 'Remuneración confirmada.');
     }
 
+    public function confirmSalesDocument(Request $request, string $resource, int $record): RedirectResponse
+    {
+        abort_unless($resource === 'sales-documents', 404);
+        $config = $this->config($resource);
+        $item = SalesDocument::query()->where('company_id', $request->user()->company_id)->findOrFail($record);
+        $this->authorizeResource($request, $config, 'update', $item);
+        try {
+            $this->salesDocuments->confirm($item, $request->user());
+        } catch (DomainException $exception) {
+            return back()->withErrors(['sales_document_confirmation' => $exception->getMessage()]);
+        }
+        return redirect()->route('operational.show', [$resource, $item->id])->with('status', 'Factura emitida.');
+    }
+
     public function update(CrudResourceRequest $request, string $resource, int $record): RedirectResponse
     {
         $config = $this->config($resource);
@@ -468,6 +484,9 @@ class OperationalCrudController extends Controller
             $data = $this->prepareData($request, $resource, $validated);
         } catch (DomainException $exception) {
             return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+        }
+        if ($resource === 'sales-documents') {
+            unset($data['status']);
         }
         if ($this->codeMeta($config['model'])['auto']) {
             unset($data['code']);

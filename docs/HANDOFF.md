@@ -251,6 +251,14 @@ Validación:
 
 Estado: **FIX CSP VALIDADO LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.
 
+## Confirmación explícita de facturas — patch local
+
+Hallazgo: la edición genérica podía forzar implícitamente `Borrador -> Pendiente`. Se implementó `POST operational.sales-documents.confirm` (`/{record}/emitir`) con `SalesDocumentService::confirm()`, transacción, lock, validación de tipo/número/fecha, auditoría y transición exclusiva `Borrador -> Pendiente`. El update genérico conserva el status actual y el detalle muestra `Emitir factura` solo para borradores no anulados.
+
+Validación: `SalesDocumentConfirmationTest` — 4 tests / 14 assertions — PASS; sin migraciones ni SQL. Producción aún no contiene este fix; `ING-000007` y Hito 2 permanecen intactos. Push y deploy pendientes.
+
+Cobertura ampliada de confirmación de facturas: preservación de IVA, vencimientos, proyección, origen, snapshot y hito; ausencia de vínculos HH; edición de documentos Pendiente; y bloqueo por movimiento de caja `posted`. `SalesDocumentConfirmationTest` queda en 6 tests / 26 assertions — PASS. Sin migraciones ni SQL; producción aún no contiene este fix.
+
 ## Deploy CSP + smoke productivo final — 2026-09-07
 
 Commit funcional desplegado: `95fb757a10e814ae41457fd26d1dac0edcec851a` — `fix: apply csp nonce to billing plan script`.

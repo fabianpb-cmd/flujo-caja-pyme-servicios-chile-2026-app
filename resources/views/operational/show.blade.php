@@ -46,6 +46,12 @@
                 <button type="submit" class="btn btn-success">Confirmar</button>
             </form>
         @endif
+        @if ($resource === 'sales-documents' && $item instanceof \App\Models\SalesDocument && $item->status === 'Borrador' && ! $item->is_voided)
+            <form method="POST" action="{{ route('operational.sales-documents.confirm', [$resource, $item->id]) }}" class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-success">Emitir factura</button>
+            </form>
+        @endif
         @if (blank($timeEntryUpdateBlockedMessage))
             <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
         @endif

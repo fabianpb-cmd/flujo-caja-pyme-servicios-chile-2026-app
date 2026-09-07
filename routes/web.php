@@ -93,6 +93,7 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->prefix('operacion/
     Route::post('/period-preview', 'timeEntryPeriodPreview')->name('time-entry-period-preview');
     Route::post('/', 'store')->name('store');
     Route::post('/{record}/confirmar', 'confirmPayrollRecord')->name('confirm');
+    Route::post('/{record}/emitir', 'confirmSalesDocument')->name('sales-documents.confirm');
     Route::get('/{record}', 'show')->name('show');
     Route::get('/{record}/editar', 'edit')->name('edit');
     Route::put('/{record}', 'update')->name('update');
