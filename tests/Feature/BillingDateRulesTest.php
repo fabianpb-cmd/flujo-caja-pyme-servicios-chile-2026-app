@@ -61,6 +61,24 @@ class BillingDateRulesTest extends TestCase
         app(\App\Services\BillingStrategyService::class)->validateProject($this->closedProject, [['sequence' => 1, 'name' => 'Uno', 'percentage' => 50, 'planned_invoice_date' => '2026-09-10'], ['sequence' => 2, 'name' => 'Dos', 'percentage' => 50, 'planned_invoice_date' => '2026-09-09']]);
     }
 
+    public function test_planned_dates_accept_physical_payload_order_when_sequence_is_chronological(): void
+    {
+        $this->assertSame('CLOSED_PROJECT', app(\App\Services\BillingStrategyService::class)->validateProject($this->closedProject, [
+            ['sequence' => 2, 'name' => 'Dos', 'percentage' => 50, 'planned_invoice_date' => '2026-09-20'],
+            ['sequence' => 1, 'name' => 'Uno', 'percentage' => 50, 'planned_invoice_date' => '2026-09-10'],
+        ]));
+    }
+
+    public function test_planned_dates_reject_physical_payload_order_when_sequence_is_not_chronological(): void
+    {
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('orden cronológico');
+        app(\App\Services\BillingStrategyService::class)->validateProject($this->closedProject, [
+            ['sequence' => 2, 'name' => 'Dos', 'percentage' => 50, 'planned_invoice_date' => '2026-09-05'],
+            ['sequence' => 1, 'name' => 'Uno', 'percentage' => 50, 'planned_invoice_date' => '2026-09-10'],
+        ]);
+    }
+
     public function test_milestone_issue_date_cannot_be_future(): void
     {
         $milestone = $this->milestone(1, 100, '2026-09-01');

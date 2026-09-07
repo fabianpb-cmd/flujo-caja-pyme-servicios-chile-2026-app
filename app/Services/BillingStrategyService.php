@@ -62,7 +62,8 @@ class BillingStrategyService
         $total = 0.0;
         $sequences = [];
         $previousPlannedDate = null;
-        foreach ($milestones as $milestone) {
+        $chronologicalMilestones = collect($milestones)->sortBy(fn (array $milestone): int => (int) ($milestone['sequence'] ?? 0));
+        foreach ($chronologicalMilestones as $milestone) {
             $sequence = (int) ($milestone['sequence'] ?? 0);
             $percentage = (float) ($milestone['percentage'] ?? 0);
             if ($sequence <= 0 || in_array($sequence, $sequences, true) || trim((string) ($milestone['name'] ?? '')) === '' || $percentage <= 0) {

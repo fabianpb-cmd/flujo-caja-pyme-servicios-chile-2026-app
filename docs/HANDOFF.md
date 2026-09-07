@@ -197,3 +197,21 @@ Hallazgo: `BillingStrategyService::validateProject()` comprueba la cronología d
 El set `BillingDateRulesTest` actual no cubre explícitamente payloads con filas desordenadas por `sequence`.
 
 Estado: **NO DESPLEGAR `f0096a7` TODAVÍA**. Corrección mínima requerida: validar fechas sobre una copia de los hitos ordenada por `sequence` y agregar tests focalizados que cubran (a) payload desordenado pero cronología válida por secuencia => PASS y (b) payload desordenado con cronología inválida por secuencia => rechazo controlado. No repetir suite completa; ejecutar solo `BillingDateRulesTest`, y por seguridad `ProjectBillingMilestoneServiceTest` si cambia la validación compartida. Sin migraciones.
+## Corrección orden cronológico de hitos — 2026-09-06
+
+Corregido el bloqueador detectado en BillingStrategyService::validateProject().
+
+La cronología de planned_invoice_date ahora se valida según sequence, independientemente del orden físico de las filas recibidas.
+
+Cobertura agregada:
+- payload desordenado con cronología válida por sequence: PASS;
+- payload desordenado con cronología inválida por sequence: rechazo controlado.
+
+Validación:
+- BillingDateRulesTest: 15 tests / 25 assertions — PASS.
+- ProjectBillingMilestoneServiceTest: 7 tests / 22 assertions — PASS.
+- git diff --check: PASS.
+- Sin migraciones nuevas.
+- Producción todavía NO contiene este patch.
+
+Estado: **BLOQUEADOR DE ORDEN DE FECHAS CORREGIDO / PUSH Y DEPLOY PENDIENTES**.
