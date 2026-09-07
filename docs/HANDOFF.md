@@ -379,3 +379,27 @@ Validación focalizada:
 - Hito 2 no tocado.
 
 Estado: **UX EMISIÓN CON N° DOCUMENTO VALIDADA LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.
+
+## Cierre productivo UX emisión de factura — 2026-09-07
+
+Commit funcional desplegado:
+`b35314be942610d45ec0bafc6b999ce366081035` — `fix: collect invoice number during confirmation`.
+
+Upload manual confirmado de:
+- `app/Http/Controllers/OperationalCrudController.php`
+- `app/Services/SalesDocumentService.php`
+- `resources/views/operational/show.blade.php`
+
+Smoke productivo sobre `ING-000007`:
+- campo N° documento visible junto a Emitir factura: PASS;
+- emisión sin número fue rechazada y mantuvo Borrador: PASS;
+- número QA utilizado: `QA-0001`;
+- emisión con número: PASS;
+- estado `Borrador -> Pendiente`: PASS;
+- tipo Factura preservado;
+- fechas y montos preservados;
+- botón Emitir factura desaparece después de confirmar.
+
+Sin migraciones ni SQL para este ajuste.
+
+Estado: **FLUJO DE EMISIÓN HITO 1 CERRADO / PASS**. Próximo paso: validar ciclo de cobro de `QA-0001` antes de emitir Hito 2.
