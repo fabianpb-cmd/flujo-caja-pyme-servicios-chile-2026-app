@@ -16,6 +16,7 @@ use App\Models\SalesDocument;
 use App\Models\TimeEntry;
 use App\Models\UfValue;
 use App\Models\LegalParameter;
+use App\Models\User;
 use App\Services\ProjectBillingMilestoneService;
 use App\Services\SalesPrefacturationService;
 use DomainException;
@@ -30,11 +31,13 @@ class ProjectBillingMilestoneServiceTest extends TestCase
     private Project $project;
     private Currency $uf;
     private ProjectBillingMilestoneService $service;
+    private User $admin;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->company = Company::query()->create(['code' => 'CMP-MILESTONE', 'name' => 'Empresa Hitos', 'status' => 'active']);
+        $this->admin = User::query()->create(['company_id' => $this->company->id, 'name' => 'Admin Hitos', 'email' => 'milestone-'.$this->company->id.'@test.local', 'password' => 'password', 'role' => 'admin', 'active' => true]);
         $client = Client::query()->create(['company_id' => $this->company->id, 'code' => 'CLI-MILESTONE', 'legal_name' => 'Cliente Hitos']);
         $this->uf = Currency::query()->create(['company_id' => $this->company->id, 'code' => 'UF', 'name' => 'Unidad de fomento', 'symbol' => 'UF', 'minor_units' => 2, 'active' => true]);
         $contract = ContractType::query()->create(['company_id' => $this->company->id, 'domain' => 'commercial', 'code' => 'PROYECTO_CERRADO', 'name' => 'Proyecto cerrado', 'active' => true]);
@@ -109,6 +112,7 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $fresh = $document->fresh();
 
         $this->assertSame('Borrador', $fresh->status);
+        $this->assertNull($fresh->document_number);
         $this->assertSame($second->id, $fresh->project_billing_milestone_id);
         $this->assertSame('PROJECT_MILESTONE', $fresh->billing_source);
         $this->assertSame($this->project->id, $fresh->project_id);
@@ -128,6 +132,8 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $this->assertSame(0, \App\Models\TimeEntry::query()->count());
         $this->assertSame(0, \App\Models\CashMovement::query()->count());
         $this->assertNull($this->project->refresh()->billing_status_id);
+        $this->actingAs($this->admin)->get(route('operational.show', ['sales-documents', $fresh->id]))
+            ->assertOk()->assertSee('Borrador')->assertSee($fresh->code);
     }
 
     public function test_issue_fails_without_active_sales_invoice_document_type(): void

@@ -444,3 +444,7 @@ Tests ejecutados: CashMovementSourceDocumentSelectorTest::test_cash_movements_us
 ## Cobertura automatizada Hito 2 - 2026-09-07
 
 Se agregó `ProjectBillingMilestoneServiceTest::test_issue_hito_two_uses_its_contractual_amount_and_preserves_plan_integrity`. La prueba construye un proyecto cerrado UF 180 con hitos 30/40/30, emite exclusivamente el Hito 2, valida UF 72 a CLP 3.600.000 usando UF 50.000 de la issue_date 2026-09-02, IVA 19 %, total CLP 4.284.000, due/projected 2026-10-02, estado Borrador, trazabilidad y ausencia de documentos/Hito 1/Hito 3, HH links, CashMovements y cambios en billing_status_id. Resultado: 1 test / 20 assertions PASS. Hito 2 productivo todavía no emitido; sin SQL ni migraciones.
+
+## Validación generación borrador Hito 2 - 2026-09-07
+
+Se amplió `ProjectBillingMilestoneServiceTest::test_issue_hito_two_uses_its_contractual_amount_and_preserves_plan_integrity` con validación HTTP del detalle del SalesDocument generado. Confirma estado Borrador, document_number NULL permitido y visible en detalle, manteniendo issue/due/projected dates, trazabilidad del Hito 2, aislamiento de Hitos 1/3, ausencia de HH/CashMovements y billing_status_id. Resultado: 1 test / 24 assertions PASS. Sin producción, SQL ni migraciones; Hito 2 productivo sigue sin emitir.
