@@ -337,3 +337,26 @@ VerificaciÃ³n final de trazabilidad:
 ConclusiÃ³n: la emisiÃ³n del Hito 1 de `Alerta MatrÃ­culas` quedÃ³ correctamente vinculada al hito, con tipo documental catalogado, fechas/montos correctos y sin consumir HH. La correcciÃ³n de cÃ³digo evita que nuevas facturas por hito queden sin `document_type_id`.
 
 Estado: **SMOKE PRODUCTIVO HITO 1 CERRADO / PASS**. No emitir Hito 2 ni registrar cobros/estados adicionales sin una validaciÃ³n funcional separada. Antes de cualquier nuevo cambio local ejecutar `git fetch origin` y rebasear sobre `origin/main` si corresponde, ya que este checkpoint documental se escribiÃ³ directamente en `main`.
+
+## Deploy confirmación explícita de facturas — 2026-09-07
+
+Commit funcional desplegado:
+`006ac05b3293575c2cb6b991fa86e41aae7bb9ba` — `fix: add explicit sales invoice confirmation`.
+
+Upload manual a producción confirmado de exactamente:
+- `app/Http/Controllers/OperationalCrudController.php`
+- `app/Services/SalesDocumentService.php`
+- `routes/web.php`
+- `resources/views/operational/show.blade.php`
+
+No se subieron tests ni documentación. Sin migraciones y sin SQL.
+
+La edición genérica de Facturas/Ingresos ya no transforma implícitamente `Borrador -> Pendiente`. La transición se realiza únicamente mediante la acción dedicada `Emitir factura`.
+
+Validación local previa:
+- `SalesDocumentConfirmationTest`: 6 tests / 26 assertions — PASS.
+- `git diff --check`: PASS.
+
+Producción contiene el código, pero todavía NO se ha ejecutado la nueva acción sobre `ING-000007`.
+
+Estado: **FIX CONFIRMACIÓN FACTURA DESPLEGADO / SMOKE PRODUCTIVO PENDIENTE**. Antes de emitir `ING-000007`, verificar visualmente botón, estado Borrador y completar de forma controlada el N° de documento. No emitir Hito 2.
