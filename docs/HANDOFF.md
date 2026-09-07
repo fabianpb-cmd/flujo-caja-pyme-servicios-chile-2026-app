@@ -187,3 +187,13 @@ Validación focalizada:
 - Producción todavía NO contiene este patch.
 
 Estado: **PATCH DE FECHAS VALIDADO LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.
+
+## Revisión estática post-push de fechas — BLOQUEADOR 2026-09-06
+
+Commit revisado en `main`: `f0096a74733a5b537cb45565c4d6126adb5b0c3a`.
+
+Hallazgo: `BillingStrategyService::validateProject()` comprueba la cronología de `planned_invoice_date` en el orden en que llegan las filas del formulario, no en el orden definido por `sequence`. Por lo tanto, un payload con filas fuera de orden puede aceptar un plan cronológicamente inválido por secuencia o rechazar uno válido. La regla autoritativa es que las fechas deben ser no decrecientes **al ordenar por `sequence`**, independientemente del orden físico de las filas enviadas.
+
+El set `BillingDateRulesTest` actual no cubre explícitamente payloads con filas desordenadas por `sequence`.
+
+Estado: **NO DESPLEGAR `f0096a7` TODAVÍA**. Corrección mínima requerida: validar fechas sobre una copia de los hitos ordenada por `sequence` y agregar tests focalizados que cubran (a) payload desordenado pero cronología válida por secuencia => PASS y (b) payload desordenado con cronología inválida por secuencia => rechazo controlado. No repetir suite completa; ejecutar solo `BillingDateRulesTest`, y por seguridad `ProjectBillingMilestoneServiceTest` si cambia la validación compartida. Sin migraciones.
