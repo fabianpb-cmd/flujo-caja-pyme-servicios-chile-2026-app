@@ -30,10 +30,10 @@ class CashMovementUxTest extends TestCase
 
         $response = $this->actingAs($admin)->get(route('operational.edit', ['resource' => 'cash-movements', 'record' => $movement->id]));
 
-        $response->assertOk()->assertSee('Fecha de cobro/pago')->assertSee('value="2.627.141,58"', false);
+        $response->assertOk()->assertSee('Fecha de cobro/pago')->assertSee('value="2.627.142"', false)->assertDontSee('2.627.141,58');
         $content = $response->getContent();
         $this->assertDoesNotMatchRegularExpression("/moneyInputs[\\s\\S]{0,300}addEventListener\\('focus'[\\s\\S]{0,150}normalizeLocalizedNumber\\(input\\.value\\)/", $content);
         $this->assertStringContainsString("input.value = normalizeLocalizedNumber(input.value);", $content);
-        $this->assertSame('2.627.141,58', \App\Support\UiFormatter::formatNumber(2627141.58));
+        $this->assertSame('2.627.142', \App\Support\UiFormatter::formatNumber(2627141.58, 0));
     }
 }

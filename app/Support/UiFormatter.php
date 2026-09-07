@@ -295,6 +295,11 @@ class UiFormatter
         return self::currencySpec($currency)['code'];
     }
 
+    public static function currencyMinorUnits(mixed $currency = 'CLP'): int
+    {
+        return self::currencySpec($currency)['minor_units'];
+    }
+
     private static function displayCurrency(object $item, array $definition): mixed
     {
         if (array_key_exists('currency', $definition)) {

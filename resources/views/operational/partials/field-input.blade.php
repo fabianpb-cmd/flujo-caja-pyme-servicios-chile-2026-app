@@ -30,8 +30,17 @@
         $renderedFieldInput = '<textarea id="'.e($field).'" name="'.e($field).'" class="form-control'.e($fieldErrorClass).'" rows="3">'.e($value).'</textarea>';
     } elseif ($type === 'money') {
         $inputValue = $rawNumericValue($value);
+        $moneyCurrency = $definition['currency'] ?? null;
+        if ($moneyCurrency === null && isset($definition['currency_relation'])) {
+            $moneyCurrency = data_get($item, $definition['currency_relation']);
+        }
+        if ($moneyCurrency === null && isset($definition['currency_field'])) {
+            $moneyCurrency = data_get($item, $definition['currency_field']);
+        }
+        $moneyCurrency ??= 'CLP';
+        $moneyMinorUnits = \App\Support\UiFormatter::currencyMinorUnits($moneyCurrency);
         $displayInputValue = $inputValue !== null && is_numeric($inputValue)
-            ? \App\Support\UiFormatter::formatNumber($inputValue)
+            ? \App\Support\UiFormatter::formatNumber($inputValue, $moneyMinorUnits)
             : ($value !== null ? (string) $value : '');
 
         $moneyCurrency = $definition['currency'] ?? null;
@@ -41,8 +50,6 @@
         if ($moneyCurrency === null && isset($definition['currency_field'])) {
             $moneyCurrency = data_get($item, $definition['currency_field']);
         }
-        $moneyCurrency ??= 'CLP';
-
         $moneyCurrencyCode = \App\Support\UiFormatter::currencyCode($moneyCurrency);
         $moneyCurrencySymbol = $moneyCurrency instanceof \App\Models\Currency
             ? ($moneyCurrency->symbol ?: $moneyCurrencyCode)
@@ -54,13 +61,15 @@
                 default => $moneyCurrencyCode,
             };
 
-        $renderedFieldInput = '<div class="input-group"><span class="input-group-text" data-money-currency-prefix="true">'.e($moneyCurrencySymbol).'</span><input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-money-input="true" data-money-currency-code="'.e($moneyCurrencyCode).'" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'"></div>';
+        $renderedFieldInput = '<div class="input-group"><span class="input-group-text" data-money-currency-prefix="true">'.e($moneyCurrencySymbol).'</span><input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-money-input="true" data-money-currency-code="'.e($moneyCurrencyCode).'" data-money-minor-units="'.e($moneyMinorUnits).'" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'"></div>';
     } elseif (($definition['presentation'] ?? null) === 'percent') {
         $inputValue = $rawNumericValue($value);
+        $nullPercentDefault = $value === null && $resource === 'sales-documents' && $field === 'payment_probability';
         $displayInputValue = $inputValue !== null && is_numeric($inputValue)
             ? \App\Support\UiFormatter::formatNumber(((float) $inputValue) * 100)
-            : ($value !== null ? (string) $value : '');
-        $renderedFieldInput = '<div class="input-group"><input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-percent-input="true" class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'"><span class="input-group-text">%</span></div>';
+            : ($nullPercentDefault ? '100' : ($value !== null ? (string) $value : ''));
+        $nullPercentAttribute = $nullPercentDefault ? ' data-percent-null-default="true"' : '';
+        $renderedFieldInput = '<div class="input-group"><input id="'.e($field).'" name="'.e($field).'" type="text" inputmode="decimal" autocomplete="off" data-percent-input="true"'.$nullPercentAttribute.' class="form-control'.e($fieldErrorClass).'" value="'.e($displayInputValue).'"><span class="input-group-text">%</span></div>';
     } elseif ($type === 'select') {
         $optionsHtml = '<option value="">Seleccione</option>';
         foreach (($options[$field] ?? ($definition['options'] ?? [])) as $key => $option) {
@@ -181,13 +190,15 @@
                     return (negative ? '-' : '') + normalized;
                 };
 
-                const formatLocalizedNumber = (value) => {
+                const formatLocalizedNumber = (value, minorUnits = null) => {
                     const normalized = normalizeLocalizedNumber(value);
                     if (normalized === '' || Number.isNaN(Number(normalized))) {
                         return value;
                     }
 
-                    const decimals = normalized.includes('.')
+                    const decimals = minorUnits !== null
+                        ? Number(minorUnits)
+                        : normalized.includes('.')
                         ? Math.min(normalized.split('.')[1].length, 2)
                         : 0;
 
@@ -198,15 +209,17 @@
                 };
 
                 moneyInputs.forEach((input) => {
+                    const minorUnits = Number(input.dataset.moneyMinorUnits ?? 2);
                     input.addEventListener('focus', () => {
-                        input.value = formatLocalizedNumber(input.value);
+                        input.value = formatLocalizedNumber(input.value, minorUnits);
                     });
                     input.addEventListener('blur', () => {
-                        input.value = formatLocalizedNumber(input.value);
+                        input.value = formatLocalizedNumber(input.value, minorUnits);
                     });
                 });
 
                 percentInputs.forEach((input) => {
+                    input.addEventListener('input', () => input.removeAttribute('data-percent-null-default'));
                     input.addEventListener('focus', () => {
                         input.value = normalizeLocalizedNumber(input.value);
                     });
@@ -218,9 +231,12 @@
                 document.querySelectorAll('form').forEach((form) => {
                     form.addEventListener('submit', () => {
                         form.querySelectorAll('[data-money-input="true"]').forEach((input) => {
-                            input.value = normalizeLocalizedNumber(input.value);
+                            const normalized = normalizeLocalizedNumber(input.value);
+                            const minorUnits = Number(input.dataset.moneyMinorUnits ?? 2);
+                            input.value = normalized === '' ? normalized : Number(normalized).toFixed(minorUnits).replace(/\.?0+$/, '');
                         });
                         form.querySelectorAll('[data-percent-input="true"]').forEach((input) => {
+                            if (input.dataset.percentNullDefault === 'true') return;
                             const normalized = normalizeLocalizedNumber(input.value);
                             input.value = normalized === '' || Number.isNaN(Number(normalized))
                                 ? normalized

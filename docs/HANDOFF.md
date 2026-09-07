@@ -411,3 +411,7 @@ Se corrigió la etiqueta Fecha de cobro/pago en Movimientos de caja, el formateo
 ## Revisión post-push: money inputs localizados - 2026-09-07
 
 La revisión detectó que el evento focus todavía mostraba los montos en formato crudo (2627141.58) aunque el valor inicial y el blur estaban localizados. Se corrigió únicamente el componente money genérico para conservar formato es-CL en focus y blur, manteniendo la normalización numérica al enviar el formulario. CashMovementUxTest: 1 test / 6 assertions PASS; git diff --check PASS. Sin migraciones ni SQL. Producción todavía NO contiene esta corrección.
+
+## UX moneda y probabilidad - patch local 2026-09-07
+
+La revisión confirmó que payment_probability NULL seguía vacío en edición y que el componente money no respetaba minor_units. El componente ahora presenta CLP con 0 decimales y otras monedas según minor_units, manteniendo normalización numérica al submit. En sales-documents, NULL se muestra como 100 % mediante un valor visual no persistible si no se modifica. CashMovementUxTest: 1 test / 7 assertions PASS; SalesDocumentConfirmationTest: 8 tests / 32 assertions PASS; git diff --check PASS. Sin migraciones ni SQL. Producción todavía NO contiene este ajuste.
