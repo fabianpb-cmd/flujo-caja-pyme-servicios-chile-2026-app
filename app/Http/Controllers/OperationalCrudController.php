@@ -409,7 +409,7 @@ class OperationalCrudController extends Controller
         $item = SalesDocument::query()->where('company_id', $request->user()->company_id)->findOrFail($record);
         $this->authorizeResource($request, $config, 'update', $item);
         try {
-            $this->salesDocuments->confirm($item, $request->user());
+            $this->salesDocuments->confirm($item, $request->user(), $request->has('document_number') ? $request->input('document_number') : null);
         } catch (DomainException $exception) {
             return back()->withErrors(['sales_document_confirmation' => $exception->getMessage()]);
         }

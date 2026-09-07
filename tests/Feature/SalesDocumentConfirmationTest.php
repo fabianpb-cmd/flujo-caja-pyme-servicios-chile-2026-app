@@ -40,13 +40,30 @@ class SalesDocumentConfirmationTest extends TestCase
         $this->actingAs($this->admin)->put(route('operational.update', ['sales-documents', $document->id]), $payload)->assertRedirect();
         $this->assertSame('Borrador', $document->fresh()->status);
 
-        $response = $this->actingAs($this->admin)->post(route('operational.sales-documents.confirm', ['sales-documents', $document->id]));
+        $response = $this->actingAs($this->admin)->post(route('operational.sales-documents.confirm', ['sales-documents', $document->id]), ['document_number' => 'F-100']);
         $response->assertRedirect(route('operational.show', ['sales-documents', $document->id]));
         $confirmed = $document->fresh();
         $this->assertSame('Pendiente', $confirmed->status);
         $this->assertSame(1000.0, (float) $confirmed->net_amount);
         $this->assertSame(1190.0, (float) $confirmed->gross_amount);
         $this->assertDatabaseHas('audit_logs', ['action' => 'sales_document.confirmed', 'auditable_id' => $document->id]);
+    }
+
+    public function test_confirmation_uses_existing_number_when_request_omits_it_and_rejects_blank_number(): void
+    {
+        $existing = $this->draft(['document_number' => 'F-EXISTING']);
+        app(SalesDocumentService::class)->confirm($existing, $this->admin);
+        $this->assertSame('F-EXISTING', $existing->fresh()->document_number);
+
+        $blank = $this->draft(['document_number' => null]);
+        try {
+            app(SalesDocumentService::class)->confirm($blank, $this->admin, '  ');
+            $this->fail('El número vacío debía ser rechazado.');
+        } catch (DomainException $exception) {
+            $this->assertStringContainsString('número', $exception->getMessage());
+        }
+        $this->assertSame('Borrador', $blank->fresh()->status);
+        $this->assertNull($blank->fresh()->document_number);
     }
 
     public function test_confirmation_requires_required_fields_and_only_accepts_draft(): void

@@ -360,3 +360,22 @@ Validación local previa:
 Producción contiene el código, pero todavía NO se ha ejecutado la nueva acción sobre `ING-000007`.
 
 Estado: **FIX CONFIRMACIÓN FACTURA DESPLEGADO / SMOKE PRODUCTIVO PENDIENTE**. Antes de emitir `ING-000007`, verificar visualmente botón, estado Borrador y completar de forma controlada el N° de documento. No emitir Hito 2.
+
+## UX emisión con N° documento — validación local 2026-09-07
+
+Se corrigió la UX de confirmación de Facturas/Ingresos para permitir ingresar o reutilizar `document_number` directamente en el flujo dedicado de `Emitir factura`, sin pasar por la edición genérica.
+
+La operación guarda `document_number` y realiza la transición `Borrador -> Pendiente` dentro de la misma transacción y bajo lock. Si falla una validación, no se persiste el número ni cambia el estado.
+
+Se preservan montos, IVA, fechas, billing_source, billing_snapshot, vínculo al hito y ausencia de vínculos HH.
+
+Validación focalizada:
+- `SalesDocumentConfirmationTest`: 7 tests / 30 assertions — PASS.
+- `git diff --check`: PASS.
+- Sin migraciones.
+- Sin SQL.
+- Producción todavía NO contiene este ajuste UX.
+- `ING-000007` permanece en Borrador en producción.
+- Hito 2 no tocado.
+
+Estado: **UX EMISIÓN CON N° DOCUMENTO VALIDADA LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.

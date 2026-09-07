@@ -49,6 +49,8 @@
         @if ($resource === 'sales-documents' && $item instanceof \App\Models\SalesDocument && $item->status === 'Borrador' && ! $item->is_voided)
             <form method="POST" action="{{ route('operational.sales-documents.confirm', [$resource, $item->id]) }}" class="d-inline">
                 @csrf
+                <label class="visually-hidden" for="sales-document-number">N° documento</label>
+                <input id="sales-document-number" class="form-control form-control-sm d-inline-block" style="width: 10rem" type="text" name="document_number" value="{{ $item->document_number ?? '' }}" placeholder="N° documento">
                 <button type="submit" class="btn btn-success">Emitir factura</button>
             </form>
         @endif
