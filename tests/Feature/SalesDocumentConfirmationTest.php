@@ -11,6 +11,7 @@ use App\Models\ContractType;
 use App\Models\Project;
 use App\Models\ProjectBillingMilestone;
 use App\Models\SalesDocument;
+use App\Models\LegalParameter;
 use App\Models\User;
 use App\Services\SalesDocumentService;
 use DomainException;
@@ -31,6 +32,7 @@ class SalesDocumentConfirmationTest extends TestCase
         $this->company = Company::query()->create(['code' => 'CMP-CONFIRM', 'name' => 'Empresa confirmación', 'status' => 'active']);
         $this->admin = User::query()->create(['company_id' => $this->company->id, 'name' => 'Admin', 'email' => 'confirm-'.$this->company->id.'@test.local', 'password' => 'password', 'role' => 'admin', 'active' => true]);
         $this->type = DocumentType::query()->create(['company_id' => $this->company->id, 'domain' => 'sales', 'code' => 'FACTURA', 'name' => 'Factura', 'active' => true]);
+        LegalParameter::query()->create(['company_id' => $this->company->id, 'parameter_code' => 'IVA', 'parameter_name' => 'IVA', 'valid_from' => '2026-01-01', 'value' => 0.19, 'unit' => '%', 'active' => true]);
     }
 
     public function test_generic_edit_preserves_draft_and_dedicated_confirmation_emits_without_recalculating(): void
@@ -114,6 +116,57 @@ class SalesDocumentConfirmationTest extends TestCase
         $document = $this->draft(['payment_probability' => null]);
         $this->actingAs($this->admin)->get(route('operational.show', ['sales-documents', $document->id]))
             ->assertOk()->assertSee('100 %');
+    }
+
+    public function test_edit_shows_null_probability_as_100_without_submitting_it(): void
+    {
+        $document = $this->draft(['payment_probability' => null]);
+
+        $this->actingAs($this->admin)
+            ->get(route('operational.edit', ['sales-documents', $document->id]))
+            ->assertOk()
+            ->assertSee('value="100"', false)
+            ->assertSee('data-percent-null-default="true"', false);
+
+        $this->actingAs($this->admin)->put(route('operational.update', ['sales-documents', $document->id]), [
+            'code' => $document->code,
+            'client_id' => $document->client_id,
+            'document_type_id' => $this->type->id,
+            'document_number' => $document->document_number,
+            'issue_date' => '2026-09-07',
+            'net_amount' => 1000,
+            'is_voided' => 0,
+        ])->assertRedirect();
+
+        $this->assertNull($document->fresh()->payment_probability);
+    }
+
+    public function test_editing_null_probability_explicitly_to_75_percent_persists_fraction(): void
+    {
+        $document = $this->draft(['payment_probability' => null]);
+
+        $this->actingAs($this->admin)->put(route('operational.update', ['sales-documents', $document->id]), [
+            'code' => $document->code,
+            'client_id' => $document->client_id,
+            'document_type_id' => $this->type->id,
+            'document_number' => $document->document_number,
+            'issue_date' => '2026-09-07',
+            'net_amount' => 1000,
+            'payment_probability' => 0.75,
+            'is_voided' => 0,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(0.75, (float) $document->fresh()->payment_probability);
+    }
+
+    public function test_edit_preserves_existing_probability_display(): void
+    {
+        $document = $this->draft(['payment_probability' => 0.75]);
+
+        $this->actingAs($this->admin)
+            ->get(route('operational.edit', ['sales-documents', $document->id]))
+            ->assertOk()
+            ->assertSee('value="75"', false);
     }
 
     public function test_confirmation_requires_type_and_issue_date_and_rejects_voided_documents(): void

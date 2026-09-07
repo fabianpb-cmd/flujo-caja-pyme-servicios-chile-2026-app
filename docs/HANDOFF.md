@@ -415,3 +415,7 @@ La revisión detectó que el evento focus todavía mostraba los montos en format
 ## UX moneda y probabilidad - patch local 2026-09-07
 
 La revisión confirmó que payment_probability NULL seguía vacío en edición y que el componente money no respetaba minor_units. El componente ahora presenta CLP con 0 decimales y otras monedas según minor_units, manteniendo normalización numérica al submit. En sales-documents, NULL se muestra como 100 % mediante un valor visual no persistible si no se modifica. CashMovementUxTest: 1 test / 7 assertions PASS; SalesDocumentConfirmationTest: 8 tests / 32 assertions PASS; git diff --check PASS. Sin migraciones ni SQL. Producción todavía NO contiene este ajuste.
+
+## Preservación de probabilidad NULL en edición - 2026-09-07
+
+Se corrigió el bloqueador por el que payment_probability NULL se mostraba como 100 pero se enviaba al backend como 100. El input visual se excluye del submit mientras no sea modificado y recupera su nombre al editarlo; así NULL permanece NULL y un valor explícito como 0.75 se conserva. También se evitó refrescar estados de SalesDocument en Borrador durante una edición genérica, necesario para completar el flujo sin convertirlo implícitamente a Pendiente. SalesDocumentConfirmationTest: 11 tests / 42 assertions PASS; sin migraciones ni SQL; producción todavía NO contiene este ajuste.

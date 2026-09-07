@@ -219,7 +219,10 @@
                 });
 
                 percentInputs.forEach((input) => {
-                    input.addEventListener('input', () => input.removeAttribute('data-percent-null-default'));
+                    input.addEventListener('input', () => {
+                        input.removeAttribute('data-percent-null-default');
+                        input.setAttribute('name', input.id);
+                    });
                     input.addEventListener('focus', () => {
                         input.value = normalizeLocalizedNumber(input.value);
                     });
@@ -236,7 +239,10 @@
                             input.value = normalized === '' ? normalized : Number(normalized).toFixed(minorUnits).replace(/\.?0+$/, '');
                         });
                         form.querySelectorAll('[data-percent-input="true"]').forEach((input) => {
-                            if (input.dataset.percentNullDefault === 'true') return;
+                            if (input.dataset.percentNullDefault === 'true') {
+                                input.removeAttribute('name');
+                                return;
+                            }
                             const normalized = normalizeLocalizedNumber(input.value);
                             input.value = normalized === '' || Number.isNaN(Number(normalized))
                                 ? normalized

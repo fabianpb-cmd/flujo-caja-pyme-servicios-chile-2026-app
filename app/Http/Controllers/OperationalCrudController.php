@@ -845,6 +845,10 @@ class OperationalCrudController extends Controller
     private function refreshDerivedState(object $model): void
     {
         if ($model instanceof SalesDocument) {
+            if ($model->status === 'Borrador') {
+                return;
+            }
+
             $this->receivables->refreshDocumentState($model);
         }
 
