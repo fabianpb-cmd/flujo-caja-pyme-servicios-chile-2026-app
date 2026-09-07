@@ -440,3 +440,7 @@ El ciclo SalesDocument Pendiente -> Parcial -> Pagado queda cubierto y PASS por 
 billing_status_id de Project no se deriva automáticamente de hitos, SalesDocument ni CashMovement. El catálogo domain=billing contiene Pendiente, Parcial y Pagado, pero el campo se mantiene por CRUD/sincronización de catálogo/importación. No se implementó cambio: para un proyecto cerrado 30/40/30, el estado de cobranza de Hito 1 no debe marcar el proyecto completo como Pagado; se recomienda definir posteriormente una semántica agregada de plan facturado separada de cobranza antes de emitir Hito 2. Hito 2 sigue sin tocarse.
 
 Tests ejecutados: CashMovementSourceDocumentSelectorTest::test_cash_movements_use_functional_codes_allow_partial_and_total_payments_and_validate_invalid_documents, 1 test / 15 assertions PASS; git diff --check PASS. Sin cambios funcionales, migraciones ni SQL.
+
+## Cobertura automatizada Hito 2 - 2026-09-07
+
+Se agregó `ProjectBillingMilestoneServiceTest::test_issue_hito_two_uses_its_contractual_amount_and_preserves_plan_integrity`. La prueba construye un proyecto cerrado UF 180 con hitos 30/40/30, emite exclusivamente el Hito 2, valida UF 72 a CLP 3.600.000 usando UF 50.000 de la issue_date 2026-09-02, IVA 19 %, total CLP 4.284.000, due/projected 2026-10-02, estado Borrador, trazabilidad y ausencia de documentos/Hito 1/Hito 3, HH links, CashMovements y cambios en billing_status_id. Resultado: 1 test / 20 assertions PASS. Hito 2 productivo todavía no emitido; sin SQL ni migraciones.

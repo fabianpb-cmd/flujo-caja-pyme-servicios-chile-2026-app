@@ -11,6 +11,7 @@ use App\Models\Currency;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\ProjectBillingMilestone;
+use App\Models\PaymentTerm;
 use App\Models\SalesDocument;
 use App\Models\TimeEntry;
 use App\Models\UfValue;
@@ -94,6 +95,39 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $document = $this->service->issue($this->milestone(1, 100), '2026-09-01', false);
 
         $this->assertSame($type->id, $document->document_type_id);
+    }
+
+    public function test_issue_hito_two_uses_its_contractual_amount_and_preserves_plan_integrity(): void
+    {
+        $term = PaymentTerm::query()->create(['company_id' => $this->company->id, 'code' => 'NET30-H2', 'name' => '30 días', 'days' => 30, 'active' => true]);
+        $this->project->update(['payment_term_id' => $term->id]);
+        $first = $this->service->save($this->project, ['sequence' => 1, 'name' => 'Inicio', 'percentage' => 30, 'planned_invoice_date' => '2026-08-05']);
+        $second = $this->service->save($this->project, ['sequence' => 2, 'name' => 'Avance', 'percentage' => 40, 'planned_invoice_date' => '2026-08-20']);
+        $third = $this->service->save($this->project, ['sequence' => 3, 'name' => 'Cierre', 'percentage' => 30, 'planned_invoice_date' => '2026-10-01']);
+
+        $document = $this->service->issue($second, '2026-09-02', true);
+        $fresh = $document->fresh();
+
+        $this->assertSame('Borrador', $fresh->status);
+        $this->assertSame($second->id, $fresh->project_billing_milestone_id);
+        $this->assertSame('PROJECT_MILESTONE', $fresh->billing_source);
+        $this->assertSame($this->project->id, $fresh->project_id);
+        $this->assertSame($this->project->client_id, $fresh->client_id);
+        $this->assertSame('Factura', $fresh->documentType->name);
+        $this->assertSame(72.0, (float) data_get($fresh->billing_snapshot, 'contractual_amount'));
+        $this->assertSame(3600000.0, (float) $fresh->net_amount);
+        $this->assertSame(0.19, (float) $fresh->vat_rate);
+        $this->assertSame(684000.0, (float) $fresh->vat_amount);
+        $this->assertSame(4284000.0, (float) $fresh->gross_amount);
+        $this->assertSame('2026-09-02', $fresh->issue_date->toDateString());
+        $this->assertSame('2026-10-02', $fresh->due_date->toDateString());
+        $this->assertSame('2026-10-02', $fresh->projected_collection_date->toDateString());
+        $this->assertSame(50000.0, (float) data_get($fresh->billing_snapshot, 'conversion.exchange_rate'));
+        $this->assertSame(0, SalesDocument::query()->whereIn('project_billing_milestone_id', [$first->id, $third->id])->count());
+        $this->assertSame(0, $fresh->timeEntryLinks()->count());
+        $this->assertSame(0, \App\Models\TimeEntry::query()->count());
+        $this->assertSame(0, \App\Models\CashMovement::query()->count());
+        $this->assertNull($this->project->refresh()->billing_status_id);
     }
 
     public function test_issue_fails_without_active_sales_invoice_document_type(): void
