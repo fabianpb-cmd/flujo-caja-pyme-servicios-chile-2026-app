@@ -288,6 +288,7 @@ La conversión observada equivale exactamente a UF 54,00 × `$40.883,00` por UF,
 **Nuevo hallazgo bloqueador antes de continuar:** `Tipo de documento` aparece vacío. La causa de código es consistente con una desalineación entre el campo legacy y el catálogo: `ProjectBillingMilestoneService::issue()` escribe `document_type = 'Factura hito'`, pero la ficha de Facturas/Ingresos muestra y exige `document_type_id`; el catálogo de ventas contiene `FACTURA` / `Factura`. La tabla conserva ambos campos (`document_type` y `document_type_id`).
 
 Estado: **BORRADOR ING-000007 CREADO / IMPORTES Y FECHAS PASS / TIPO DE DOCUMENTO CATALOGADO PENDIENTE**. No editar, cobrar, anular ni emitir otro hito hasta corregir y validar `document_type_id`. El vínculo al hito y la ausencia de consumo HH aún deben verificarse como parte del cierre de este smoke.
+
 ## Corrección tipo de documento en facturación por hito — 2026-09-07
 
 Se corrigió la emisión automática por hito para asignar el catálogo de ventas
@@ -304,3 +305,27 @@ Validación:
 - Producción todavía NO contiene esta corrección.
 
 Estado: **FIX DOCUMENT_TYPE VALIDADO LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.
+
+## Cierre productivo Hito 1 — 2026-09-07
+
+Commit funcional desplegado: `9a05d11d78434f00dd21297fa533b6174b645d67` — `fix: catalog milestone invoice document type`.
+
+Upload manual a producción confirmado de solo:
+- `app/Services/ProjectBillingMilestoneService.php`
+
+Corrección puntual de datos aplicada en `tdatcons_flujo_stg` sobre el borrador existente `ING-000007`:
+- `document_type_id` pasó de `NULL` a `1` (`FACTURA` / `Factura`);
+- exactamente 1 fila afectada;
+- `project_billing_milestone_id = 1`;
+- estado permanece `Borrador`;
+- neto `2207682.00`, IVA `419459.58`, total `2627141.58` sin cambios.
+
+Verificación final de trazabilidad:
+- `billing_source = PROJECT_MILESTONE`;
+- hito vinculado: secuencia `1`, nombre `hito 1`;
+- `linked_time_entries = 0`;
+- `linked_hours = 0.0000`.
+
+Conclusión: la emisión del Hito 1 de `Alerta Matrículas` quedó correctamente vinculada al hito, con tipo documental catalogado, fechas/montos correctos y sin consumir HH. La corrección de código evita que nuevas facturas por hito queden sin `document_type_id`.
+
+Estado: **SMOKE PRODUCTIVO HITO 1 CERRADO / PASS**. No emitir Hito 2 ni registrar cobros/estados adicionales sin una validación funcional separada. Antes de cualquier nuevo cambio local ejecutar `git fetch origin` y rebasear sobre `origin/main` si corresponde, ya que este checkpoint documental se escribió directamente en `main`.
