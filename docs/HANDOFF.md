@@ -403,3 +403,7 @@ Smoke productivo sobre `ING-000007`:
 Sin migraciones ni SQL para este ajuste.
 
 Estado: **FLUJO DE EMISI�N HITO 1 CERRADO / PASS**. Pr�ximo paso: validar ciclo de cobro de `QA-0001` antes de emitir Hito 2.
+
+## UX de cobros y pagos — patch local
+
+Se corrigió la etiqueta Fecha de cobro/pago en Movimientos de caja, el formateo humano de Ingreso/Egreso usa el componente monetario existente sin cambiar el valor numérico enviado, y Probabilidad NULL se muestra como 100 % solo en presentación, sin escribir 100 en BD. Tests: CashMovementUxTest + SalesDocumentConfirmationTest, 9 tests / 36 assertions PASS; git diff --check PASS. Sin migraciones ni SQL. Producción todavía NO contiene este ajuste; ING-000007 / QA-0001 quedó Pagado en producción y Hito 2 no fue tocado.

@@ -278,6 +278,7 @@
                     $resource === 'assignments' && $field === 'hourly_value' => $assignmentEffectiveHourlyDisplay ?: 'No configurado',
                     $resource === 'assignments' && $field === 'project_value' => $assignmentProjectValueDisplay,
                     $resource === 'time-entries' && $field === 'hourly_value' => filled($item->hourlyRateDisplayCurrency) && filled($item->hourly_value) ? \App\Support\UiFormatter::formatMoney($item->hourly_value, $item->hourlyRateDisplayCurrency).' / HH' : '—',
+                    $resource === 'sales-documents' && $field === 'payment_probability' => \App\Support\UiFormatter::formatPercent($item->payment_probability === null ? 1 : $item->payment_probability, 0),
                     default => \App\Support\UiFormatter::display($item, $field, $definition),
                 })
                 <dd class="col-sm-8 mb-0 {{ \App\Support\UiFormatter::isNumericField($field, $definition) ? 'text-sm-end amount-cell' : '' }}">

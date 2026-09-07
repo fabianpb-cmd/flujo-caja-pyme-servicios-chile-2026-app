@@ -109,6 +109,13 @@ class SalesDocumentConfirmationTest extends TestCase
         $this->assertSame(1000.0, (float) $pending->fresh()->net_amount);
     }
 
+    public function test_sales_document_show_displays_null_probability_as_full_probability(): void
+    {
+        $document = $this->draft(['payment_probability' => null]);
+        $this->actingAs($this->admin)->get(route('operational.show', ['sales-documents', $document->id]))
+            ->assertOk()->assertSee('100 %');
+    }
+
     public function test_confirmation_requires_type_and_issue_date_and_rejects_voided_documents(): void
     {
         foreach ([['document_type_id' => null, 'message' => 'tipo'], ['issue_date' => null, 'message' => 'fecha'], ['is_voided' => true, 'message' => 'anulada']] as $case) {

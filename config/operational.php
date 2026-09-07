@@ -410,7 +410,7 @@ return [
             'source_document_code' => ['label' => 'Codigo documento', 'type' => 'select', 'options' => [], 'depends_on' => 'source_document_type', 'source_document_selector' => true],
             'counterparty_name' => ['label' => 'Contraparte', 'type' => 'text'],
             'project_id' => ['label' => 'Proyecto', 'type' => 'relation', 'model' => Project::class, 'display' => 'name'],
-            'movement_date' => ['label' => 'Fecha', 'type' => 'date'],
+            'movement_date' => ['label' => 'Fecha de cobro/pago', 'type' => 'date'],
             'income' => ['label' => 'Ingreso', 'type' => 'money'],
             'expense' => ['label' => 'Egreso', 'type' => 'money'],
             'payment_method_id' => ['label' => 'Medio pago', 'type' => 'relation', 'model' => PaymentMethod::class, 'display' => 'name'],
