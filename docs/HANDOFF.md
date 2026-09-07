@@ -407,3 +407,7 @@ Estado: **FLUJO DE EMISI�N HITO 1 CERRADO / PASS**. Pr�ximo paso: validar ciclo 
 ## UX de cobros y pagos — patch local
 
 Se corrigió la etiqueta Fecha de cobro/pago en Movimientos de caja, el formateo humano de Ingreso/Egreso usa el componente monetario existente sin cambiar el valor numérico enviado, y Probabilidad NULL se muestra como 100 % solo en presentación, sin escribir 100 en BD. Tests: CashMovementUxTest + SalesDocumentConfirmationTest, 9 tests / 36 assertions PASS; git diff --check PASS. Sin migraciones ni SQL. Producción todavía NO contiene este ajuste; ING-000007 / QA-0001 quedó Pagado en producción y Hito 2 no fue tocado.
+
+## Revisión post-push: money inputs localizados - 2026-09-07
+
+La revisión detectó que el evento focus todavía mostraba los montos en formato crudo (2627141.58) aunque el valor inicial y el blur estaban localizados. Se corrigió únicamente el componente money genérico para conservar formato es-CL en focus y blur, manteniendo la normalización numérica al enviar el formulario. CashMovementUxTest: 1 test / 6 assertions PASS; git diff --check PASS. Sin migraciones ni SQL. Producción todavía NO contiene esta corrección.

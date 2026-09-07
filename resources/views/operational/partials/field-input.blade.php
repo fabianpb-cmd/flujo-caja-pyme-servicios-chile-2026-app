@@ -199,7 +199,7 @@
 
                 moneyInputs.forEach((input) => {
                     input.addEventListener('focus', () => {
-                        input.value = normalizeLocalizedNumber(input.value);
+                        input.value = formatLocalizedNumber(input.value);
                     });
                     input.addEventListener('blur', () => {
                         input.value = formatLocalizedNumber(input.value);
