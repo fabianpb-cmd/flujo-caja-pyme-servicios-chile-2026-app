@@ -230,3 +230,22 @@ Usuario confirmó upload manual a producción de exactamente estos 4 archivos:
 No se subieron tests ni documentación; no hay migraciones ni SQL para este patch. Producción queda con las reglas de fecha y orden cronológico desplegadas.
 
 Estado: **PATCH DE FECHAS SUBIDO / SMOKE PRODUCTIVO NO DESTRUCTIVO PENDIENTE**. No emitir facturas hasta completar este smoke. Verificar primero en `Alerta Matrículas`: (1) detalle muestra `Fecha prevista:` separada de fecha de emisión; (2) el input de emisión precarga la fecha actual; (3) al intentar guardar el plan existente con fechas cronológicamente inconsistentes se obtiene error controlado y no se persiste ningún cambio. Después corregir las fechas previstas usando el calendario comercial real, no fechas inventadas, antes de retomar la emisión controlada.
+## Corrección CSP resumen plan de facturación — 2026-09-07
+
+Smoke productivo posterior al patch de fechas:
+- detalle muestra Fecha prevista: separada de la fecha de emisión: PASS;
+- fecha de emisión precargada con la fecha actual: PASS;
+- plan visible de Alerta Matrículas: 05/08/2026, 20/08/2026, 01/10/2026, cronológicamente ordenado.
+
+Hallazgo UX:
+- Editar Proyecto mostraba Total programado: 0% y Pendiente: 100% pese a tener 30/40/30.
+- causa confirmada: el script de data-project-billing-plan no tenía nonce CSP y era bloqueado por el navegador.
+- corrección: agregar el nonce CSP al script específico del plan, sin cambiar su lógica.
+
+Validación:
+- ProjectBillingPlanHttpTest::test_billing_plan_percentage_script_has_csp_nonce: 1 test / 3 assertions — PASS.
+- git diff --check: PASS.
+- Sin migraciones.
+- Producción todavía NO contiene esta corrección CSP.
+
+Estado: **FIX CSP VALIDADO LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.

@@ -71,6 +71,18 @@ class ProjectBillingPlanHttpTest extends TestCase
         $this->assertSame(2, ProjectBillingMilestone::query()->where('project_id', $project->id)->count());
     }
 
+    public function test_billing_plan_percentage_script_has_csp_nonce(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-CSP'));
+
+        $response = $this->actingAs($admin)->get(route('operational.edit', ['projects', $project->id]));
+
+        $response->assertOk();
+        $response->assertSee('data-project-billing-plan', false);
+        $this->assertMatchesRegularExpression('/data-project-billing-plan[\s\S]*<script nonce="[^"]+"[\s\S]*syncPercentages/', $response->getContent());
+    }
+
     private function fixtures(): array
     {
         $company = Company::query()->create(['code' => 'CMP-HTTP-PLAN', 'name' => 'Empresa HTTP Plan', 'status' => 'active']);
