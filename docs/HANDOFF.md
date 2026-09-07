@@ -419,3 +419,16 @@ La revisión confirmó que payment_probability NULL seguía vacío en edición y
 ## Preservación de probabilidad NULL en edición - 2026-09-07
 
 Se corrigió el bloqueador por el que payment_probability NULL se mostraba como 100 pero se enviaba al backend como 100. El input visual se excluye del submit mientras no sea modificado y recupera su nombre al editarlo; así NULL permanece NULL y un valor explícito como 0.75 se conserva. También se evitó refrescar estados de SalesDocument en Borrador durante una edición genérica, necesario para completar el flujo sin convertirlo implícitamente a Pendiente. SalesDocumentConfirmationTest: 11 tests / 42 assertions PASS; sin migraciones ni SQL; producción todavía NO contiene este ajuste.
+
+## Cierre UX cobros, moneda y probabilidad - producción 2026-09-07
+
+Deploy productivo completado y smoke PASS sobre los ajustes acumulados hasta 74b85bf.
+
+Validado en producción:
+- Movimientos de caja muestra Fecha de cobro/pago.
+- Campos monetarios respetan la precisión de la moneda; CLP se presenta sin decimales.
+- payment_probability NULL se presenta como 100 %.
+- Guardar una factura sin modificar la probabilidad visual no altera el NULL persistido.
+- Sin migraciones ni SQL.
+
+Estado: **UX COBROS / MONEDA / PROBABILIDAD CERRADO EN PRODUCCIÓN / PASS**.
