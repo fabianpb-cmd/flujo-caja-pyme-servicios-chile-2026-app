@@ -230,6 +230,7 @@ Usuario confirmó upload manual a producción de exactamente estos 4 archivos:
 No se subieron tests ni documentación; no hay migraciones ni SQL para este patch. Producción queda con las reglas de fecha y orden cronológico desplegadas.
 
 Estado: **PATCH DE FECHAS SUBIDO / SMOKE PRODUCTIVO NO DESTRUCTIVO PENDIENTE**. No emitir facturas hasta completar este smoke. Verificar primero en `Alerta Matrículas`: (1) detalle muestra `Fecha prevista:` separada de fecha de emisión; (2) el input de emisión precarga la fecha actual; (3) al intentar guardar el plan existente con fechas cronológicamente inconsistentes se obtiene error controlado y no se persiste ningún cambio. Después corregir las fechas previstas usando el calendario comercial real, no fechas inventadas, antes de retomar la emisión controlada.
+
 ## Corrección CSP resumen plan de facturación — 2026-09-07
 
 Smoke productivo posterior al patch de fechas:
@@ -249,3 +250,18 @@ Validación:
 - Producción todavía NO contiene esta corrección CSP.
 
 Estado: **FIX CSP VALIDADO LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.
+
+## Deploy CSP + smoke productivo final — 2026-09-07
+
+Commit funcional desplegado: `95fb757a10e814ae41457fd26d1dac0edcec851a` — `fix: apply csp nonce to billing plan script`.
+
+Usuario confirmó upload manual a producción de solo:
+- `resources/views/operational/form.blade.php`
+
+Smoke productivo del resumen porcentual reportado **OK** después del upload. Quedan también confirmados los checks previos de fechas: `Fecha prevista` separada de emisión, fecha real precargada con la fecha actual y plan de `Alerta Matrículas` cronológicamente ordenado (`05/08/2026`, `20/08/2026`, `01/10/2026`).
+
+No hubo migraciones ni SQL. No se subieron tests ni documentación a producción.
+
+Estado: **PATCH DE FECHAS + FIX CSP DESPLEGADOS / SMOKE NO DESTRUCTIVO CERRADO PASS**.
+
+Próximo paso autorizado técnicamente: retomar una emisión controlada del Hito 1 de `Alerta Matrículas`. Al crear el borrador, verificar antes de avanzar que monto contractual, conversión a CLP, `issue_date`, `due_date`, `projected_collection_date`, IVA y vínculo al hito sean coherentes; confirmar además que no se consumieron HH por tratarse de `Proyecto cerrado`. No ejecutar acciones adicionales irreversibles sin validación.
