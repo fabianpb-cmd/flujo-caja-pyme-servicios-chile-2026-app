@@ -484,3 +484,13 @@ Reparación productiva ya realizada únicamente sobre `ING-000008` / `QA-0002`: 
 Auditoría histórica previa: `ING-000006` / documento 1, `billing_source=TIME_ENTRIES`, `project_billing_milestone_id=NULL`, issue_date 2026-09-03, net 306688.00, IVA histórico 58270.72, gross histórico 364958.72, collected 0, estado `Pendiente`. El snapshot ya contiene net=306688, IVA=58271, gross=364959. Existen 20 vínculos HH, 9.75 horas y subtotal_clp total 306688.
 
 Reparación planificada para `ING-000006`: modificar únicamente `vat_amount` y `gross_amount`; no tocar snapshot, HH, estado ni otros documentos. Este checkpoint es previo a esa reparación controlada.
+
+## Cierre final intervención productiva precisión CLP - 2026-09-09
+
+Causa raíz: los SalesDocument liquidados en CLP permitían centavos históricos en IVA/bruto por redondeo a 2 decimales, generando inconsistencias visuales y saldos residuales menores a $1. El fix `cd45034d15cd84e82d1fd8ccda349d6c971199b0` corrigió ReceivablesService para usar precisión CLP entera y ya está desplegado. No requiere migraciones.
+
+Reparación controlada `ING-000008` / `QA-0002`: `vat_amount` 559279.44 -> 559279.00 y `gross_amount` 3502855.44 -> 3502855.00; `collected_amount` 3502855.00 quedó sin cambio; `Parcial` -> `Pagado`; saldo final 0.00; UPDATE afectó exactamente 1 fila. `MOV-000011` e `ING-000007` no fueron modificados.
+
+Reparación controlada `ING-000006` (id 6, documento 1, TIME_ENTRIES, sin hito): snapshot correcto net=306688, IVA=58271, gross=364959; 20 vínculos HH, 9.75 horas aprobadas y subtotal_clp 306688. Se ajustó únicamente `vat_amount` 58270.72 -> 58271.00 y `gross_amount` 364958.72 -> 364959.00; net_amount 306688.00, collected_amount 0.00 y estado `Pendiente` permanecieron sin cambio. Snapshot y vínculos HH no fueron modificados. UPDATE afectó exactamente 1 fila.
+
+`ING-000007` se preservó: histórico pagado, gross y cobro coinciden exactamente y saldo real 0; no se modificó por ser consistente. Incidente de precisión CLP cerrado. Sin migraciones y sin cambios adicionales de código.
