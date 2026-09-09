@@ -494,3 +494,9 @@ Reparación controlada `ING-000008` / `QA-0002`: `vat_amount` 559279.44 -> 55927
 Reparación controlada `ING-000006` (id 6, documento 1, TIME_ENTRIES, sin hito): snapshot correcto net=306688, IVA=58271, gross=364959; 20 vínculos HH, 9.75 horas aprobadas y subtotal_clp 306688. Se ajustó únicamente `vat_amount` 58270.72 -> 58271.00 y `gross_amount` 364958.72 -> 364959.00; net_amount 306688.00, collected_amount 0.00 y estado `Pendiente` permanecieron sin cambio. Snapshot y vínculos HH no fueron modificados. UPDATE afectó exactamente 1 fila.
 
 `ING-000007` se preservó: histórico pagado, gross y cobro coinciden exactamente y saldo real 0; no se modificó por ser consistente. Incidente de precisión CLP cerrado. Sin migraciones y sin cambios adicionales de código.
+
+## Cobertura automatizada Hito 3 - 2026-09-09
+
+Se agrego `test_issue_hito_three_is_independent_and_can_be_confirmed_without_changing_prior_milestones` en `ProjectBillingMilestoneServiceTest`. La prueba construye localmente un proyecto cerrado UF 180 con plan 30/40/30, emite Hitos 1 y 2, emite de forma independiente el Hito 3 con fecha prevista 2026-10-01 y emision real 2026-09-09, y confirma el borrador mediante el flujo existente.
+
+Resultado: PASS, 1 test y 33 assertions. Hito 3 queda en UF 54, neto CLP 2700000, IVA 513000 y bruto 3213000; due/projected 2026-10-09. Se preservan Hitos 1 y 2, no se crean vinculos HH ni movimientos de caja y `billing_status_id` permanece sin cambios. No se tocaron datos productivos, no hay SQL ni migraciones nuevas.

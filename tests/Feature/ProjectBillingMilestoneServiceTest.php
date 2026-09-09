@@ -179,6 +179,64 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $this->assertSame('Pagado', $document->status);
     }
 
+    public function test_issue_hito_three_is_independent_and_can_be_confirmed_without_changing_prior_milestones(): void
+    {
+        $term = PaymentTerm::query()->create(['company_id' => $this->company->id, 'code' => 'NET30-H3', 'name' => '30 días', 'days' => 30, 'active' => true]);
+        $this->project->update(['payment_term_id' => $term->id]);
+        UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-09-09', 'value' => 50000, 'active' => true]);
+
+        $first = $this->service->save($this->project, ['sequence' => 1, 'name' => 'Inicio', 'percentage' => 30, 'planned_invoice_date' => '2026-08-05']);
+        $second = $this->service->save($this->project, ['sequence' => 2, 'name' => 'Avance', 'percentage' => 40, 'planned_invoice_date' => '2026-08-20']);
+        $third = $this->service->save($this->project, ['sequence' => 3, 'name' => 'Cierre', 'percentage' => 30, 'planned_invoice_date' => '2026-10-01']);
+
+        $firstDocument = $this->service->issue($first, '2026-09-01', true);
+        $secondDocument = $this->service->issue($second, '2026-09-02', true);
+        $priorDocuments = [
+            $firstDocument->id => $firstDocument->fresh()->toArray(),
+            $secondDocument->id => $secondDocument->fresh()->toArray(),
+        ];
+        $billingStatusBefore = $this->project->refresh()->billing_status_id;
+
+        $draft = $this->service->issue($third, '2026-09-09', true)->fresh();
+
+        $this->assertSame(54.0, (float) data_get($draft->billing_snapshot, 'contractual_amount'));
+        $this->assertSame($third->id, $draft->project_billing_milestone_id);
+        $this->assertSame('PROJECT_MILESTONE', $draft->billing_source);
+        $this->assertSame('Borrador', $draft->status);
+        $this->assertNull($draft->document_number);
+        $this->assertSame('2026-09-09', $draft->issue_date->toDateString());
+        $this->assertSame('2026-10-09', $draft->due_date->toDateString());
+        $this->assertSame('2026-10-09', $draft->projected_collection_date->toDateString());
+        $this->assertSame(2700000.0, (float) $draft->net_amount);
+        $this->assertSame(513000.0, (float) $draft->vat_amount);
+        $this->assertSame(3213000.0, (float) $draft->gross_amount);
+        $this->assertSame('2026-10-01', $third->fresh()->planned_invoice_date->toDateString());
+        $this->assertSame(50000.0, (float) data_get($draft->billing_snapshot, 'conversion.exchange_rate'));
+        $this->assertSame(1, SalesDocument::query()->where('project_billing_milestone_id', $first->id)->count());
+        $this->assertSame(1, SalesDocument::query()->where('project_billing_milestone_id', $second->id)->count());
+        $this->assertSame(0, $draft->timeEntryLinks()->count());
+        $this->assertSame(0, \App\Models\CashMovement::query()->count());
+        $this->assertSame($billingStatusBefore, $this->project->refresh()->billing_status_id);
+
+        $confirmed = app(\App\Services\SalesDocumentService::class)->confirm($draft, $this->admin, 'QA-H3');
+
+        $this->assertSame('Pendiente', $confirmed->status);
+        $this->assertSame('QA-H3', $confirmed->document_number);
+        $this->assertSame(2700000.0, (float) $confirmed->net_amount);
+        $this->assertSame(513000.0, (float) $confirmed->vat_amount);
+        $this->assertSame(3213000.0, (float) $confirmed->gross_amount);
+        $this->assertSame('2026-09-09', $confirmed->issue_date->toDateString());
+        $this->assertSame('2026-10-09', $confirmed->due_date->toDateString());
+        $this->assertSame('2026-10-09', $confirmed->projected_collection_date->toDateString());
+        $this->assertSame($third->id, $confirmed->project_billing_milestone_id);
+        $this->assertSame('PROJECT_MILESTONE', $confirmed->billing_source);
+        $this->assertSame($priorDocuments[$firstDocument->id], $firstDocument->fresh()->toArray());
+        $this->assertSame($priorDocuments[$secondDocument->id], $secondDocument->fresh()->toArray());
+        $this->assertSame(0, $confirmed->timeEntryLinks()->count());
+        $this->assertSame(0, \App\Models\CashMovement::query()->count());
+        $this->assertSame($billingStatusBefore, $this->project->refresh()->billing_status_id);
+    }
+
     public function test_issue_fails_without_active_sales_invoice_document_type(): void
     {
         DocumentType::query()->where('company_id', $this->company->id)->where('domain', 'sales')->where('code', 'FACTURA')->delete();
