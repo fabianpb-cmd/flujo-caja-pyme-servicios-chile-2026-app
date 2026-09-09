@@ -474,3 +474,13 @@ Reparación controlada ejecutada únicamente sobre `ING-000008` / `QA-0002`: SQL
 `MOV-000011` permaneció posted e intacto. `ING-000007` permaneció intacto. No hubo migraciones. Pendiente: auditoría histórica de otros SalesDocument CLP con fracciones y saldos residuales antes de cualquier reparación.
 
 Estado: **INCIDENTE PRECISIÓN CLP CERRADO / AUDITORÍA HISTÓRICA PENDIENTE**.
+
+## Checkpoint previo reparación histórica CLP - 2026-09-09
+
+Fix funcional desplegado: `cd45034d15cd84e82d1fd8ccda349d6c971199b0`. SalesDocument liquida en CLP y usa precisión CLP entera.
+
+Reparación productiva ya realizada únicamente sobre `ING-000008` / `QA-0002`: residual histórico $0,44; `vat_amount` 559279.44 -> 559279.00; `gross_amount` 3502855.44 -> 3502855.00; `collected_amount` quedó 3502855.00; `Parcial` -> `Pagado`; UPDATE afectó exactamente 1 fila; saldo final 0.00. `MOV-000011` e `ING-000007` no fueron modificados.
+
+Auditoría histórica previa: `ING-000006` / documento 1, `billing_source=TIME_ENTRIES`, `project_billing_milestone_id=NULL`, issue_date 2026-09-03, net 306688.00, IVA histórico 58270.72, gross histórico 364958.72, collected 0, estado `Pendiente`. El snapshot ya contiene net=306688, IVA=58271, gross=364959. Existen 20 vínculos HH, 9.75 horas y subtotal_clp total 306688.
+
+Reparación planificada para `ING-000006`: modificar únicamente `vat_amount` y `gross_amount`; no tocar snapshot, HH, estado ni otros documentos. Este checkpoint es previo a esa reparación controlada.
