@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CashMovement;
 use App\Models\SalesDocument;
+use App\Support\UiFormatter;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
@@ -16,14 +17,14 @@ class ReceivablesService
     public function amountsWithVat(int $companyId, string|float|int $netAmount, CarbonInterface|string $date): array
     {
         $vatRate = $this->vatRate($companyId, $date);
-        $net = round((float) $netAmount, 2);
-        $vat = round($net * $vatRate, 2);
+        $net = UiFormatter::roundAmount($netAmount, 'CLP');
+        $vat = UiFormatter::roundAmount($net * $vatRate, 'CLP');
 
         return [
             'net_amount' => $net,
             'vat_rate' => $vatRate,
             'vat_amount' => $vat,
-            'gross_amount' => round($net + $vat, 2),
+            'gross_amount' => UiFormatter::roundAmount($net + $vat, 'CLP'),
         ];
     }
 
@@ -39,7 +40,7 @@ class ReceivablesService
 
     public function balance(SalesDocument $document, CarbonInterface|string|null $asOf = null): float
     {
-        return max(0, round((float) $document->gross_amount - $this->collectedAmount($document, $asOf), 2));
+        return max(0, UiFormatter::roundAmount((float) $document->gross_amount - $this->collectedAmount($document, $asOf), 'CLP'));
     }
 
     public function forecastAmount(SalesDocument $document): float

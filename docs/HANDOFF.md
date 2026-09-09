@@ -460,3 +460,7 @@ Se confirmó en esquema y servicios que SalesDocument no tiene moneda propia y q
 ## Corrección final de prefijo monetario en selector de cobranza - 2026-09-09
 
 La revisión confirmó que el cambio anterior actualizaba currency_code y minor_units, pero no el span visible del prefijo. Se añadió actualización explícita de [data-money-currency-prefix="true"] al seleccionar cada documento, con CLP=$, USD=US$, EUR=€, UF=UF y fallback al código; el valor sugerido mantiene minor_units. CashMovementSourceDocumentSelectorTest: 5 tests / 74 assertions PASS; CashMovementUxTest: 1 test / 7 assertions PASS; git diff --check PASS. Sin SQL ni migraciones; producción no tocada.
+
+## Precisión monetaria CLP en facturas de hitos - 2026-09-09
+
+Se confirmó la causa: SalesDocument almacena liquidación CLP sin currency_id; ProjectBillingMilestoneService convierte UF a CLP, pero ReceivablesService redondeaba neto/IVA/bruto/saldo a 2 decimales. Ahora esos importes usan UiFormatter::roundAmount(..., CLP), manteniendo columnas decimal(2) sin migración. Regresión focalizada: UF 72 convertido a net CLP 2.943.576, IVA 559.279, gross 3.502.855; cobro 1.000.000 deja Parcial/saldo 2.502.855, sobrepago 2.502.856 se rechaza y pago exacto deja Pagado/saldo 0. ProjectBillingMilestoneServiceTest: 11 tests / 59 assertions PASS; CashMovementSourceDocumentSelectorTest: 5 tests / 74 assertions PASS; git diff --check PASS. Documentos históricos no fueron modificados; detectar fracciones con consultas posteriores antes de reparar. Sin SQL ni migraciones; producción no tocada.

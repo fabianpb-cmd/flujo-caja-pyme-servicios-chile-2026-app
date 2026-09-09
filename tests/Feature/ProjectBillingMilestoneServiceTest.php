@@ -12,6 +12,10 @@ use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\ProjectBillingMilestone;
 use App\Models\PaymentTerm;
+use App\Models\CashAccount;
+use App\Models\CashMovementType;
+use App\Models\Currency as MoneyCurrency;
+use App\Models\PaymentMethod;
 use App\Models\SalesDocument;
 use App\Models\TimeEntry;
 use App\Models\UfValue;
@@ -134,6 +138,45 @@ class ProjectBillingMilestoneServiceTest extends TestCase
         $this->assertNull($this->project->refresh()->billing_status_id);
         $this->actingAs($this->admin)->get(route('operational.show', ['sales-documents', $fresh->id]))
             ->assertOk()->assertSee('Borrador')->assertSee($fresh->code);
+    }
+
+    public function test_milestone_invoice_uses_integer_clp_precision_through_partial_and_full_payment(): void
+    {
+        $this->uf->update(['minor_units' => 2]);
+        UfValue::query()->create(['company_id' => $this->company->id, 'value_date' => '2026-09-04', 'value' => 40883, 'active' => true]);
+        $document = $this->service->issue($this->milestone(2, 40), '2026-09-04', true);
+        $document->update(['status' => 'Pendiente']);
+        $document->refresh();
+
+        $this->assertSame(2943576.0, (float) $document->net_amount);
+        $this->assertSame(559279.0, (float) $document->vat_amount);
+        $this->assertSame(3502855.0, (float) $document->gross_amount);
+
+        app(\App\Services\CatalogService::class)->seedDefaultsForCompany($this->company->id);
+        $clp = MoneyCurrency::query()->where('company_id', $this->company->id)->where('code', 'CLP')->firstOrFail();
+        $account = CashAccount::query()->create(['company_id' => $this->company->id, 'name' => 'Caja precisión', 'currency_id' => $clp->id, 'opening_balance' => 0, 'is_active' => true]);
+        $type = CashMovementType::query()->where('company_id', $this->company->id)->firstOrFail();
+        $method = PaymentMethod::query()->where('company_id', $this->company->id)->firstOrFail();
+        $common = ['company_id' => $this->company->id, 'movement_type' => 'Ingreso', 'movement_type_id' => $type->id, 'source_document_type' => 'sales_document', 'source_document_code' => $document->code, 'project_id' => $this->project->id, 'movement_date' => '2026-09-05', 'expense' => 0, 'payment_method_id' => $method->id, 'cash_account_id' => $account->id, 'status' => 'posted'];
+        $cash = app(\App\Services\CashMovementService::class);
+
+        $cash->create($common + ['income' => 1000000], $this->admin);
+        $document->refresh();
+        $this->assertSame(2502855.0, app(\App\Services\ReceivablesService::class)->balance($document));
+        $this->assertSame('Parcial', $document->status);
+
+        try {
+            $cash->create($common + ['income' => 2502856], $this->admin);
+            $this->fail('El sobrepago debía ser rechazado.');
+        } catch (\DomainException $exception) {
+            $this->assertStringContainsString('saldo', strtolower($exception->getMessage()));
+        }
+        $this->assertSame(1, \App\Models\CashMovement::query()->where('source_document_code', $document->code)->count());
+
+        $cash->create($common + ['income' => 2502855], $this->admin);
+        $document->refresh();
+        $this->assertSame(0.0, app(\App\Services\ReceivablesService::class)->balance($document));
+        $this->assertSame('Pagado', $document->status);
     }
 
     public function test_issue_fails_without_active_sales_invoice_document_type(): void
