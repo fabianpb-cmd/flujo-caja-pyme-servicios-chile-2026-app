@@ -1305,11 +1305,9 @@ class OperationalCrudController extends Controller
         $clientNames = \App\Models\Client::query()
             ->whereIn('id', $salesDocuments->pluck('client_id')->filter()->unique())
             ->pluck('legal_name', 'id');
-        $projects = Project::query()
+        $projectNames = Project::query()
             ->whereIn('id', $salesDocuments->pluck('project_id')->filter()->unique())
-            ->with('salesCurrency')
-            ->get()
-            ->keyBy('id');
+            ->pluck('name', 'id');
 
         foreach ($salesDocuments as $document) {
             $balance = $this->receivables->balance($document);
@@ -1318,18 +1316,16 @@ class OperationalCrudController extends Controller
             }
 
             $counterparty = (string) ($clientNames[$document->client_id] ?? 'Sin contraparte');
-            $projectRecord = $document->project_id ? ($projects[$document->project_id] ?? null) : null;
-            $project = (string) ($projectRecord?->name ?? 'Sin proyecto');
-            $currency = $projectRecord?->salesCurrency ?: 'CLP';
+            $project = (string) ($document->project_id ? ($projectNames[$document->project_id] ?? 'Sin proyecto') : 'Sin proyecto');
             $options[$document->code] = $this->cashMovementSourceDocumentOption(
                 'sales_document',
                 $document->code,
-                [$document->code, filled($document->document_number) ? 'N° '.$document->document_number : null, $counterparty, $project, UiFormatter::formatMoney($balance, $currency), $document->status],
+                [$document->code, filled($document->document_number) ? 'N° '.$document->document_number : null, $counterparty, $project, UiFormatter::formatMoney($balance, 'CLP'), $document->status],
                 $counterparty,
                 $document->project_id,
                 $balance,
                 0,
-                $currency
+                'CLP'
             );
         }
 

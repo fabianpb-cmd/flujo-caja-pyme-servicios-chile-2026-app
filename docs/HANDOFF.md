@@ -452,3 +452,11 @@ Se amplió `ProjectBillingMilestoneServiceTest::test_issue_hito_two_uses_its_con
 ## UX selector de cobros y moneda - 2026-09-07
 
 Se corrigió la etiqueta de documentos origen para incluir código, N° documento cuando existe, cliente, proyecto, saldo y estado, omitiendo limpiamente el N° cuando es NULL. La precarga de Ingreso/Egreso usa metadata de moneda/minor_units del proyecto; CLP se presenta sin decimales y el valor se mantiene normalizable al backend. El residual 0,44 observado es presentación de un saldo CLP, no un cambio contable. CashMovementSourceDocumentSelectorTest: 5 tests / 72 assertions PASS; CashMovementUxTest: 1 test / 7 assertions PASS; git diff --check PASS. Sin migraciones ni SQL, producción no tocada.
+
+## Selector de cobranza: moneda de liquidación del documento - 2026-09-09
+
+Se confirmó en esquema y servicios que SalesDocument no tiene moneda propia y que net_amount, IVA, gross_amount, collected_amount y balance son importes monetarios CLP. El selector ya no usa la moneda contractual UF del proyecto: etiqueta, saldo sugerido, currency_code, minor_units y prefijo usan CLP; el valor se mantiene interno y normalizable sin reconversión. También incluye N° documento cuando existe y omite el segmento cuando es NULL. CashMovementSourceDocumentSelectorTest: 5 tests / 72 assertions PASS; CashMovementUxTest: 1 test / 7 assertions PASS; git diff --check PASS. Sin SQL ni migraciones; producción no tocada.
+
+## Corrección final de prefijo monetario en selector de cobranza - 2026-09-09
+
+La revisión confirmó que el cambio anterior actualizaba currency_code y minor_units, pero no el span visible del prefijo. Se añadió actualización explícita de [data-money-currency-prefix="true"] al seleccionar cada documento, con CLP=$, USD=US$, EUR=€, UF=UF y fallback al código; el valor sugerido mantiene minor_units. CashMovementSourceDocumentSelectorTest: 5 tests / 74 assertions PASS; CashMovementUxTest: 1 test / 7 assertions PASS; git diff --check PASS. Sin SQL ni migraciones; producción no tocada.

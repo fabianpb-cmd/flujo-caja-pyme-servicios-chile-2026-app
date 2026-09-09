@@ -2014,8 +2014,13 @@
                         : '';
                 }
                 [incomeInput, expenseInput].filter(Boolean).forEach((input) => {
+                    const currencyCode = option.dataset.currencyCode || 'CLP';
                     input.dataset.moneyMinorUnits = option.dataset.currencyMinorUnits || '0';
-                    input.dataset.moneyCurrencyCode = option.dataset.currencyCode || 'CLP';
+                    input.dataset.moneyCurrencyCode = currencyCode;
+                    const prefix = input.closest('.input-group')?.querySelector('[data-money-currency-prefix="true"]');
+                    if (prefix) {
+                        prefix.textContent = { CLP: '$', USD: 'US$', EUR: '€', UF: 'UF' }[currencyCode] || currencyCode;
+                    }
                 });
             };
 

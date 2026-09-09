@@ -87,6 +87,8 @@ class CashMovementSourceDocumentSelectorTest extends TestCase
         $this->assertStringContainsString('option.dataset.suggestedIncome', $html);
         $this->assertStringContainsString('option.dataset.suggestedExpense', $html);
         $this->assertStringContainsString('option.dataset.currencyMinorUnits', $html);
+        $this->assertStringContainsString('[data-money-currency-prefix="true"]', $html);
+        $this->assertStringContainsString('prefix.textContent', $html);
     }
 
     public function test_cash_movements_use_functional_codes_allow_partial_and_total_payments_and_validate_invalid_documents(): void
