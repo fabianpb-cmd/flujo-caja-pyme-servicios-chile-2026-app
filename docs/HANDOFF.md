@@ -464,3 +464,13 @@ La revisión confirmó que el cambio anterior actualizaba currency_code y minor_
 ## Precisión monetaria CLP en facturas de hitos - 2026-09-09
 
 Se confirmó la causa: SalesDocument almacena liquidación CLP sin currency_id; ProjectBillingMilestoneService convierte UF a CLP, pero ReceivablesService redondeaba neto/IVA/bruto/saldo a 2 decimales. Ahora esos importes usan UiFormatter::roundAmount(..., CLP), manteniendo columnas decimal(2) sin migración. Regresión focalizada: UF 72 convertido a net CLP 2.943.576, IVA 559.279, gross 3.502.855; cobro 1.000.000 deja Parcial/saldo 2.502.855, sobrepago 2.502.856 se rechaza y pago exacto deja Pagado/saldo 0. ProjectBillingMilestoneServiceTest: 11 tests / 59 assertions PASS; CashMovementSourceDocumentSelectorTest: 5 tests / 74 assertions PASS; git diff --check PASS. Documentos históricos no fueron modificados; detectar fracciones con consultas posteriores antes de reparar. Sin SQL ni migraciones; producción no tocada.
+
+## Cierre productivo incidente precisión CLP - 2026-09-09
+
+Causa raíz: ReceivablesService permitía centavos en IVA/bruto de SalesDocument CLP, generando saldos residuales menores a $1. Fix desplegado: `cd45034d15cd84e82d1fd8ccda349d6c971199b0` (`fix: enforce clp precision on milestone invoices`), con ReceivablesService redondeando según precisión CLP.
+
+Reparación controlada ejecutada únicamente sobre `ING-000008` / `QA-0002`: SQL correctivo de una fila ajustó `vat_amount` de 559279.44 a 559279.00, `gross_amount` de 3502855.44 a 3502855.00 y estado a `Pagado`. Resultado UPDATE: exactamente 1 fila afectada. Verificación final: net 2943576.00, IVA 559279.00, gross 3502855.00, collected 3502855.00, saldo 0.00, estado `Pagado`.
+
+`MOV-000011` permaneció posted e intacto. `ING-000007` permaneció intacto. No hubo migraciones. Pendiente: auditoría histórica de otros SalesDocument CLP con fracciones y saldos residuales antes de cualquier reparación.
+
+Estado: **INCIDENTE PRECISIÓN CLP CERRADO / AUDITORÍA HISTÓRICA PENDIENTE**.
