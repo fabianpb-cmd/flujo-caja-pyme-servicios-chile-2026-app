@@ -506,3 +506,9 @@ Resultado: PASS, 1 test y 33 assertions. Hito 3 queda en UF 54, neto CLP 2700000
 El detalle de Proyecto cerrado ahora muestra `Editar plan` mientras exista al menos un hito sin factura activa. Cuando todos los hitos estan facturados, muestra `Ver plan` y mantiene el plan en el detalle como solo lectura, sin formularios ni controles de mantenimiento.
 
 Pruebas focalizadas nuevas: `test_partially_invoiced_plan_keeps_edit_plan_action` y `test_fully_invoiced_plan_is_read_only_and_exposes_only_ver_plan`: PASS, 2 tests / 8 assertions. La proteccion server-side de hitos facturados permanece intacta. Sin cambios de facturacion, documentos, SQL ni migraciones; produccion no fue tocada.
+
+## Cierre productivo: plan de facturacion completado en solo lectura - 2026-09-10
+
+El cambio `4a9db02` (`fix: show completed billing plan read only`) fue validado en produccion para el proyecto cerrado con todos sus hitos facturados. El detalle muestra `Ver plan`, ya no muestra `Editar plan`, mantiene visible el plan y los hitos con estado `Facturado`, sin inputs ni controles de modificacion.
+
+No se ejecutaron SQL ni migraciones, no hubo cambios de datos y no se modifico codigo durante este cierre.
