@@ -1958,11 +1958,22 @@
             const prefix = isUf
                 ? 'UF'
                 : (selectedOption?.dataset?.currencySymbol || selectedOption?.dataset?.currencyCode || selectedOption?.textContent?.trim() || 'Moneda');
+            const currencyCode = isUf ? 'UF' : (selectedOption?.dataset?.currencyCode || 'CLP').toUpperCase();
+            const minorUnits = Number.parseInt(selectedOption?.dataset?.currencyMinorUnits || (isUf ? '2' : '0'), 10);
 
             rateUnitTypeField.value = isUf ? 'UF' : 'CURRENCY';
             rateCurrencyField.value = currencyId;
             rateUnitPrefixTargets.forEach((target) => {
                 target.textContent = prefix;
+            });
+            ['hourly_value', 'project_value'].forEach((fieldId) => {
+                const input = form?.querySelector(`#${fieldId}`);
+                if (!input) return;
+                input.dataset.moneyCurrencyCode = currencyCode;
+                input.dataset.moneyMinorUnits = String(Number.isFinite(minorUnits) ? minorUnits : 2);
+                const moneyPrefix = input.closest('.input-group')?.querySelector('[data-money-currency-prefix="true"]');
+                if (moneyPrefix) moneyPrefix.textContent = prefix;
+                input.dispatchEvent(new Event('blur'));
             });
         };
 

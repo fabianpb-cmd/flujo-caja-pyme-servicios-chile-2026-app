@@ -185,6 +185,9 @@ class OperationalUiTest extends TestCase
         $response->assertOk();
         $response->assertSee('data-rate-unit-selector="true"', false);
         $response->assertDontSee('Moneda valor HH');
+        $response->assertSee('input.dataset.moneyCurrencyCode = currencyCode;', false);
+        $response->assertSee('input.dataset.moneyMinorUnits = String(Number.isFinite(minorUnits) ? minorUnits : 2);', false);
+        $response->assertSee("input.dispatchEvent(new Event('blur'));", false);
     }
 
     public function test_assignments_show_updated_guidance_and_project_vigency_metadata(): void

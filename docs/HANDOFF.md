@@ -584,3 +584,14 @@ Se agrego `test_http_update_isolates_temporary_sequences_from_high_requested_seq
 Smoke PASS: plan inicial 1/2/3; se elimino Hito 2 y quedaron secuencias 1/3 con total 70%; `Agregar hito` reutilizo automaticamente la secuencia 2 y la inserto en orden; el nuevo Hito 2 fue modificado y guardado; al reabrir persistieron secuencias 1/2/3 y los nuevos datos; el total quedo en 100%. `PRY-000012` permanecio intacto y read-only. No se ejecuto SQL, no hubo migraciones, ni se crearon facturas o movimientos por este smoke.
 
 `ProjectBillingPlanHttpTest`: 13 tests / 67 assertions PASS. QA productivo final de Proyectos cerrado.
+## QA focalizado Personal -> Asignaciones -> Horas - 2026-09-10
+
+Se ejecuto smoke productivo con datos QA propios y controlados, sin tocar `PRY-000012` ni documentos financieros. Se valido Persona `PER-000012` con acentos, RUT aceptado, modalidad Pago por hora, unidad UF y edicion persistente de tarifa `UF 1,20`; Asignacion `ASI-000027` con vinculo Persona/Cliente/Proyecto, vigencia, unidad UF, tarifa de costeo `UF 1,20`, monto pactado `UF 54,00` y persistencia de edicion.
+
+La carga valida de Horas genero `HOR-000065-HOR-000067` para 08/09/2026-10/09/2026: 3 dias, 8 horas trabajadas y aprobadas, tarifa `UF 1,20 / HH`, proyecto/cliente/asignacion derivados correctamente. Se verifico el detalle y la pantalla de edicion. La carga fue eliminada al finalizar, junto con la Asignacion y Persona QA creadas; no quedaron datos creados por este smoke.
+
+Blocker local corregido: `syncRateUnitUi()` actualizaba unidad y prefijo, pero no `data-money-currency-code` ni `data-money-minor-units` de `hourly_value` y `project_value`. El parche sincroniza ambos datasets y dispara blur, evitando que una tarifa UF decimal se redondee como CLP antes del submit. Se agrego regresion al test existente de Asignaciones.
+
+Tests focalizados: `test_assignments_use_single_hourly_rate_selector_and_share_unit_with_project_value`, `test_assignments_show_effective_project_rate_when_specific_hourly_value_is_empty`, `test_assignments_specific_hourly_value_prevails_over_project_reference`, `test_time_entries_create_view_uses_a_single_unified_batch_form` y `test_time_entries_unified_load_creates_daily_entries_from_total_hours_only`: **5 tests / 62 assertions PASS**. `git diff --check` PASS. Los fallos no ejecutados nuevamente corresponden a problemas historicos de `OperationalUiTest` (`all()` sobre array y expectativa desplazada por validaciones previas), no relacionados con este parche.
+
+Estado: **QA LOCAL FOCALIZADO PASS / PRODUCCION NO MODIFICADA**. Sin migraciones, sin SQL, sin deploy ni push. Pendiente para una siguiente ronda: smoke negativo de RUT/duplicado y fecha de termino anterior, si se requiere ampliar cobertura.
