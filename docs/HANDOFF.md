@@ -609,3 +609,12 @@ El smoke productivo read-only de Asignaciones confirmo que el catalogo de moneda
 Causa raiz confirmada: `CatalogService::upsertSimple()` usaba `firstOrCreate()` pero solo persistia atributos genericos y descartaba `symbol`, `minor_units` e `is_base_currency` de Currency. Se agrego `upsertCurrencies()` con `firstOrCreate()` y metadata completa para monedas nuevas, sin sobrescribir personalizaciones existentes al reseedear.
 
 Se agrego `test_currency_seed_preserves_metadata_and_existing_customization` en `AdministrationBaselineSeederTest`: **1 test / 17 assertions PASS**. Verifica CLP, UF, USD y EUR, idempotencia y preservacion de personalizacion. Sin migraciones, sin SQL, sin cambios productivos y sin deploy en esta iteracion.
+## QA productivo Staffing/Time: catálogo Currency reparado y smoke cerrado - 2026-09-10
+
+Se reparo exclusivamente mediante UI la metadata de las cuatro monedas existentes en produccion, sin crear, eliminar ni modificar otros registros. El commit de codigo desplegado `3f2e38102a8dbed5f2256e82027c921329d2a568` contiene la correccion de provisioning en `CatalogService.php`.
+
+Catalogo final: CLP = `$`, `minor_units=0`, moneda base `Si`, activo `Si`; UF = `UF`, `2`, base `No`, activo `Si`; USD = `US$`, `2`, base `No`, activo `Si`; EUR = `€`, `2`, base `No`, activo `Si`. Existe exactamente una moneda por cada codigo y CLP es la unica moneda base.
+
+Smoke productivo de Asignaciones PASS: en Nueva Asignacion se selecciono Persona y Proyecto QA sin guardar. UF mostro prefijo UF, `currencyCode=UF`, `minorUnits=2` y `1,20` con decimales; CLP mostro `$`, `currencyCode=CLP`, `minorUnits=0` y `1200,75` se presento como `1.201`; el retorno a UF mostro `UF`, `2` y `1,25`. No se creo ninguna Asignacion ni otro dato, no hubo errores JavaScript observados ni respuestas HTTP 500/419.
+
+**QA PRODUCTIVO STAFFING/TIME: PASS / CERRADO.** Personal -> Asignaciones -> Horas cerrado. Sin SQL, sin migraciones, sin seeders y sin deploy adicional.
