@@ -73,7 +73,7 @@ class CatalogService
             ['code' => 'AHORRO', 'name' => 'Ahorro', 'sort_order' => 30],
         ], $timestamp);
 
-        $this->upsertSimple($companyId, Currency::class, [
+        $this->upsertCurrencies($companyId, [
             ['code' => 'CLP', 'name' => 'Peso chileno', 'symbol' => '$', 'minor_units' => 0, 'is_base_currency' => true, 'sort_order' => 10],
             ['code' => 'UF', 'name' => 'Unidad de Fomento', 'symbol' => 'UF', 'minor_units' => 2, 'is_base_currency' => false, 'sort_order' => 20],
             ['code' => 'USD', 'name' => 'Dólar estadounidense', 'symbol' => 'US$', 'minor_units' => 2, 'is_base_currency' => false, 'sort_order' => 30],
@@ -735,6 +735,26 @@ class CatalogService
                 [
                     'name' => $row['name'],
                     'description' => $row['description'] ?? null,
+                    'active' => $row['active'] ?? true,
+                    'sort_order' => $row['sort_order'] ?? null,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ]
+            );
+        });
+    }
+
+    private function upsertCurrencies(int $companyId, array $rows, $timestamp): void
+    {
+        collect($rows)->each(function (array $row) use ($companyId, $timestamp) {
+            Currency::query()->firstOrCreate(
+                ['company_id' => $companyId, 'code' => $row['code']],
+                [
+                    'name' => $row['name'],
+                    'description' => $row['description'] ?? null,
+                    'symbol' => $row['symbol'] ?? null,
+                    'minor_units' => $row['minor_units'] ?? 2,
+                    'is_base_currency' => $row['is_base_currency'] ?? false,
                     'active' => $row['active'] ?? true,
                     'sort_order' => $row['sort_order'] ?? null,
                     'created_at' => $timestamp,

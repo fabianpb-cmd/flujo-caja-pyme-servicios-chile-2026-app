@@ -602,3 +602,10 @@ Se corrigio exclusivamente `resources/views/operational/form.blade.php`: el sele
 Se agrego una regresion al test existente `test_assignments_use_single_hourly_rate_selector_and_share_unit_with_project_value`, que verifica la opcion CLP con `data-currency-code="CLP"` y `data-currency-minor-units="0"`, junto con la sincronizacion dinamica ya existente para UF. Resultado: **1 test / 7 assertions PASS**. `php artisan view:cache` y `git diff --check` PASS.
 
 Sin migraciones, sin SQL y sin deploy adicional en esta iteracion.
+## Correccion de provisioning de metadata Currency - 2026-09-10
+
+El smoke productivo read-only de Asignaciones confirmo que el catalogo de monedas existente estaba desalineado: CLP id 1 tenia simbolo vacio, `minor_units=2` y moneda base `No`; UF id 2, USD id 3 y EUR id 4 tambien mostraban simbolo vacio, `minor_units=2` y moneda base `No`. No se editaron registros productivos.
+
+Causa raiz confirmada: `CatalogService::upsertSimple()` usaba `firstOrCreate()` pero solo persistia atributos genericos y descartaba `symbol`, `minor_units` e `is_base_currency` de Currency. Se agrego `upsertCurrencies()` con `firstOrCreate()` y metadata completa para monedas nuevas, sin sobrescribir personalizaciones existentes al reseedear.
+
+Se agrego `test_currency_seed_preserves_metadata_and_existing_customization` en `AdministrationBaselineSeederTest`: **1 test / 17 assertions PASS**. Verifica CLP, UF, USD y EUR, idempotencia y preservacion de personalizacion. Sin migraciones, sin SQL, sin cambios productivos y sin deploy en esta iteracion.

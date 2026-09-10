@@ -66,6 +66,37 @@ class AdministrationBaselineSeederTest extends TestCase
         $this->assertFalse($method->active);
     }
 
+    public function test_currency_seed_preserves_metadata_and_existing_customization(): void
+    {
+        $company = Company::query()->create(['code' => 'CMP-CURRENCY', 'name' => 'Empresa Monedas', 'status' => 'active']);
+
+        $this->seed(OperationalCatalogSeeder::class);
+
+        $currencies = Currency::query()->where('company_id', $company->id)->get()->keyBy('code');
+        $this->assertCount(4, $currencies);
+        $this->assertSame('$', $currencies['CLP']->symbol);
+        $this->assertSame(0, (int) $currencies['CLP']->minor_units);
+        $this->assertTrue((bool) $currencies['CLP']->is_base_currency);
+        $this->assertSame('UF', $currencies['UF']->symbol);
+        $this->assertSame(2, (int) $currencies['UF']->minor_units);
+        $this->assertFalse((bool) $currencies['UF']->is_base_currency);
+        $this->assertSame('US$', $currencies['USD']->symbol);
+        $this->assertSame(2, (int) $currencies['USD']->minor_units);
+        $this->assertFalse((bool) $currencies['USD']->is_base_currency);
+        $this->assertSame('€', $currencies['EUR']->symbol);
+        $this->assertSame(2, (int) $currencies['EUR']->minor_units);
+        $this->assertFalse((bool) $currencies['EUR']->is_base_currency);
+
+        $currencies['CLP']->update(['symbol' => 'CLP personalizado', 'minor_units' => 1, 'is_base_currency' => false]);
+        $this->seed(OperationalCatalogSeeder::class);
+
+        $customized = Currency::query()->where('company_id', $company->id)->where('code', 'CLP')->firstOrFail();
+        $this->assertSame(4, Currency::query()->where('company_id', $company->id)->count());
+        $this->assertSame('CLP personalizado', $customized->symbol);
+        $this->assertSame(1, (int) $customized->minor_units);
+        $this->assertFalse((bool) $customized->is_base_currency);
+    }
+
     public function test_operational_catalog_seeder_does_not_overwrite_company_parameter_customization(): void
     {
         $company = Company::query()->create(['code' => 'CMP-PARAM', 'name' => 'Empresa Param', 'status' => 'active']);
