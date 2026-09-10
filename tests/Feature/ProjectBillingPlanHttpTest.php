@@ -124,6 +124,25 @@ class ProjectBillingPlanHttpTest extends TestCase
         $this->assertDatabaseHas('project_billing_milestones', ['id' => $second->id, 'sequence' => 1]);
     }
 
+    public function test_http_update_isolates_temporary_sequences_from_high_requested_sequences(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-HIGH-SWAP'));
+        $first = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 1, 'name' => 'H1', 'planned_invoice_date' => '2026-08-05', 'percentage' => 50]);
+        $second = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 2, 'name' => 'H2', 'planned_invoice_date' => '2026-08-20', 'percentage' => 50]);
+
+        $payload = $this->projectPayload($client, $currency, $closed, $active, $billing, $project->code) + ['billing_milestones' => [
+            ['id' => $first->id, 'sequence' => 6, 'name' => 'H1', 'planned_invoice_date' => '2026-09-20', 'percentage' => 50],
+            ['id' => $second->id, 'sequence' => 5, 'name' => 'H2', 'planned_invoice_date' => '2026-09-10', 'percentage' => 50],
+        ]];
+
+        $response = $this->actingAs($admin)->put(route('operational.update', ['projects', $project->id]), $payload);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('project_billing_milestones', ['id' => $first->id, 'sequence' => 6]);
+        $this->assertDatabaseHas('project_billing_milestones', ['id' => $second->id, 'sequence' => 5]);
+    }
+
     public function test_invalid_duplicate_sequence_returns_plan_error_and_preserves_input(): void
     {
         [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();

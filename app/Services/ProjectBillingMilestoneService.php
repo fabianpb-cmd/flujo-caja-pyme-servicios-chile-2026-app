@@ -80,9 +80,11 @@ class ProjectBillingMilestoneService
             }
         }
 
-        $temporarySequence = (int) ProjectBillingMilestone::query()
+        $maxRequestedSequence = (int) collect($rows)->max(fn (array $row): int => (int) ($row['sequence'] ?? 0));
+        $maxCurrentSequence = (int) ProjectBillingMilestone::query()
             ->where('project_id', $project->id)
-            ->max('sequence') + count($editableUpdates) + 1;
+            ->max('sequence');
+        $temporarySequence = max($maxCurrentSequence, $maxRequestedSequence) + 1;
         foreach ($editableUpdates as [$milestone, $sequence]) {
             if ((int) $milestone->sequence !== $sequence) {
                 MassAssignment::fillAndSave($milestone, ['sequence' => $temporarySequence++]);

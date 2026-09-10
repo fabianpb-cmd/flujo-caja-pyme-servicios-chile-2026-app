@@ -572,3 +572,8 @@ Se corrigieron dos regresiones de la UI del formulario: los eventos focus/blur d
 Se corrigio la edicion de planes de facturacion: al agregar un hito la UI elige el menor entero positivo disponible e inserta la fila en orden, evitando duplicados tras eliminar filas intermedias. `ProjectBillingMilestoneService::syncPlan()` valida pertenencia e invariabilidad de hitos facturados antes de mutar, elimina primero omitidos no facturados y usa secuencias temporales unicas para swaps de hitos editables, manteniendo atomicidad e indice unico.
 
 Los errores de plan ahora se devuelven bajo `project_billing_plan`, se conservan con `withInput()` y se muestran junto al plan. `ProjectBillingPlanHttpTest`: 12 tests / 64 assertions PASS; `php artisan view:cache` y `git diff --check` PASS. Sin SQL, sin migraciones y sin deploy.
+## Aislamiento de secuencias temporales de hitos - 2026-09-10
+
+Se corrigio `ProjectBillingMilestoneService::syncPlan()` para iniciar las secuencias temporales por encima del maximo entre las secuencias actuales y todas las secuencias finales solicitadas, evitando colisiones durante swaps o reordenamientos hacia valores altos. Las validaciones previas, eliminacion primero, atomicidad, proteccion de hitos facturados e indice unico permanecen intactos.
+
+Se agrego `test_http_update_isolates_temporary_sequences_from_high_requested_sequences`: `ProjectBillingPlanHttpTest` pasa con 13 tests / 67 assertions; `git diff --check` PASS. Sin SQL, sin migraciones y sin deploy.
