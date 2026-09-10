@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Currency;
+use App\Models\DocumentType;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\SalesDocument;
@@ -168,12 +169,22 @@ class SalesPrefacturationService
             adjustmentAmount: $input['adjustment_amount'] ?? 0,
             adjustmentReason: $input['adjustment_reason'] ?? null,
         );
+        $documentType = DocumentType::query()
+            ->where('company_id', $companyId)
+            ->where('domain', 'sales')
+            ->where('code', 'FACTURA')
+            ->where('active', true)
+            ->first();
+        if (! $documentType) {
+            throw new DomainException('No existe un tipo de documento FACTURA activo para la empresa.');
+        }
 
-        return DB::transaction(function () use ($companyId, $calculation): SalesDocument {
+        return DB::transaction(function () use ($companyId, $calculation, $documentType): SalesDocument {
             $document = MassAssignment::create(SalesDocument::class, [
                 'company_id' => $companyId,
                 'client_id' => $calculation['client']->id,
                 'project_id' => $calculation['project']->id,
+                'document_type_id' => $documentType->id,
                 'document_type' => 'Prefacturación HH',
                 'issue_date' => $calculation['issue_date'],
                 'due_date' => $this->dueDate($calculation['project'], Carbon::parse($calculation['issue_date']))?->toDateString(),

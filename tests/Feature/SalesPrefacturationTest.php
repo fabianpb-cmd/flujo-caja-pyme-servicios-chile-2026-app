@@ -7,9 +7,11 @@ use App\Models\Client;
 use App\Models\Company;
 use App\Models\ContractType;
 use App\Models\Currency;
+use App\Models\DocumentType;
 use App\Models\ExchangeRate;
 use App\Models\LegalParameter;
 use App\Models\Person;
+use App\Models\PaymentTerm;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
 use App\Models\SalesDocumentTimeEntry;
@@ -47,6 +49,7 @@ class SalesPrefacturationTest extends TestCase
             'active' => true,
         ]);
         $this->client = Client::query()->create(['company_id' => $this->company->id, 'code' => 'CLI-HH', 'legal_name' => 'Cliente HH']);
+        DocumentType::query()->create(['company_id' => $this->company->id, 'domain' => 'sales', 'code' => 'FACTURA', 'name' => 'Factura', 'active' => true]);
         $hourlyContract = ContractType::query()->create(['company_id' => $this->company->id, 'domain' => 'commercial', 'code' => 'POR_HORA', 'name' => 'Por hora', 'active' => true]);
         $this->project = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $this->client->id, 'code' => 'PRY-HH', 'name' => 'Proyecto HH', 'contract_type_id' => $hourlyContract->id, 'contracted_hourly_rate' => 35000]);
         $this->person = Person::query()->create(['company_id' => $this->company->id, 'code' => 'PER-HH', 'name' => 'Consultora HH', 'modality' => 'Honorarios mensual', 'status' => 'active']);
@@ -166,6 +169,62 @@ class SalesPrefacturationTest extends TestCase
 
         $this->assertSame('Borrador', $document->status);
         $this->assertSame(1, SalesDocumentTimeEntry::query()->count());
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('No existen HH aprobadas facturables');
+        app(SalesPrefacturationService::class)->generateDraft($this->company->id, [
+            'project_id' => $this->project->id,
+            'period' => '2026-08-01',
+            'issue_date' => '2026-08-31',
+            'taxable' => true,
+        ]);
+    }
+
+    public function test_hourly_billing_draft_can_be_confirmed_without_recalculating_or_reusing_hours(): void
+    {
+        $uf = $this->currency('UF', 'Unidad de fomento');
+        $term = PaymentTerm::query()->create(['company_id' => $this->company->id, 'code' => 'NET30-HH-E2E', 'name' => '30 días', 'days' => 30, 'active' => true]);
+        $this->project->update(['sales_currency_id' => $uf->id, 'contracted_hourly_rate' => 1.2, 'payment_term_id' => $term->id]);
+        UfValue::query()->where('company_id', $this->company->id)->whereDate('value_date', '2026-08-31')->update(['value' => 40000, 'active' => true]);
+        $this->entry($this->assignment(['hourly_value' => 99, 'hourly_rate_unit_type' => 'UF']), 2, $this->approvedId, '2026-08-01');
+        $this->entry($this->assignment(['hourly_value' => 88, 'hourly_rate_unit_type' => 'UF']), 3, $this->approvedId, '2026-08-02');
+        $this->entry($this->assignment(['hourly_value' => 77, 'hourly_rate_unit_type' => 'UF']), 4, $this->pendingId, '2026-08-03');
+
+        $draft = app(SalesPrefacturationService::class)->generateDraft($this->company->id, [
+            'project_id' => $this->project->id,
+            'period' => '2026-08-01',
+            'issue_date' => '2026-08-31',
+            'taxable' => true,
+        ]);
+        $before = $draft->fresh();
+        $snapshot = $before->billing_snapshot;
+
+        $this->assertSame('Borrador', $before->status);
+        $this->assertNull($before->document_number);
+        $this->assertNotNull($before->document_type_id);
+        $this->assertSame('TIME_ENTRIES', $before->billing_source);
+        $this->assertSame(5.0, (float) data_get($snapshot, 'hours_total'));
+        $this->assertSame(6.0, (float) $before->billing_snapshot['commercial_base_amount']);
+        $this->assertSame(240000.0, (float) $before->net_amount);
+        $this->assertSame(45600.0, (float) $before->vat_amount);
+        $this->assertSame(285600.0, (float) $before->gross_amount);
+        $this->assertSame('2026-08-31', $before->issue_date->toDateString());
+        $this->assertSame('2026-09-30', $before->due_date->toDateString());
+        $this->assertSame('2026-09-30', $before->projected_collection_date->toDateString());
+        $this->assertSame(40000.0, (float) data_get($snapshot, 'issue_date_conversion_rate'));
+        $this->assertSame(2, SalesDocumentTimeEntry::query()->where('sales_document_id', $before->id)->count());
+        $this->assertSame(0, \App\Models\CashMovement::query()->count());
+
+        $confirmed = app(\App\Services\SalesDocumentService::class)->confirm($before, $this->admin, 'QA-HH-001');
+        $this->assertSame('Pendiente', $confirmed->status);
+        $this->assertSame('QA-HH-001', $confirmed->document_number);
+        $this->assertSame(240000.0, (float) $confirmed->net_amount);
+        $this->assertSame(45600.0, (float) $confirmed->vat_amount);
+        $this->assertSame(285600.0, (float) $confirmed->gross_amount);
+        $this->assertSame('2026-08-31', $confirmed->issue_date->toDateString());
+        $this->assertSame('2026-09-30', $confirmed->due_date->toDateString());
+        $this->assertSame($snapshot, $confirmed->billing_snapshot);
+        $this->assertSame(2, SalesDocumentTimeEntry::query()->where('sales_document_id', $confirmed->id)->count());
+
         $this->expectException(DomainException::class);
         $this->expectExceptionMessage('No existen HH aprobadas facturables');
         app(SalesPrefacturationService::class)->generateDraft($this->company->id, [

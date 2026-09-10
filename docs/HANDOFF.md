@@ -512,3 +512,19 @@ Pruebas focalizadas nuevas: `test_partially_invoiced_plan_keeps_edit_plan_action
 El cambio `4a9db02` (`fix: show completed billing plan read only`) fue validado en produccion para el proyecto cerrado con todos sus hitos facturados. El detalle muestra `Ver plan`, ya no muestra `Editar plan`, mantiene visible el plan y los hitos con estado `Facturado`, sin inputs ni controles de modificacion.
 
 No se ejecutaron SQL ni migraciones, no hubo cambios de datos y no se modifico codigo durante este cierre.
+
+## Cierre local facturacion Por Hora / TIME_ENTRIES - 2026-09-10
+
+Auditoria focalizada: las reglas de estrategia, HH aprobadas no facturadas, tarifa comercial del proyecto, fechas mensuales, conversion por issue_date, precision CLP, vencimiento, trazabilidad y no duplicacion ya estaban cubiertas por `SalesPrefacturationTest` y `BillingDateRulesTest`.
+
+Blocker corregido: `SalesPrefacturationService::generateDraft()` no asignaba `document_type_id`, por lo que el borrador TIME_ENTRIES no podia pasar por `SalesDocumentService::confirm()`. Ahora resuelve el catalogo sales/FACTURA activo de la misma empresa y falla con mensaje controlado si falta.
+
+Prueba E2E agregada: `test_hourly_billing_draft_can_be_confirmed_without_recalculating_or_reusing_hours`, con 12 tests / 58 assertions PASS en `SalesPrefacturationTest`. Valida HH aprobadas, tarifa comercial UF, conversion issue_date, CLP entero, IVA, due/projected, borrador, links HH, confirmacion Borrador -> Pendiente sin recalculo y exclusion de segunda facturacion. Sin SQL, sin migraciones, produccion no tocada.
+
+Smoke productivo pendiente, maximo 6 pasos:
+1. Seleccionar un Proyecto Por Hora QA con moneda UF, tarifa comercial definida, payment term y periodo mensual cerrado.
+2. Verificar antes de generar: dos HH aprobadas dentro del periodo, una HH no aprobada, y UF/FX disponible para la issue_date; confirmar que ninguna aprobada ya tenga factura activa.
+3. Generar el borrador con issue_date no futura y al cierre del periodo; revisar HH aprobadas solamente, tarifa del proyecto, conversion a CLP entero, IVA, total, due/projected y estado Borrador.
+4. Confirmar con un numero QA; revisar Pendiente, document_type Factura y que montos, fechas, snapshot y links HH no cambien.
+5. Volver a abrir el flujo del mismo periodo y verificar que las HH ya vinculadas no aparecen como facturables.
+6. STOP si aparece tarifa de Persona/Asignacion, HH no aprobada, fecha futura/anterior al cierre mensual, recalculo al confirmar, duplicacion de links o cualquier CashMovement creado.
