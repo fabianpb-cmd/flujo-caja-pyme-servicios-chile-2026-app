@@ -577,3 +577,10 @@ Los errores de plan ahora se devuelven bajo `project_billing_plan`, se conservan
 Se corrigio `ProjectBillingMilestoneService::syncPlan()` para iniciar las secuencias temporales por encima del maximo entre las secuencias actuales y todas las secuencias finales solicitadas, evitando colisiones durante swaps o reordenamientos hacia valores altos. Las validaciones previas, eliminacion primero, atomicidad, proteccion de hitos facturados e indice unico permanecen intactos.
 
 Se agrego `test_http_update_isolates_temporary_sequences_from_high_requested_sequences`: `ProjectBillingPlanHttpTest` pasa con 13 tests / 67 assertions; `git diff --check` PASS. Sin SQL, sin migraciones y sin deploy.
+## QA productivo final de Proyectos - 2026-09-10
+
+**PASS / CERRADO.** El deploy productivo acumulado incluyo `c93db32a4e2c1c1f9c9ccb7bbaf0dacb6b99ee1f` y `0565d16325b0d4695afdf17fc7909f59adb96e08`.
+
+Smoke PASS: plan inicial 1/2/3; se elimino Hito 2 y quedaron secuencias 1/3 con total 70%; `Agregar hito` reutilizo automaticamente la secuencia 2 y la inserto en orden; el nuevo Hito 2 fue modificado y guardado; al reabrir persistieron secuencias 1/2/3 y los nuevos datos; el total quedo en 100%. `PRY-000012` permanecio intacto y read-only. No se ejecuto SQL, no hubo migraciones, ni se crearon facturas o movimientos por este smoke.
+
+`ProjectBillingPlanHttpTest`: 13 tests / 67 assertions PASS. QA productivo final de Proyectos cerrado.
