@@ -6,10 +6,12 @@ use App\Models\Client;
 use App\Models\Company;
 use App\Models\ContractType;
 use App\Models\Currency;
+use App\Models\DocumentType;
 use App\Models\Project;
 use App\Models\ProjectBillingMilestone;
 use App\Models\LegalParameter;
 use App\Models\RecordStatus;
+use App\Models\UfValue;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -81,6 +83,43 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response->assertOk();
         $response->assertSee('data-project-billing-plan', false);
         $this->assertMatchesRegularExpression('/data-project-billing-plan[\s\S]*<script nonce="[^"]+"[\s\S]*syncPercentages/', $response->getContent());
+    }
+
+    public function test_partially_invoiced_plan_keeps_edit_plan_action(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-PARTIAL'));
+        $first = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 1, 'name' => 'Inicial', 'percentage' => 50]);
+        ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 2, 'name' => 'Final', 'percentage' => 50]);
+        $this->issueMilestone($project, $first, $company);
+
+        $response = $this->actingAs($admin)->get(route('operational.show', ['projects', $project->id]));
+
+        $response->assertOk()->assertSee('Editar plan')->assertDontSee('Ver plan');
+    }
+
+    public function test_fully_invoiced_plan_is_read_only_and_exposes_only_ver_plan(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-COMPLETE'));
+        $first = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 1, 'name' => 'Inicial', 'percentage' => 50]);
+        $second = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 2, 'name' => 'Final', 'percentage' => 50]);
+        $this->issueMilestone($project, $first, $company);
+        $this->issueMilestone($project, $second, $company);
+
+        $response = $this->actingAs($admin)->get(route('operational.show', ['projects', $project->id]));
+
+        $response->assertOk()->assertSee('Ver plan')->assertDontSee('Editar plan')->assertSee('Facturado');
+        $this->assertStringNotContainsString('name="billing_milestones', $response->getContent());
+    }
+
+    private function issueMilestone(Project $project, ProjectBillingMilestone $milestone, Company $company): void
+    {
+        DocumentType::query()->firstOrCreate(['company_id' => $company->id, 'domain' => 'sales', 'code' => 'FACTURA'], ['name' => 'Factura', 'active' => true]);
+        if (! UfValue::query()->where('company_id', $company->id)->whereDate('value_date', '2026-09-09')->exists()) {
+            UfValue::query()->create(['company_id' => $company->id, 'value_date' => '2026-09-09', 'value' => 50000, 'active' => true]);
+        }
+        app(\App\Services\ProjectBillingMilestoneService::class)->issue($milestone, '2026-09-09', true);
     }
 
     private function fixtures(): array

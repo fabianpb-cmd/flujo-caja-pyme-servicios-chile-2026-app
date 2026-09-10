@@ -190,8 +190,9 @@
 
     @if ($resource === 'projects' && ($billingStrategy ?? null) === \App\Services\BillingStrategyService::CLOSED_PROJECT && ! empty($billingPlan))
         @php($billingCurrency = $item->salesCurrency ?: 'CLP')
-        <div class="app-panel p-3 mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2"><div><div class="section-title mb-0">Plan de facturación</div><div class="small text-muted">{{ \App\Support\UiFormatter::formatPercent($billingPlan['scheduled_percentage'] / 100, 2) }} programado · {{ \App\Support\UiFormatter::formatPercent($billingPlan['remaining_percentage'] / 100, 2) }} pendiente por programar</div></div><a class="btn btn-sm btn-outline-primary" href="{{ route('operational.edit', ['projects', $item->id]) }}">Editar plan</a></div>
+        @php($billingPlanComplete = collect($billingPlan['milestones'])->isNotEmpty() && collect($billingPlan['milestones'])->every(fn ($row) => $row['invoiced']))
+        <div class="app-panel p-3 mb-4" id="billing-plan">
+            <div class="d-flex justify-content-between align-items-center mb-2"><div><div class="section-title mb-0">Plan de facturación</div><div class="small text-muted">{{ \App\Support\UiFormatter::formatPercent($billingPlan['scheduled_percentage'] / 100, 2) }} programado · {{ \App\Support\UiFormatter::formatPercent($billingPlan['remaining_percentage'] / 100, 2) }} pendiente por programar</div></div>@if($billingPlanComplete)<a class="btn btn-sm btn-outline-secondary" href="{{ route('operational.show', ['projects', $item->id]) }}#billing-plan">Ver plan</a>@else<a class="btn btn-sm btn-outline-primary" href="{{ route('operational.edit', ['projects', $item->id]) }}">Editar plan</a>@endif</div>
             @foreach ($billingPlan['milestones'] as $row)
                 @php($milestone = $row['model'])
                 <div class="border rounded p-2 mb-2">

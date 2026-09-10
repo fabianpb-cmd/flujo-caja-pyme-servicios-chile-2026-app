@@ -500,3 +500,9 @@ Reparación controlada `ING-000006` (id 6, documento 1, TIME_ENTRIES, sin hito):
 Se agrego `test_issue_hito_three_is_independent_and_can_be_confirmed_without_changing_prior_milestones` en `ProjectBillingMilestoneServiceTest`. La prueba construye localmente un proyecto cerrado UF 180 con plan 30/40/30, emite Hitos 1 y 2, emite de forma independiente el Hito 3 con fecha prevista 2026-10-01 y emision real 2026-09-09, y confirma el borrador mediante el flujo existente.
 
 Resultado: PASS, 1 test y 33 assertions. Hito 3 queda en UF 54, neto CLP 2700000, IVA 513000 y bruto 3213000; due/projected 2026-10-09. Se preservan Hitos 1 y 2, no se crean vinculos HH ni movimientos de caja y `billing_status_id` permanece sin cambios. No se tocaron datos productivos, no hay SQL ni migraciones nuevas.
+
+## UX plan cerrado: lectura al completar facturacion - 2026-09-10
+
+El detalle de Proyecto cerrado ahora muestra `Editar plan` mientras exista al menos un hito sin factura activa. Cuando todos los hitos estan facturados, muestra `Ver plan` y mantiene el plan en el detalle como solo lectura, sin formularios ni controles de mantenimiento.
+
+Pruebas focalizadas nuevas: `test_partially_invoiced_plan_keeps_edit_plan_action` y `test_fully_invoiced_plan_is_read_only_and_exposes_only_ver_plan`: PASS, 2 tests / 8 assertions. La proteccion server-side de hitos facturados permanece intacta. Sin cambios de facturacion, documentos, SQL ni migraciones; produccion no fue tocada.
