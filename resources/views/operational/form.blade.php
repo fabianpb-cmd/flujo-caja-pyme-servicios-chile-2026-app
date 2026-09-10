@@ -1461,12 +1461,26 @@
             @php($projectSelectedContract = old('contract_type_id', $item->contract_type_id ?? null))
             @php($projectSelectedContractData = $projectSelectedContract ? ($projectContractTypes[$projectSelectedContract] ?? null) : null)
             @php($projectIsClosed = is_array($projectSelectedContractData) && (strtoupper((string) ($projectSelectedContractData['code'] ?? '')) === 'PROYECTO_CERRADO' || mb_strtolower((string) ($projectSelectedContractData['label'] ?? '')) === 'proyecto cerrado'))
-            @php($projectMilestoneRows = old('billing_milestones', $item->exists ? $item->billingMilestones->map(fn ($m) => ['id' => $m->id, 'sequence' => $m->sequence, 'name' => $m->name, 'planned_invoice_date' => optional($m->planned_invoice_date)->toDateString(), 'percentage' => $m->percentage, 'notes' => $m->notes])->all() : [['sequence' => 1, 'name' => '', 'planned_invoice_date' => '', 'percentage' => '', 'notes' => '']]))
+            @php($projectBillingPlanReadOnly = $projectBillingPlanReadOnly ?? false)
+            @php($projectMilestoneRows = old('billing_milestones', $item->exists ? $item->billingMilestones->map(fn ($m) => ['id' => $m->id, 'sequence' => $m->sequence, 'name' => $m->name, 'planned_invoice_date' => optional($m->planned_invoice_date)->toDateString(), 'percentage' => $m->percentage, 'notes' => $m->notes, 'is_billed' => $m->salesDocuments->contains(fn ($document) => ! $document->is_voided && $document->status !== 'Anulado')])->all() : [['sequence' => 1, 'name' => '', 'planned_invoice_date' => '', 'percentage' => '', 'notes' => '', 'is_billed' => false]]))
             <div class="app-panel p-3 mb-4" data-project-billing-plan data-closed="{{ $projectIsClosed ? '1' : '0' }}">
                 <div class="section-title mb-2">PLAN DE FACTURACIÓN</div>
                 <div data-project-billing-hourly class="small text-muted {{ $projectIsClosed ? 'd-none' : '' }}">Modalidad: Facturación por HH aprobadas · Periodicidad actual: Mensual · Base: HH aprobadas no facturadas del período.<br>La tarifa cobrada al cliente por cada HH aprobada se configura como Tarifa comercial HH. No corresponde al costo del consultor.</div>
                 <div data-project-billing-unsupported class="alert alert-warning py-2 {{ $projectIsClosed || $projectSelectedContract ? 'd-none' : '' }}">Este tipo de contrato no tiene una estrategia de facturación configurada.</div>
                 <div data-project-billing-milestones class="{{ $projectIsClosed ? '' : 'd-none' }}">
+                    @if ($projectBillingPlanReadOnly)
+                        <div class="small text-muted mb-2">Todos los hitos tienen factura activa. El plan es solo lectura.</div>
+                        @foreach ($item->billingMilestones->sortBy('sequence') as $milestone)
+                            @php($activeDocument = $milestone->salesDocuments->first(fn ($document) => ! $document->is_voided && $document->status !== 'Anulado'))
+                            <div class="row g-2 mb-2" data-project-milestone-row>
+                                <div class="col-1"><span class="form-control-plaintext">{{ $milestone->sequence }}</span></div>
+                                <div class="col-3"><span class="form-control-plaintext">{{ $milestone->name }}</span></div>
+                                <div class="col-3"><span class="form-control-plaintext">{{ $milestone->planned_invoice_date ? \App\Support\UiFormatter::formatDate($milestone->planned_invoice_date) : 'Sin fecha prevista' }}</span></div>
+                                <div class="col-2"><span class="form-control-plaintext">{{ rtrim(rtrim(number_format((float) $milestone->percentage, 2, '.', ''), '0'), '.') }} %</span></div>
+                                <div class="col-3"><span class="form-control-plaintext">Facturado{{ $activeDocument?->code ? ' · '.$activeDocument->code : '' }}</span></div>
+                            </div>
+                        @endforeach
+                    @else
                     @foreach ($projectMilestoneRows as $index => $row)
                         <div class="row g-2 mb-2" data-project-milestone-row>
                             @if (!empty($row['id']))<input type="hidden" name="billing_milestones[{{ $index }}][id]" value="{{ $row['id'] }}">@endif
@@ -1476,9 +1490,20 @@
                             @php($milestonePercentage = $row['percentage'] ?? '')
                             @php($milestonePercentage = is_numeric($milestonePercentage) ? rtrim(rtrim(number_format((float) $milestonePercentage, 2, '.', ''), '0'), '.') : $milestonePercentage)
                             <div class="col-2"><input required class="form-control" name="billing_milestones[{{ $index }}][percentage]" type="number" min="0.01" max="100" step="0.01" value="{{ $milestonePercentage }}" placeholder="%"></div>
-                            <div class="col-3"><input class="form-control" name="billing_milestones[{{ $index }}][notes]" value="{{ $row['notes'] ?? '' }}" placeholder="Notas"></div>
+                            <div class="col-3 d-flex gap-2"><input class="form-control" name="billing_milestones[{{ $index }}][notes]" value="{{ $row['notes'] ?? '' }}" placeholder="Notas">@if (empty($row['is_billed']))<button type="button" class="btn btn-outline-danger" data-project-billing-remove aria-label="Eliminar hito">Eliminar</button>@endif</div>
                         </div>
                     @endforeach
+                    <template data-project-billing-milestone-template>
+                        <div class="row g-2 mb-2" data-project-milestone-row>
+                            <div class="col-1"><input required class="form-control" name="billing_milestones[__INDEX__][sequence]" type="number" min="1" value="" placeholder="#"></div>
+                            <div class="col-3"><input required class="form-control" name="billing_milestones[__INDEX__][name]" value="" placeholder="Nombre del hito"></div>
+                            <div class="col-3"><input class="form-control" name="billing_milestones[__INDEX__][planned_invoice_date]" type="date" value=""></div>
+                            <div class="col-2"><input required class="form-control" name="billing_milestones[__INDEX__][percentage]" type="number" min="0.01" max="100" step="0.01" value="" placeholder="%"></div>
+                            <div class="col-3 d-flex gap-2"><input class="form-control" name="billing_milestones[__INDEX__][notes]" value="" placeholder="Notas"><button type="button" class="btn btn-outline-danger" data-project-billing-remove aria-label="Eliminar hito">Eliminar</button></div>
+                        </div>
+                    </template>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-project-billing-add>Agregar hito</button>
+                    @endif
                     <div class="small text-muted">Total programado: <span data-project-billing-total>0</span>% · Pendiente por programar: <span data-project-billing-remaining>100</span>%</div>
                     <div class="alert alert-warning py-2 mt-2 d-none" data-project-billing-warning role="alert"></div>
                 </div>
@@ -1486,6 +1511,9 @@
             @push('scripts')
                 <script nonce="{{ $cspNonce ?? '' }}">
                     (() => { const panel = document.querySelector('[data-project-billing-plan]'); const select = document.getElementById('contract_type_id'); if (!panel || !select) return; const milestones = panel.querySelector('[data-project-billing-milestones]'); const form = panel.closest('form'); const submit = form?.querySelector('button[type="submit"]'); const total = panel.querySelector('[data-project-billing-total]'); const remaining = panel.querySelector('[data-project-billing-remaining]'); const warning = panel.querySelector('[data-project-billing-warning]'); const format = value => Number(value).toLocaleString('es-CL', { maximumFractionDigits: 2, useGrouping: false }); const syncPercentages = () => { const sum = [...(milestones?.querySelectorAll('input[name$="[percentage]"]') || [])].reduce((total, input) => total + (Number.parseFloat(input.value) || 0), 0); const rounded = Math.round(sum * 100) / 100; const excess = Math.max(0, rounded - 100); if (total) total.textContent = format(rounded); if (remaining) remaining.textContent = format(Math.max(0, 100 - rounded)); if (warning) { warning.textContent = excess > 0 ? `La suma de hitos supera el 100% en ${format(excess)} %.` : ''; warning.classList.toggle('d-none', excess <= 0); } if (submit) submit.disabled = excess > 0; }; const sync = () => { const option = select.options[select.selectedIndex]; const code = (option?.dataset?.code || '').toUpperCase(); const label = (option?.textContent || '').trim().toLowerCase(); const closed = code === 'PROYECTO_CERRADO' || label === 'proyecto cerrado'; const supportedHourly = ['POR_HORA', 'POR_HORAS', 'HOURLY'].includes(code) || ['por hora', 'por horas'].includes(label); panel.dataset.closed = closed ? '1' : '0'; milestones?.classList.toggle('d-none', !closed); milestones?.querySelectorAll('input').forEach(input => input.disabled = !closed); panel.querySelector('[data-project-billing-hourly]')?.classList.toggle('d-none', closed); panel.querySelector('[data-project-billing-unsupported]')?.classList.toggle('d-none', closed || supportedHourly); syncPercentages(); }; milestones?.addEventListener('input', syncPercentages); select.addEventListener('change', sync); sync(); })();
+                </script>
+                <script nonce="{{ $cspNonce ?? '' }}">
+                    (() => { const panel = document.querySelector('[data-project-billing-plan]'); const milestones = panel?.querySelector('[data-project-billing-milestones]'); const add = panel?.querySelector('[data-project-billing-add]'); const template = panel?.querySelector('[data-project-billing-milestone-template]'); if (!panel || !milestones || !add || !template) return; const renumber = () => milestones.querySelectorAll('[data-project-milestone-row]').forEach((row, index) => row.querySelectorAll('[name]').forEach(input => { input.name = input.name.replace(/billing_milestones\[\d+\]/, `billing_milestones[${index}]`); })); const bindRemove = row => row.querySelector('[data-project-billing-remove]')?.addEventListener('click', () => { if (milestones.querySelectorAll('[data-project-milestone-row]').length <= 1) return; row.remove(); renumber(); milestones.dispatchEvent(new Event('input', { bubbles: true })); }); milestones.querySelectorAll('[data-project-milestone-row]').forEach(bindRemove); add.addEventListener('click', () => { const row = template.content.firstElementChild.cloneNode(true); const index = milestones.querySelectorAll('[data-project-milestone-row]').length; row.querySelector('input[name$="[sequence]"]').value = index + 1; milestones.insertBefore(row, template); bindRemove(row); renumber(); milestones.dispatchEvent(new Event('input', { bubbles: true })); }); })();
                 </script>
             @endpush
         @endif

@@ -543,3 +543,12 @@ La auditoria final mantuvo **0 blockers productivos**. El grupo financiero focal
 Se corrigio exclusivamente el fixture de `BillingDateRulesTest`, agregando ese catalogo para la empresa del test, sin cambios de codigo productivo ni de expectativas funcionales. Resultado final: **15 tests / 25 assertions PASS**.
 
 Sin migraciones, sin SQL y sin deploy. **RELEASE STATUS: READY**; puede cerrarse release.
+## QA focalizado de Proyectos - 2026-09-10
+
+QA productivo realizado con datos temporales `QA-PROJ-20260910-CLOSED` y `QA-PROJ-20260910-HOURLY`, ambos eliminados al finalizar. `PRY-000012` no fue modificado.
+
+Se verifico carga de lista, detalle, edicion, persistencia, busqueda sin resultados y 404 controlado. El proyecto cerrado QA se creo, mostro el plan y total 100%; al probar 101% se mostro warning y se bloqueo Guardar. El proyecto Por Hora QA se creo con UF 1,20 y pago a 30 dias; tarifa cero fue rechazada server-side y se restauro el valor valido. Cambiar un proyecto cerrado con hitos a Por Hora fue rechazado con mensaje funcional. No se crearon facturas ni movimientos de caja.
+
+Se detecto un blocker UX en la version productiva: el formulario de Proyecto cerrado no exponia controles para agregar/eliminar filas, impidiendo construir 30/40/30 desde la UI. Se implemento localmente un control minimo para agregar hitos y eliminar solo hitos no facturados; el modo de plan completamente facturado permanece solo lectura. La correccion local fue validada por `ProjectBillingPlanHttpTest` (7 tests / 35 assertions PASS) y `php artisan view:cache`.
+
+Estado: **QA LOCAL PASS / PRODUCCION PENDIENTE DE DEPLOY DEL FIX DE UI**. No se hizo deploy, push, SQL ni migracion; el blocker de multi-hito debe verificarse nuevamente despues del despliegue.

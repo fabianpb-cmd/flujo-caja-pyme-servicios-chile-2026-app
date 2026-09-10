@@ -146,6 +146,7 @@ class OperationalCrudController extends Controller
             'payrollFormState' => [],
             'payrollHourlyCost' => null,
             'assignmentCommitmentPreview' => $resource === 'assignments' ? $this->assignmentCommitmentPreviewData($request, $item) : null,
+            'projectBillingPlanReadOnly' => false,
         ]);
     }
 
@@ -262,6 +263,12 @@ class OperationalCrudController extends Controller
         $config = $this->config($resource);
         $item = $config['model']::query()->with($this->relationNames($config))->findOrFail($record);
         $this->authorizeResource($request, $config, 'update', $item);
+        $projectBillingPlanReadOnly = false;
+        if ($resource === 'projects' && $item instanceof Project) {
+            $item->loadMissing('billingMilestones.salesDocuments');
+            $projectBillingPlanReadOnly = $item->billingMilestones->isNotEmpty()
+                && $item->billingMilestones->every(fn ($milestone) => $milestone->salesDocuments->contains(fn ($document) => ! $document->is_voided && $document->status !== 'Anulado'));
+        }
 
         if ($resource === 'time-entries' && $item instanceof TimeEntry && filled($item->period_batch_id)) {
             $batchEntries = $this->timeEntryBatchEntries($request->user()->company_id, (string) $item->period_batch_id, $this->relationNames($config));
@@ -322,6 +329,7 @@ class OperationalCrudController extends Controller
             'payrollCalculationBreakdown' => $resource === 'payroll-records' ? $this->payroll->explain($item) : null,
             'salesCalculationBreakdown' => $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null,
             'assignmentCommitmentPreview' => $resource === 'assignments' ? $this->assignmentCommitmentPreviewData($request, $item) : null,
+            'projectBillingPlanReadOnly' => $projectBillingPlanReadOnly,
         ]);
     }
 
