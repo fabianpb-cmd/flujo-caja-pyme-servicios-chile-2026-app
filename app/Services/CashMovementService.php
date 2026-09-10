@@ -9,6 +9,7 @@ use App\Models\PayrollRecord;
 use App\Models\SalesDocument;
 use App\Models\User;
 use App\Support\MassAssignment;
+use App\Support\UiFormatter;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -36,6 +37,9 @@ class CashMovementService
 
             $data['income'] = $income;
             $data['expense'] = $expense;
+            if (($data['source_document_type'] ?? null) === 'expense_document') {
+                $data['expense'] = UiFormatter::roundAmount($expense, 'CLP');
+            }
             $data['created_by_user_id'] = $user?->id;
             $data['status'] = $data['status'] ?? 'posted';
             $this->assertSupportedStatus($data['status']);
@@ -82,6 +86,9 @@ class CashMovementService
             $before = $locked->toArray();
             $data['income'] = $income;
             $data['expense'] = $expense;
+            if (($data['source_document_type'] ?? null) === 'expense_document') {
+                $data['expense'] = UiFormatter::roundAmount($expense, 'CLP');
+            }
             $data['company_id'] = $locked->company_id;
             $data['status'] = $data['status'] ?? $locked->status;
             $this->assertSupportedStatus($data['status']);

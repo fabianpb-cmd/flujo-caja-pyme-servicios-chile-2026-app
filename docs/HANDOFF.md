@@ -627,3 +627,12 @@ Metadata final verificada: CLP = $, minor_units=0, moneda base Si, activo Si; UF
 El smoke productivo final de Asignaciones paso sin guardar: UF mostro prefijo UF, codigo UF, minor_units=2 y 1,20 se mantuvo decimal al salir del campo; CLP mostro prefijo $, codigo CLP, minor_units=0 y 1200,75 se presento como 1.201; al volver a UF, 1,25 con minor_units=2 se mostro como 1,25. No se observaron errores JavaScript ni respuestas HTTP 500/419. No se creo ninguna Asignacion ni otro dato durante el smoke.
 
 **QA PRODUCTIVO STAFFING/TIME: PASS / CERRADO.** Personal -> Asignaciones -> Horas cerrado. La produccion queda con la metadata Currency corregida; no se ejecutaron tests por tratarse de una reparacion productiva UI autorizada. Sin SQL, sin migraciones, sin seeders y sin deploy adicional.
+## QA focalizado Egresos -> CxP -> Pagos - 2026-09-10
+
+Auditoria local focalizada: ExpenseDocument y CashMovement liquidan en CLP, pero PayablesService conservaba redondeo de dos decimales. Se corrigio para usar UiFormatter::roundAmount(..., CLP) en neto, IVA, bruto, pagado y saldo. Los pagos de expense_document tambien se normalizan a pesos enteros en CashMovementService; no se alteran movimientos historicos.
+
+Validacion local: 3 tests / 12 assertions PASS para precision CLP y ciclo de pago de egresos; git diff --check PASS. No se ejecuto suite completa.
+
+Smoke productivo bloqueado: la sesion del navegador estaba expirada en /login y no se solicitaron ni introdujeron credenciales. Por tanto no se creo ExpenseDocument QA, no se crearon CashMovement y no se modificaron datos productivos. Quedan pendientes la creacion controlada QA, pago parcial, rechazo de sobrepago, pago final e inmutabilidad posted.
+
+Estado: **EGRESOS/CXP/PAGOS: BLOCKED POR SESION PRODUCTIVA EXPIRADA**. Sin SQL, sin migraciones y sin deploy de esta correccion local.

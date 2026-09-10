@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CashMovement;
 use App\Models\ExpenseDocument;
+use App\Support\UiFormatter;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
@@ -16,15 +17,15 @@ class PayablesService
     public function amountsWithVat(int $companyId, string|float|int $netAmount, CarbonInterface|string $date, bool $recoverableVat = true): array
     {
         $vatRate = $this->vatRate($companyId, $date);
-        $net = round((float) $netAmount, 2);
-        $vat = round($net * $vatRate, 2);
+        $net = UiFormatter::roundAmount($netAmount, 'CLP');
+        $vat = UiFormatter::roundAmount($net * $vatRate, 'CLP');
 
         return [
             'net_amount' => $net,
             'vat_rate' => $vatRate,
             'vat_amount' => $vat,
             'recoverable_vat_amount' => $recoverableVat ? $vat : 0.0,
-            'gross_amount' => round($net + $vat, 2),
+            'gross_amount' => UiFormatter::roundAmount($net + $vat, 'CLP'),
         ];
     }
 
@@ -35,12 +36,12 @@ class PayablesService
 
     public function paidAmount(ExpenseDocument $document, CarbonInterface|string|null $asOf = null): float
     {
-        return (float) $this->cashQuery($document, $asOf)->sum('expense');
+        return UiFormatter::roundAmount($this->cashQuery($document, $asOf)->sum('expense'), 'CLP');
     }
 
     public function balance(ExpenseDocument $document, CarbonInterface|string|null $asOf = null): float
     {
-        return max(0, round((float) $document->gross_amount - $this->paidAmount($document, $asOf), 2));
+        return max(0, UiFormatter::roundAmount((float) $document->gross_amount - $this->paidAmount($document, $asOf), 'CLP'));
     }
 
     public function deriveStatus(ExpenseDocument $document, CarbonInterface|string|null $asOf = null): string

@@ -906,6 +906,29 @@ class FinancialCoreTest extends TestCase
         $this->assertSame('Pagado', $expense->refresh()->payment_status);
     }
 
+    public function test_expense_amounts_use_integer_clp_precision(): void
+    {
+        $amounts = app(PayablesService::class)->amountsWithVat($this->company->id, 2943576.44, '2026-08-01');
+
+        $this->assertSame(2943576.0, $amounts['net_amount']);
+        $this->assertSame(559279.0, $amounts['vat_amount']);
+        $this->assertSame(3502855.0, $amounts['gross_amount']);
+    }
+
+    public function test_expense_cash_movements_use_integer_clp_precision(): void
+    {
+        $expense = $this->expense('EGR-CLP-PRECISION', 1000000, '2026-08-01');
+
+        $movement = app(CashMovementService::class)->create(
+            $this->cashData('MOV-CLP-PRECISION', 'expense_document', $expense->code, '2026-08-15', 0, 400000.44),
+            $this->user,
+        );
+
+        $this->assertSame(400000.0, (float) $movement->expense);
+        $this->assertSame(400000.0, (float) $expense->refresh()->paid_amount);
+        $this->assertSame(600000.0, app(PayablesService::class)->balance($expense));
+    }
+
     public function test_legal_parameter_is_selected_by_vigency(): void
     {
         $service = app(LegalParameterService::class);
