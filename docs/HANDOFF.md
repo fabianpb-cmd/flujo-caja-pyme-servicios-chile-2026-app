@@ -536,3 +536,10 @@ Smoke productivo PASS sobre datos QA. Se validó un proyecto Por Hora en UF con 
 La confirmacion `Borrador -> Pendiente` con numero QA preservo montos, fechas, snapshot y vinculos HH. Las HH ya facturadas dejaron de estar disponibles para una segunda facturacion. No se creo `CashMovement`. El blocker corregido en `d02d94a272cba4dab81a0960579727b99624ea2b` queda validado en produccion QA y el bloque TIME_ENTRIES queda cerrado.
 
 Sin migraciones, sin SQL y sin cambios de codigo en este cierre documental.
+## Gate final de release: fixture de fechas alineado - 2026-09-10
+
+La auditoria final mantuvo **0 blockers productivos**. El grupo financiero focalizado permanece en **53 tests / 421 assertions PASS**. `BillingDateRulesTest` inicialmente presentaba 9 PASS y 6 errores porque su fixture no creaba el `DocumentType` activo `sales/FACTURA` requerido legitimamente por los servicios de facturacion.
+
+Se corrigio exclusivamente el fixture de `BillingDateRulesTest`, agregando ese catalogo para la empresa del test, sin cambios de codigo productivo ni de expectativas funcionales. Resultado final: **15 tests / 25 assertions PASS**.
+
+Sin migraciones, sin SQL y sin deploy. **RELEASE STATUS: READY**; puede cerrarse release.

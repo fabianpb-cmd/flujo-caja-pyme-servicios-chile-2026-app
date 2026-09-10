@@ -7,6 +7,7 @@ use App\Models\ApprovalStatus;
 use App\Models\Company;
 use App\Models\ContractType;
 use App\Models\Currency;
+use App\Models\DocumentType;
 use App\Models\PaymentTerm;
 use App\Models\RecordStatus;
 use App\Models\Project;
@@ -37,6 +38,7 @@ class BillingDateRulesTest extends TestCase
         parent::setUp();
         $this->company = Company::query()->create(['code' => 'CMP-DATES', 'name' => 'Empresa fechas', 'status' => 'active']);
         $this->client = Client::query()->create(['company_id' => $this->company->id, 'code' => 'CLI-DATES', 'legal_name' => 'Cliente fechas']);
+        DocumentType::query()->create(['company_id' => $this->company->id, 'domain' => 'sales', 'code' => 'FACTURA', 'name' => 'Factura', 'active' => true]);
         $this->uf = Currency::query()->create(['company_id' => $this->company->id, 'code' => 'UF', 'name' => 'Unidad de fomento', 'symbol' => 'UF', 'minor_units' => 2, 'active' => true]);
         $closed = ContractType::query()->create(['company_id' => $this->company->id, 'domain' => 'commercial', 'code' => 'PROYECTO_CERRADO', 'name' => 'Proyecto cerrado', 'active' => true]);
         $this->closedProject = Project::query()->create(['company_id' => $this->company->id, 'client_id' => $this->client->id, 'code' => 'PRY-DATES', 'name' => 'Proyecto fechas', 'contract_type_id' => $closed->id, 'sales_currency_id' => $this->uf->id, 'sale_net' => 180, 'start_date' => '2026-01-01', 'end_date' => '2026-09-30']);
