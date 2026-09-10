@@ -618,3 +618,12 @@ Catalogo final: CLP = `$`, `minor_units=0`, moneda base `Si`, activo `Si`; UF = 
 Smoke productivo de Asignaciones PASS: en Nueva Asignacion se selecciono Persona y Proyecto QA sin guardar. UF mostro prefijo UF, `currencyCode=UF`, `minorUnits=2` y `1,20` con decimales; CLP mostro `$`, `currencyCode=CLP`, `minorUnits=0` y `1200,75` se presento como `1.201`; el retorno a UF mostro `UF`, `2` y `1,25`. No se creo ninguna Asignacion ni otro dato, no hubo errores JavaScript observados ni respuestas HTTP 500/419.
 
 **QA PRODUCTIVO STAFFING/TIME: PASS / CERRADO.** Personal -> Asignaciones -> Horas cerrado. Sin SQL, sin migraciones, sin seeders y sin deploy adicional.
+## Cierre productivo final: Currency y smoke Staffing/Time - 2026-09-10
+
+Se completo el precheck productivo y se confirmo exactamente un registro activo por codigo CLP, UF, USD y EUR, sin duplicados. Se repararon unicamente esos cuatro registros existentes mediante la UI, sin crear ni eliminar monedas y sin cambiar sus codigos, nombres, descripciones, estados activos ni ordenes.
+
+Metadata final verificada: CLP = $, minor_units=0, moneda base Si, activo Si; UF = UF, minor_units=2, base No, activo Si; USD = US$, minor_units=2, base No, activo Si; EUR = EUR, minor_units=2, base No, activo Si. CLP es la unica moneda base.
+
+El smoke productivo final de Asignaciones paso sin guardar: UF mostro prefijo UF, codigo UF, minor_units=2 y 1,20 se mantuvo decimal al salir del campo; CLP mostro prefijo $, codigo CLP, minor_units=0 y 1200,75 se presento como 1.201; al volver a UF, 1,25 con minor_units=2 se mostro como 1,25. No se observaron errores JavaScript ni respuestas HTTP 500/419. No se creo ninguna Asignacion ni otro dato durante el smoke.
+
+**QA PRODUCTIVO STAFFING/TIME: PASS / CERRADO.** Personal -> Asignaciones -> Horas cerrado. La produccion queda con la metadata Currency corregida; no se ejecutaron tests por tratarse de una reparacion productiva UI autorizada. Sin SQL, sin migraciones, sin seeders y sin deploy adicional.
