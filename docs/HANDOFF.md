@@ -595,3 +595,10 @@ Blocker local corregido: `syncRateUnitUi()` actualizaba unidad y prefijo, pero n
 Tests focalizados: `test_assignments_use_single_hourly_rate_selector_and_share_unit_with_project_value`, `test_assignments_show_effective_project_rate_when_specific_hourly_value_is_empty`, `test_assignments_specific_hourly_value_prevails_over_project_reference`, `test_time_entries_create_view_uses_a_single_unified_batch_form` y `test_time_entries_unified_load_creates_daily_entries_from_total_hours_only`: **5 tests / 62 assertions PASS**. `git diff --check` PASS. Los fallos no ejecutados nuevamente corresponden a problemas historicos de `OperationalUiTest` (`all()` sobre array y expectativa desplazada por validaciones previas), no relacionados con este parche.
 
 Estado: **QA LOCAL FOCALIZADO PASS / PRODUCCION NO MODIFICADA**. Sin migraciones, sin SQL, sin deploy ni push. Pendiente para una siguiente ronda: smoke negativo de RUT/duplicado y fecha de termino anterior, si se requiere ampliar cobertura.
+## Correccion pre-deploy: metadata de precision en tarifa de Asignaciones - 2026-09-10
+
+Se corrigio exclusivamente `resources/views/operational/form.blade.php`: el selector visual `hourly_rate_unit_visual` ahora usa `currency_minor_units`, que es la clave entregada por `OperationalCrudController::options()`. Asi, UF conserva 2 decimales y CLP, USD, EUR u otras monedas usan los `minor_units` reales del catalogo, sin duplicar metadata ni cambiar logica financiera.
+
+Se agrego una regresion al test existente `test_assignments_use_single_hourly_rate_selector_and_share_unit_with_project_value`, que verifica la opcion CLP con `data-currency-code="CLP"` y `data-currency-minor-units="0"`, junto con la sincronizacion dinamica ya existente para UF. Resultado: **1 test / 7 assertions PASS**. `php artisan view:cache` y `git diff --check` PASS.
+
+Sin migraciones, sin SQL y sin deploy adicional en esta iteracion.

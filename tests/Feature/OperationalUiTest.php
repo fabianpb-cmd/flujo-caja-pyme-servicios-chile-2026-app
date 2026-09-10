@@ -163,6 +163,8 @@ class OperationalUiTest extends TestCase
     {
         [$company, $admin] = $this->companyWithAdmin();
 
+        $this->currency($company->id, 'CLP', 'Peso chileno');
+
         $client = Client::query()->create([
             'company_id' => $company->id,
             'code' => 'CLI-TAR',
@@ -185,6 +187,10 @@ class OperationalUiTest extends TestCase
         $response->assertOk();
         $response->assertSee('data-rate-unit-selector="true"', false);
         $response->assertDontSee('Moneda valor HH');
+        $this->assertMatchesRegularExpression(
+            '/<option[^>]*data-currency-code="CLP"[^>]*data-currency-minor-units="0"[^>]*>/s',
+            $response->getContent(),
+        );
         $response->assertSee('input.dataset.moneyCurrencyCode = currencyCode;', false);
         $response->assertSee('input.dataset.moneyMinorUnits = String(Number.isFinite(minorUnits) ? minorUnits : 2);', false);
         $response->assertSee("input.dispatchEvent(new Event('blur'));", false);

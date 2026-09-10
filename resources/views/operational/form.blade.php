@@ -1780,7 +1780,7 @@
                                                     value="currency:{{ $currencyId }}"
                                                     data-currency-symbol="{{ $currencySymbol }}"
                                                     data-currency-code="{{ $currencyCode }}"
-                                                    data-currency-minor-units="{{ $currencyOption['minor_units'] ?? 2 }}"
+                                                    data-currency-minor-units="{{ $currencyOption['currency_minor_units'] ?? 2 }}"
                                                     @selected($selectedRateUnitType !== 'UF' && (string) $selectedRateCurrencyId === (string) $currencyId)
                                                 >
                                                     {{ $currencyCode ?: ($currencyOption['label'] ?? 'Moneda') }}
