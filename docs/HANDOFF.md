@@ -528,3 +528,11 @@ Smoke productivo pendiente, maximo 6 pasos:
 4. Confirmar con un numero QA; revisar Pendiente, document_type Factura y que montos, fechas, snapshot y links HH no cambien.
 5. Volver a abrir el flujo del mismo periodo y verificar que las HH ya vinculadas no aparecen como facturables.
 6. STOP si aparece tarifa de Persona/Asignacion, HH no aprobada, fecha futura/anterior al cierre mensual, recalculo al confirmar, duplicacion de links o cualquier CashMovement creado.
+
+## Cierre productivo smoke Por Hora / TIME_ENTRIES - 2026-09-10
+
+Smoke productivo PASS sobre datos QA. Se validó un proyecto Por Hora en UF con HH aprobadas elegibles y HH no aprobadas excluidas; se utilizo exclusivamente la tarifa comercial del proyecto y la conversion correspondiente a `issue_date`. El borrador genero documento tipo FACTURA con `document_type_id` correcto, neto/IVA/gross CLP enteros y due/projected coherentes.
+
+La confirmacion `Borrador -> Pendiente` con numero QA preservo montos, fechas, snapshot y vinculos HH. Las HH ya facturadas dejaron de estar disponibles para una segunda facturacion. No se creo `CashMovement`. El blocker corregido en `d02d94a272cba4dab81a0960579727b99624ea2b` queda validado en produccion QA y el bloque TIME_ENTRIES queda cerrado.
+
+Sin migraciones, sin SQL y sin cambios de codigo en este cierre documental.
