@@ -637,3 +637,10 @@ Smoke productivo bloqueado: la sesion del navegador estaba expirada en /login y 
 
 Estado: **EGRESOS/CXP/PAGOS: BLOCKED POR SESION PRODUCTIVA EXPIRADA**. Sin SQL, sin migraciones y sin deploy de esta correccion local.
 Nota de trazabilidad del smoke: se creo temporalmente `EGR-000004` con proveedor `QA-AP-20260910-1015`; al detectar que el monto localizado se persistia como `$1` en produccion, se elimino por la UI antes de crear cualquier CashMovement. No quedan datos QA de Egresos asociados a esta iteracion.
+## Smoke productivo Egresos/CxP bloqueado por monto localizado - 2026-09-10
+
+Se repitio el smoke con la sesion autenticada y el codigo indicado como desplegado (`3b5d6a7` y `97c66ba`). Se creo temporalmente `EGR-000005`, proveedor `QA-AP-20260910-1030`, ingresando visualmente `1.000.000` CLP. Produccion persistio nuevamente neto `$1`, IVA `$0` y bruto `$1`, por lo que el smoke se detuvo antes de CxP y pagos. El gasto QA fue eliminado por UI y no tuvo CashMovement asociado; no quedan datos QA de esta ejecucion.
+
+El blocker indica que la version efectiva de produccion no esta ejecutando la normalizacion HTTP de `97c66ba` o requiere una nueva publicacion/cache. No se probaron pago parcial, sobrepago, pago final, selector ni inmutabilidad posted. Navegador: 0 errores JavaScript observados; no se observaron respuestas HTTP 500/419.
+
+Estado: **QA PRODUCTIVO EGRESOS/CXP/PAGOS: BLOCKED / PASS LOCAL PENDIENTE DE DESPLIEGUE EFECTIVO**. No se hizo push ni deploy adicional, sin SQL y sin migraciones.
