@@ -562,3 +562,8 @@ La vista editable mantiene `Agregar hito` y `Eliminar` solo para hitos no factur
 Se corrigio la UX del formulario: las opciones de `sales_currency_id` ahora exponen codigo, simbolo y `minor_units`, y un script CSP sincroniza en vivo esa metadata y el prefijo visible de `contracted_hourly_rate`, `sale_net` y `sale_total` sin convertir los valores numericos. La tarifa comercial HH queda de solo lectura para Proyecto cerrado, preservando su valor historico; continua editable para Por Hora.
 
 `ProjectBillingPlanHttpTest`: 9 tests / 49 assertions PASS. `php artisan view:cache` y `git diff --check` PASS. Sin migraciones, sin SQL y sin deploy; produccion no contiene este ajuste.
+## Interacciones finales de moneda comercial en Proyectos - 2026-09-10
+
+Se corrigieron dos regresiones de la UI del formulario: los eventos focus/blur de inputs monetarios leen `data-money-minor-units` dinamicamente, por lo que un cambio CLP -> UF conserva los decimales correctos; y el cambio de tipo de contrato actualiza `contracted_hourly_rate.readOnly` dentro de `sync`, sin depender del orden de seleccion. La tarifa HH queda de solo lectura en Proyecto cerrado y editable en Por Hora, preservando valores historicos.
+
+`ProjectBillingPlanHttpTest`: 9 tests / 51 assertions PASS; `php artisan view:cache` y `git diff --check` PASS. Sin migraciones, sin SQL y sin deploy.

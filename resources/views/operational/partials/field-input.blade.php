@@ -215,11 +215,12 @@
                 };
 
                 moneyInputs.forEach((input) => {
-                    const minorUnits = Number(input.dataset.moneyMinorUnits ?? 2);
                     input.addEventListener('focus', () => {
+                        const minorUnits = Number(input.dataset.moneyMinorUnits ?? 2);
                         input.value = formatLocalizedNumber(input.value, minorUnits);
                     });
                     input.addEventListener('blur', () => {
+                        const minorUnits = Number(input.dataset.moneyMinorUnits ?? 2);
                         input.value = formatLocalizedNumber(input.value, minorUnits);
                     });
                 });

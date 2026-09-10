@@ -181,6 +181,7 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response->assertSee('data-currency-minor-units="2"', false);
         $response->assertSee("['contracted_hourly_rate', 'sale_net', 'sale_total']", false);
         $response->assertSee('input.dataset.moneyCurrencyCode = code', false);
+        $response->assertSee('const minorUnits = Number(input.dataset.moneyMinorUnits ?? 2);', false);
         $response->assertSee('data-money-currency-prefix="true"', false);
     }
 
@@ -194,6 +195,7 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response->assertOk();
         $response->assertSee('data-project-hourly-rate-field="true"', false);
         $response->assertSee("rate.readOnly = form.querySelector('[data-project-billing-plan]')?.dataset.closed === '1'", false);
+        $response->assertSee('if (rate) rate.readOnly = closed;', false);
     }
 
     private function issueMilestone(Project $project, ProjectBillingMilestone $milestone, Company $company): void
