@@ -169,6 +169,33 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response->assertSee('Facturado');
     }
 
+    public function test_project_sales_currency_metadata_syncs_all_commercial_money_fields(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $response = $this->actingAs($admin)->get(route('operational.create', 'projects'));
+
+        $response->assertOk();
+        $response->assertSee('id="sales_currency_id"', false);
+        $response->assertSee('data-currency-code="UF"', false);
+        $response->assertSee('data-currency-symbol="UF"', false);
+        $response->assertSee('data-currency-minor-units="2"', false);
+        $response->assertSee("['contracted_hourly_rate', 'sale_net', 'sale_total']", false);
+        $response->assertSee('input.dataset.moneyCurrencyCode = code', false);
+        $response->assertSee('data-money-currency-prefix="true"', false);
+    }
+
+    public function test_closed_project_hourly_rate_is_not_editable(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-CLOSED-RATE'));
+
+        $response = $this->actingAs($admin)->get(route('operational.edit', ['projects', $project->id]));
+
+        $response->assertOk();
+        $response->assertSee('data-project-hourly-rate-field="true"', false);
+        $response->assertSee("rate.readOnly = form.querySelector('[data-project-billing-plan]')?.dataset.closed === '1'", false);
+    }
+
     private function issueMilestone(Project $project, ProjectBillingMilestone $milestone, Company $company): void
     {
         DocumentType::query()->firstOrCreate(['company_id' => $company->id, 'domain' => 'sales', 'code' => 'FACTURA'], ['name' => 'Factura', 'active' => true]);

@@ -1199,6 +1199,7 @@ class OperationalCrudController extends Controller
                 if (($definition['model'] ?? null) === \App\Models\Currency::class) {
                     $payload['currency_code'] = $record->code;
                     $payload['currency_symbol'] = $record->symbol;
+                    $payload['currency_minor_units'] = (int) ($record->minor_units ?? 2);
                 }
 
                 if ($resource === 'time-entries' && $field === 'project_id' && $record instanceof \App\Models\Project) {

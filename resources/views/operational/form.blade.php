@@ -1554,7 +1554,8 @@
                     @continue
                 @endif
                 @if (!($sharedRateUnitFields && $field === 'hourly_rate_currency_id'))
-                    <div class="{{ $colClass }}">
+                    @php($projectHourlyRateReadOnly = $resource === 'projects' && $field === 'contracted_hourly_rate' && $projectIsClosed)
+                    <div class="{{ $colClass }}" @if($resource === 'projects' && $field === 'contracted_hourly_rate') data-project-hourly-rate-field="true" @endif>
                         @if ($type === 'checkbox')
                             <div class="form-check mt-4">
                                 <input type="checkbox" class="form-check-input" id="{{ $field }}" name="{{ $field }}" value="1" @checked((bool) $value)>
@@ -1606,7 +1607,7 @@
                                     data-time-entry-project-select="true"
                                 >
                                     <option value="">Seleccione</option>
-                                    @foreach (($options[$field] ?? []) as $key => $option)
+                                        @foreach (($options[$field] ?? []) as $key => $option)
                                         @php($label = is_array($option) ? $option['label'] : $option)
                                         @php($parentId = is_array($option) ? ($option['parent_id'] ?? null) : null)
                                         <option
@@ -1792,6 +1793,9 @@
                             @else
                                 @include('operational.partials.field-input')
                             @endif
+                            @if ($projectHourlyRateReadOnly)
+                                <div class="small text-muted mt-1">No aplica para Proyecto cerrado; se conserva el valor histórico.</div>
+                            @endif
                             @error($field)
                                 <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror
@@ -1846,8 +1850,34 @@
 </form>
 @endsection
 
-@push('scripts')
-<script nonce="{{ $cspNonce ?? '' }}">
+            @push('scripts')
+                <script nonce="{{ $cspNonce ?? '' }}">
+                    (() => {
+                        const form = document.querySelector('[data-operational-form="true"]');
+                        const currencySelect = form?.querySelector('#sales_currency_id');
+                        if (!form || !currencySelect) return;
+                        const prefixFor = code => ({ CLP: '$', USD: 'US$', EUR: '€', UF: 'UF' }[code] || code);
+                        const syncSalesCurrency = () => {
+                            const option = currencySelect.options[currencySelect.selectedIndex];
+                            const code = (option?.dataset.currencyCode || 'CLP').toUpperCase();
+                            const minorUnits = Number.parseInt(option?.dataset.currencyMinorUnits || '2', 10);
+                            ['contracted_hourly_rate', 'sale_net', 'sale_total'].forEach(id => {
+                                const input = form.querySelector(`#${id}`);
+                                if (!input) return;
+                                input.dataset.moneyCurrencyCode = code;
+                                input.dataset.moneyMinorUnits = String(Number.isFinite(minorUnits) ? minorUnits : 2);
+                                const prefix = input.closest('.input-group')?.querySelector('[data-money-currency-prefix="true"]');
+                                if (prefix) prefix.textContent = prefixFor(code);
+                                input.dispatchEvent(new Event('blur'));
+                            });
+                            const rate = form.querySelector('#contracted_hourly_rate');
+                            if (rate) rate.readOnly = form.querySelector('[data-project-billing-plan]')?.dataset.closed === '1';
+                        };
+                        currencySelect.addEventListener('change', syncSalesCurrency);
+                        syncSalesCurrency();
+                    })();
+                </script>
+                <script nonce="{{ $cspNonce ?? '' }}">
     (() => {
         const form = document.querySelector('[data-operational-form="true"]');
         const childSelects = document.querySelectorAll('[data-dependent-select="true"]');
