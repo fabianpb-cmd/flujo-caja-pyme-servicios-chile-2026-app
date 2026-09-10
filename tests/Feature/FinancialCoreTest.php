@@ -12,6 +12,7 @@ use App\Models\Company;
 use App\Models\CompanySetting;
 use App\Models\ApprovalStatus;
 use App\Models\Currency;
+use App\Models\DocumentType;
 use App\Models\ExchangeRate;
 use App\Models\ContractType;
 use App\Models\ExpenseDocument;
@@ -927,6 +928,34 @@ class FinancialCoreTest extends TestCase
         $this->assertSame(400000.0, (float) $movement->expense);
         $this->assertSame(400000.0, (float) $expense->refresh()->paid_amount);
         $this->assertSame(600000.0, app(PayablesService::class)->balance($expense));
+    }
+
+    public function test_expense_http_normalizes_localized_thousands_before_calculation(): void
+    {
+        $documentType = DocumentType::query()->create([
+            'company_id' => $this->company->id,
+            'domain' => 'expense',
+            'code' => 'FACTURA',
+            'name' => 'Factura',
+            'active' => true,
+        ]);
+
+        $response = $this->actingAs($this->user)->post(route('operational.store', ['expense-documents']), [
+            'vendor_name' => 'QA Localizado',
+            'document_type_id' => $documentType->id,
+            'issue_date' => '2026-08-01',
+            'due_date' => '2026-09-01',
+            'net_amount' => '1.000.000',
+            'deductible_vat' => true,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('expense_documents', [
+            'vendor_name' => 'QA Localizado',
+            'net_amount' => 1000000,
+            'vat_amount' => 190000,
+            'gross_amount' => 1190000,
+        ]);
     }
 
     public function test_legal_parameter_is_selected_by_vigency(): void

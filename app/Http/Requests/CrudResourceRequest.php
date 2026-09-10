@@ -178,6 +178,17 @@ class CrudResourceRequest extends FormRequest
             $this->merge([$field => $this->normalizeDateInput($this->input($field))]);
         }
 
+        $moneyFields = collect($config)
+            ->filter(fn (array $field): bool => ($field['type'] ?? null) === 'money')
+            ->keys()
+            ->all();
+
+        foreach ($moneyFields as $field) {
+            if (filled($this->input($field))) {
+                $this->merge([$field => $this->normalizeMoneyInput($this->input($field))]);
+            }
+        }
+
         $checkboxes = collect($config)
             ->filter(fn (array $field): bool => ($field['type'] ?? null) === 'checkbox')
             ->keys()
@@ -776,6 +787,37 @@ class CrudResourceRequest extends FormRequest
         $normalized = str_replace(',', '.', preg_replace('/\s+/', '', (string) $value));
 
         return is_numeric($normalized) ? (float) $normalized : null;
+    }
+
+    private function normalizeMoneyInput(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $normalized = preg_replace('/[^0-9,\.\-]/', '', trim((string) $value));
+        if ($normalized === null || $normalized === '') {
+            return null;
+        }
+
+        $negative = str_starts_with($normalized, '-');
+        $normalized = str_replace('-', '', $normalized);
+        $hasComma = str_contains($normalized, ',');
+        $dotCount = substr_count($normalized, '.');
+
+        if ($hasComma) {
+            $normalized = str_replace('.', '', $normalized);
+            $normalized = str_replace(',', '.', $normalized);
+        } elseif ($dotCount > 1) {
+            $normalized = str_replace('.', '', $normalized);
+        } elseif ($dotCount === 1) {
+            [$integerPart, $fractionPart] = array_pad(explode('.', $normalized, 2), 2, '');
+            if (strlen($fractionPart) === 3 && $integerPart !== '') {
+                $normalized = $integerPart.$fractionPart;
+            }
+        }
+
+        return ($negative ? '-' : '').$normalized;
     }
 
     private function approvalStatusCode(): ?string

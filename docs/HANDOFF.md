@@ -636,3 +636,4 @@ Validacion local: 3 tests / 12 assertions PASS para precision CLP y ciclo de pag
 Smoke productivo bloqueado: la sesion del navegador estaba expirada en /login y no se solicitaron ni introdujeron credenciales. Por tanto no se creo ExpenseDocument QA, no se crearon CashMovement y no se modificaron datos productivos. Quedan pendientes la creacion controlada QA, pago parcial, rechazo de sobrepago, pago final e inmutabilidad posted.
 
 Estado: **EGRESOS/CXP/PAGOS: BLOCKED POR SESION PRODUCTIVA EXPIRADA**. Sin SQL, sin migraciones y sin deploy de esta correccion local.
+Nota de trazabilidad del smoke: se creo temporalmente `EGR-000004` con proveedor `QA-AP-20260910-1015`; al detectar que el monto localizado se persistia como `$1` en produccion, se elimino por la UI antes de crear cualquier CashMovement. No quedan datos QA de Egresos asociados a esta iteracion.
