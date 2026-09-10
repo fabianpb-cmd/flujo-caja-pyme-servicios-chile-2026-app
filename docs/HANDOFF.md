@@ -552,3 +552,8 @@ Se verifico carga de lista, detalle, edicion, persistencia, busqueda sin resulta
 Se detecto un blocker UX en la version productiva: el formulario de Proyecto cerrado no exponia controles para agregar/eliminar filas, impidiendo construir 30/40/30 desde la UI. Se implemento localmente un control minimo para agregar hitos y eliminar solo hitos no facturados; el modo de plan completamente facturado permanece solo lectura. La correccion local fue validada por `ProjectBillingPlanHttpTest` (7 tests / 35 assertions PASS) y `php artisan view:cache`.
 
 Estado: **QA LOCAL PASS / PRODUCCION PENDIENTE DE DEPLOY DEL FIX DE UI**. No se hizo deploy, push, SQL ni migracion; el blocker de multi-hito debe verificarse nuevamente despues del despliegue.
+## Revision pre-deploy: formulario de hitos robustecido - 2026-09-10
+
+Se corrigieron dos defectos de la UI de planes de facturacion: el template de filas usa indices numericos para que `renumber()` nunca deje `__INDEX__` en nombres enviables, y los totales de un plan solo lectura se inicializan desde los porcentajes reales y no son sobrescritos por JavaScript cuando no existen inputs.
+
+La vista editable mantiene `Agregar hito` y `Eliminar` solo para hitos no facturados; el plan completamente facturado mantiene ausencia de inputs y controles. `ProjectBillingPlanHttpTest` paso con 7 tests / 38 assertions; `php artisan view:cache` y `git diff --check` PASS. Sin migraciones, sin SQL y sin deploy.

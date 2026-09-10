@@ -117,6 +117,7 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response->assertOk();
         $response->assertSee('data-project-billing-plan', false);
         $response->assertSee('data-project-billing-add', false);
+        $this->assertStringNotContainsString('billing_milestones[__INDEX__]', $response->getContent());
         $this->assertMatchesRegularExpression('/data-project-billing-plan[\s\S]*<script nonce="[^"]+"[\s\S]*syncPercentages/', $response->getContent());
     }
 
@@ -160,6 +161,8 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response = $this->actingAs($admin)->get(route('operational.edit', ['projects', $project->id]));
 
         $response->assertOk()->assertSee('Todos los hitos tienen factura activa. El plan es solo lectura.');
+        $response->assertSee('data-project-billing-total>100</span>', false);
+        $response->assertSee('data-project-billing-remaining>0</span>', false);
         $this->assertStringNotContainsString('name="billing_milestones', $response->getContent());
         $this->assertStringNotContainsString('class="btn btn-outline-secondary btn-sm mt-2" data-project-billing-add', $response->getContent());
         $this->assertStringNotContainsString('placeholder="Nombre del hito"', $response->getContent());
