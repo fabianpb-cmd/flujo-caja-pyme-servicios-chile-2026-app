@@ -567,3 +567,8 @@ Se corrigio la UX del formulario: las opciones de `sales_currency_id` ahora expo
 Se corrigieron dos regresiones de la UI del formulario: los eventos focus/blur de inputs monetarios leen `data-money-minor-units` dinamicamente, por lo que un cambio CLP -> UF conserva los decimales correctos; y el cambio de tipo de contrato actualiza `contracted_hourly_rate.readOnly` dentro de `sync`, sin depender del orden de seleccion. La tarifa HH queda de solo lectura en Proyecto cerrado y editable en Por Hora, preservando valores historicos.
 
 `ProjectBillingPlanHttpTest`: 9 tests / 51 assertions PASS; `php artisan view:cache` y `git diff --check` PASS. Sin migraciones, sin SQL y sin deploy.
+## Edicion estructural atomica del plan de hitos - 2026-09-10
+
+Se corrigio la edicion de planes de facturacion: al agregar un hito la UI elige el menor entero positivo disponible e inserta la fila en orden, evitando duplicados tras eliminar filas intermedias. `ProjectBillingMilestoneService::syncPlan()` valida pertenencia e invariabilidad de hitos facturados antes de mutar, elimina primero omitidos no facturados y usa secuencias temporales unicas para swaps de hitos editables, manteniendo atomicidad e indice unico.
+
+Los errores de plan ahora se devuelven bajo `project_billing_plan`, se conservan con `withInput()` y se muestran junto al plan. `ProjectBillingPlanHttpTest`: 12 tests / 64 assertions PASS; `php artisan view:cache` y `git diff --check` PASS. Sin SQL, sin migraciones y sin deploy.

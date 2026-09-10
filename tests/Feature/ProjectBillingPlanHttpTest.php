@@ -84,6 +84,64 @@ class ProjectBillingPlanHttpTest extends TestCase
         $this->assertSame(2, ProjectBillingMilestone::query()->where('project_id', $project->id)->count());
     }
 
+    public function test_http_update_can_delete_and_replace_an_unbilled_milestone_with_the_same_sequence(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-REPLACE'));
+        $first = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 1, 'name' => 'H1', 'planned_invoice_date' => '2026-08-05', 'percentage' => 50]);
+        $oldSecond = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 2, 'name' => 'H2 antiguo', 'planned_invoice_date' => '2026-08-20', 'percentage' => 30]);
+        $third = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 3, 'name' => 'H3', 'planned_invoice_date' => '2026-10-01', 'percentage' => 20]);
+        $payload = $this->projectPayload($client, $currency, $closed, $active, $billing, $project->code) + ['billing_milestones' => [
+            ['id' => $first->id, 'sequence' => 1, 'name' => 'H1', 'planned_invoice_date' => '2026-08-05', 'percentage' => 50],
+            ['sequence' => 2, 'name' => 'H2 nuevo', 'planned_invoice_date' => '2026-08-25', 'percentage' => 30],
+            ['id' => $third->id, 'sequence' => 3, 'name' => 'H3', 'planned_invoice_date' => '2026-10-01', 'percentage' => 20],
+        ]];
+
+        $response = $this->actingAs($admin)->put(route('operational.update', ['projects', $project->id]), $payload);
+
+        $response->assertRedirect();
+        $this->assertDatabaseMissing('project_billing_milestones', ['id' => $oldSecond->id]);
+        $this->assertDatabaseHas('project_billing_milestones', ['project_id' => $project->id, 'sequence' => 2, 'name' => 'H2 nuevo']);
+        $this->assertSame([1, 2, 3], ProjectBillingMilestone::query()->where('project_id', $project->id)->orderBy('sequence')->pluck('sequence')->all());
+    }
+
+    public function test_http_update_can_swap_sequences_of_unbilled_milestones(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-SWAP'));
+        $first = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 1, 'name' => 'H1', 'planned_invoice_date' => '2026-08-05', 'percentage' => 50]);
+        $second = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 2, 'name' => 'H2', 'planned_invoice_date' => '2026-08-20', 'percentage' => 50]);
+
+        $payload = $this->projectPayload($client, $currency, $closed, $active, $billing, $project->code) + ['billing_milestones' => [
+            ['id' => $first->id, 'sequence' => 2, 'name' => 'H1', 'planned_invoice_date' => '2026-08-20', 'percentage' => 50],
+            ['id' => $second->id, 'sequence' => 1, 'name' => 'H2', 'planned_invoice_date' => '2026-08-05', 'percentage' => 50],
+        ]];
+
+        $response = $this->actingAs($admin)->put(route('operational.update', ['projects', $project->id]), $payload);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('project_billing_milestones', ['id' => $first->id, 'sequence' => 2]);
+        $this->assertDatabaseHas('project_billing_milestones', ['id' => $second->id, 'sequence' => 1]);
+    }
+
+    public function test_invalid_duplicate_sequence_returns_plan_error_and_preserves_input(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $project = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $closed, $active, $billing, 'PRY-HTTP-INVALID-SEQ'));
+        $first = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 1, 'name' => 'H1', 'planned_invoice_date' => '2026-08-05', 'percentage' => 50]);
+        $second = ProjectBillingMilestone::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'sequence' => 2, 'name' => 'H2', 'planned_invoice_date' => '2026-08-20', 'percentage' => 50]);
+        $payload = $this->projectPayload($client, $currency, $closed, $active, $billing, $project->code) + ['billing_milestones' => [
+            ['id' => $first->id, 'sequence' => 1, 'name' => 'H1 editado', 'planned_invoice_date' => '2026-08-05', 'percentage' => 50],
+            ['id' => $second->id, 'sequence' => 1, 'name' => 'H2 editado', 'planned_invoice_date' => '2026-08-20', 'percentage' => 50],
+        ]];
+
+        $response = $this->actingAs($admin)->put(route('operational.update', ['projects', $project->id]), $payload);
+
+        $response->assertRedirect()->assertSessionHasErrors('project_billing_plan');
+        $this->assertSame('H1', $first->refresh()->name);
+        $this->assertSame('H2', $second->refresh()->name);
+    }
+
     public function test_http_update_rejects_changes_to_a_billed_milestone(): void
     {
         [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
@@ -118,6 +176,7 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response->assertSee('data-project-billing-plan', false);
         $response->assertSee('data-project-billing-add', false);
         $this->assertStringNotContainsString('billing_milestones[__INDEX__]', $response->getContent());
+        $response->assertSee('while (used.has(sequence)) sequence += 1', false);
         $this->assertMatchesRegularExpression('/data-project-billing-plan[\s\S]*<script nonce="[^"]+"[\s\S]*syncPercentages/', $response->getContent());
     }
 

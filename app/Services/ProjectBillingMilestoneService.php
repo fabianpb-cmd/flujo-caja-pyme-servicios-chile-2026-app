@@ -57,20 +57,43 @@ class ProjectBillingMilestoneService
     {
         $existing = $project->billingMilestones()->get()->keyBy('id');
         $ids = collect($rows)->pluck('id')->filter()->map(fn ($id) => (int) $id)->toArray();
+        $editableUpdates = [];
         foreach ($rows as $row) {
             $milestone = isset($row['id']) ? $existing[(int) $row['id']] ?? null : null;
             if (isset($row['id']) && ! $milestone) throw new DomainException('El hito indicado no pertenece al proyecto o empresa.');
             if ($milestone && $this->isInvoiced($milestone)) {
                 $unchanged = collect(['sequence', 'name', 'planned_invoice_date', 'percentage', 'notes'])->every(fn ($field) => (string) ($milestone->{$field} ?? '') === (string) ($row[$field] ?? ''));
                 if (! $unchanged) throw new DomainException('Un hito facturado no se puede editar.');
+            } elseif ($milestone) {
+                $editableUpdates[] = [$milestone, (int) $row['sequence']];
             }
         }
+        foreach ($existing as $milestone) {
+            if (! in_array($milestone->id, $ids, true) && $this->isInvoiced($milestone)) {
+                throw new DomainException('Un hito facturado no se puede eliminar.');
+            }
+        }
+
+        foreach ($existing as $milestone) {
+            if (! in_array($milestone->id, $ids, true)) {
+                $milestone->delete();
+            }
+        }
+
+        $temporarySequence = (int) ProjectBillingMilestone::query()
+            ->where('project_id', $project->id)
+            ->max('sequence') + count($editableUpdates) + 1;
+        foreach ($editableUpdates as [$milestone, $sequence]) {
+            if ((int) $milestone->sequence !== $sequence) {
+                MassAssignment::fillAndSave($milestone, ['sequence' => $temporarySequence++]);
+            }
+        }
+
         foreach ($rows as $row) {
             $milestone = isset($row['id']) ? $existing[(int) $row['id']] ?? null : null;
             $payload = ['sequence' => (int) $row['sequence'], 'name' => trim($row['name']), 'planned_invoice_date' => $row['planned_invoice_date'] ?? null, 'percentage' => (float) $row['percentage'], 'notes' => $row['notes'] ?? null];
             if ($milestone) MassAssignment::fillAndSave($milestone, $payload); else MassAssignment::create(ProjectBillingMilestone::class, ['company_id' => $project->company_id, 'project_id' => $project->id] + $payload);
         }
-        foreach ($existing as $milestone) if (! in_array($milestone->id, $ids, true)) { if ($this->isInvoiced($milestone)) throw new DomainException('Un hito facturado no se puede eliminar.'); $milestone->delete(); }
     }
 
     public function delete(ProjectBillingMilestone $milestone): void

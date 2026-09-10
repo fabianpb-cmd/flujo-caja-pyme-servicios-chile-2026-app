@@ -185,7 +185,7 @@ class OperationalCrudController extends Controller
         try {
             $data = $this->prepareData($request, $resource, $validated);
         } catch (DomainException $exception) {
-            return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+            return back()->withInput()->withErrors([$resource === 'projects' ? 'project_billing_plan' : 'payroll' => $exception->getMessage()]);
         }
 
         if ($resource === 'cash-movements') {
@@ -491,7 +491,7 @@ class OperationalCrudController extends Controller
         try {
             $data = $this->prepareData($request, $resource, $validated);
         } catch (DomainException $exception) {
-            return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+            return back()->withInput()->withErrors([$resource === 'projects' ? 'project_billing_plan' : 'payroll' => $exception->getMessage()]);
         }
         if ($resource === 'sales-documents') {
             unset($data['status']);
@@ -531,7 +531,7 @@ class OperationalCrudController extends Controller
                 }
             });
         } catch (DomainException $exception) {
-            return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+            return back()->withInput()->withErrors([$resource === 'projects' ? 'project_billing_plan' : 'payroll' => $exception->getMessage()]);
         }
         $this->refreshDerivedState($item->refresh());
         $this->audit->record('operational.updated', $item->refresh(), $request->user(), $before);
