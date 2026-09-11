@@ -243,7 +243,8 @@
                         form.querySelectorAll('[data-money-input="true"]').forEach((input) => {
                             const normalized = normalizeLocalizedNumber(input.value);
                             const minorUnits = Number(input.dataset.moneyMinorUnits ?? 2);
-                            input.value = normalized === '' ? normalized : Number(normalized).toFixed(minorUnits).replace(/\.?0+$/, '');
+                            const fixed = Number(normalized).toFixed(minorUnits);
+                            input.value = normalized === '' ? normalized : (minorUnits === 0 ? fixed : fixed.replace(/\.?0+$/, ''));
                         });
                         form.querySelectorAll('[data-percent-input="true"]').forEach((input) => {
                             if (input.dataset.percentNullDefault === 'true') {

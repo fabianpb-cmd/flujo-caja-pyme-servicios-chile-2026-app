@@ -36,4 +36,19 @@ class CashMovementUxTest extends TestCase
         $this->assertStringContainsString("input.value = normalizeLocalizedNumber(input.value);", $content);
         $this->assertSame('2.627.142', \App\Support\UiFormatter::formatNumber(2627141.58, 0));
     }
+
+    public function test_money_submit_preserves_integer_trailing_zeroes_for_clp(): void
+    {
+        $content = file_get_contents(resource_path('views/operational/partials/field-input.blade.php'));
+
+        $this->assertStringContainsString('const fixed = Number(normalized).toFixed(minorUnits);', $content);
+        $this->assertStringContainsString(
+            "minorUnits === 0 ? fixed : fixed.replace(/\\.?0+$/, '')",
+            $content
+        );
+        $this->assertStringNotContainsString(
+            "Number(normalized).toFixed(minorUnits).replace(/\\.?0+$/, '')",
+            $content
+        );
+    }
 }

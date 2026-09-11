@@ -644,3 +644,4 @@ Se repitio el smoke con la sesion autenticada y el codigo indicado como desplega
 El blocker indica que la version efectiva de produccion no esta ejecutando la normalizacion HTTP de `97c66ba` o requiere una nueva publicacion/cache. No se probaron pago parcial, sobrepago, pago final, selector ni inmutabilidad posted. Navegador: 0 errores JavaScript observados; no se observaron respuestas HTTP 500/419.
 
 Estado: **QA PRODUCTIVO EGRESOS/CXP/PAGOS: BLOCKED / PASS LOCAL PENDIENTE DE DESPLIEGUE EFECTIVO**. No se hizo push ni deploy adicional, sin SQL y sin migraciones.
+Causa raiz definitiva confirmada posteriormente: el probe productivo net_amount=1 fue causado por el trimming JavaScript de ceros enteros en el submit de inputs money. Se implemento la correccion local en resources/views/operational/partials/field-input.blade.php; la normalizacion server-side existente queda intacta. Produccion queda pendiente de deploy y smoke final.
