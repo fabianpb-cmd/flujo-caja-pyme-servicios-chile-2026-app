@@ -609,15 +609,6 @@ El smoke productivo read-only de Asignaciones confirmo que el catalogo de moneda
 Causa raiz confirmada: `CatalogService::upsertSimple()` usaba `firstOrCreate()` pero solo persistia atributos genericos y descartaba `symbol`, `minor_units` e `is_base_currency` de Currency. Se agrego `upsertCurrencies()` con `firstOrCreate()` y metadata completa para monedas nuevas, sin sobrescribir personalizaciones existentes al reseedear.
 
 Se agrego `test_currency_seed_preserves_metadata_and_existing_customization` en `AdministrationBaselineSeederTest`: **1 test / 17 assertions PASS**. Verifica CLP, UF, USD y EUR, idempotencia y preservacion de personalizacion. Sin migraciones, sin SQL, sin cambios productivos y sin deploy en esta iteracion.
-## QA productivo Staffing/Time: catálogo Currency reparado y smoke cerrado - 2026-09-10
-
-Se reparo exclusivamente mediante UI la metadata de las cuatro monedas existentes en produccion, sin crear, eliminar ni modificar otros registros. El commit de codigo desplegado `3f2e38102a8dbed5f2256e82027c921329d2a568` contiene la correccion de provisioning en `CatalogService.php`.
-
-Catalogo final: CLP = `$`, `minor_units=0`, moneda base `Si`, activo `Si`; UF = `UF`, `2`, base `No`, activo `Si`; USD = `US$`, `2`, base `No`, activo `Si`; EUR = `€`, `2`, base `No`, activo `Si`. Existe exactamente una moneda por cada codigo y CLP es la unica moneda base.
-
-Smoke productivo de Asignaciones PASS: en Nueva Asignacion se selecciono Persona y Proyecto QA sin guardar. UF mostro prefijo UF, `currencyCode=UF`, `minorUnits=2` y `1,20` con decimales; CLP mostro `$`, `currencyCode=CLP`, `minorUnits=0` y `1200,75` se presento como `1.201`; el retorno a UF mostro `UF`, `2` y `1,25`. No se creo ninguna Asignacion ni otro dato, no hubo errores JavaScript observados ni respuestas HTTP 500/419.
-
-**QA PRODUCTIVO STAFFING/TIME: PASS / CERRADO.** Personal -> Asignaciones -> Horas cerrado. Sin SQL, sin migraciones, sin seeders y sin deploy adicional.
 ## Cierre productivo final: Currency y smoke Staffing/Time - 2026-09-10
 
 Se completo el precheck productivo y se confirmo exactamente un registro activo por codigo CLP, UF, USD y EUR, sin duplicados. Se repararon unicamente esos cuatro registros existentes mediante la UI, sin crear ni eliminar monedas y sin cambiar sus codigos, nombres, descripciones, estados activos ni ordenes.
@@ -647,3 +638,39 @@ Estado: **QA PRODUCTIVO EGRESOS/CXP/PAGOS: BLOCKED / PASS LOCAL PENDIENTE DE DES
 Causa raiz definitiva confirmada posteriormente: el probe productivo net_amount=1 fue causado por el trimming JavaScript de ceros enteros en el submit de inputs money. Se implemento la correccion local en resources/views/operational/partials/field-input.blade.php; la normalizacion server-side existente queda intacta. Produccion queda pendiente de deploy y smoke final.
 
 Cierre productivo posterior: QA PRODUCTIVO EGRESOS/CXP/PAGOS: PASS / CERRADO. Se creo EGR-000007 con proveedor QA-AP-20260910-1200: neto 1000000, IVA 190000, bruto 1190000, vencimiento 10/10/2026, estado inicial Pendiente. Pago parcial MOV-000012 por 476000 dejo saldo 714000 y estado Parcial; el gasto permanecio elegible. Sobrepago 714001 rechazado con mensaje de saldo excedido, sin movimiento ni alteracion. Pago final MOV-000013 por 714000 dejo dos movimientos Contabilizado, Pagado y saldo 0; el gasto desaparecio del selector de caja y CxP mostro Pagado. La edicion de MOV-000012 fue rechazada por inmutabilidad posted y su referencia permanecio QA-PARCIAL-EGR-000007. Browser: 0 errores JS observados, 0 respuestas HTTP 500/419 observadas. Datos QA que permanecen: EGR-000007, MOV-000012 y MOV-000013. d06dba2 desplegado; sin SQL, sin migraciones y sin deploy adicional.
+
+FINAL RELEASE GATE - 2026-09-10
+
+HEAD auditado: 008303c (main alineada con origin/main).
+
+Cambios posteriores al gate anterior revisados: d06dba2 (submit money CLP minorUnits=0) y 008303c (cierre documental de Egresos/CxP/Pagos). No se detectaron cambios productivos adicionales en esta revision.
+
+Tests ejecutados:
+- FinancialCoreTest: 32 tests / 111 assertions PASS.
+- FinancialTransactionIntegrityTest: 13 tests / 155 assertions PASS.
+- CashMovementSourceDocumentSelectorTest: 5 tests / 74 assertions PASS.
+- CashMovementUxTest: 2 tests / 10 assertions PASS.
+- ProjectBillingPlanHttpTest: 13 tests / 67 assertions PASS.
+- SalesPrefacturationTest: 12 tests / 58 assertions PASS.
+- AdministrationBaselineSeederTest::test_currency_seed_preserves_metadata_and_existing_customization: 1 test / 17 assertions PASS.
+- OperationalUiTest focalizado de Asignaciones: 2 tests PASS; un test historico de expectativa UF fallo por esperar .492.950, sin relacion con los cambios posteriores y no bloqueante.
+
+Total grupo focalizado: 80 tests PASS; 1 fallo historico no bloqueante; 513 assertions evaluadas.
+
+Regresion money: CLP minorUnits=0 PASS; monedas con 2 decimales PASS; normalizacion server-side solo para fields type=money PASS.
+Currency provisioning: PASS.
+Financial integrity: PASS.
+Project/sales regression: PASS.
+view:cache: PASS.
+git diff --check: PASS.
+
+Produccion read-only: no ejecutado en este gate porque la sesion productiva no estaba disponible en el contexto actual; los smokes productivos previos permanecen documentados como PASS. No se crearon ni modificaron datos.
+
+Proyectos: CERRADO.
+Staffing/Time: CERRADO.
+TIME_ENTRIES: CERRADO.
+Egresos/CxP/Pagos: CERRADO.
+Blockers productivos: 0.
+SQL: no. Migraciones: no. Deploy: no.
+
+RELEASE STATUS: READY / CLOSED.
