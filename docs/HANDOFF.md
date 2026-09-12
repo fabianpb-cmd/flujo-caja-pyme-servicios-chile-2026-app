@@ -723,3 +723,59 @@ La persistencia usa una transaccion y upsert por company_id + value_date; crea o
 UfCsvImportTest: 4 tests / 16 assertions PASS. view:cache PASS. git diff --check PASS. No se cargo CSV en produccion; importacion productiva pendiente. Sin SQL, sin migraciones y sin seeders.
 
 Archivos: app/Services/UfCsvImportService.php, app/Http/Controllers/OperationalCrudController.php, routes/web.php, resources/views/operational/index.blade.php, tests/Feature/UfCsvImportTest.php y docs/HANDOFF.md.
+AUDITORÍA CONCILIACIÓN BANCARIA - DISEÑO - 2026-09-12
+
+Estado actual: READY TO IMPLEMENT con blockers de diseño/contabilidad que deben resolverse antes de activar conciliación por cuenta. No se implementó conciliación, no se crearon datos, rutas, modelos, tablas ni migraciones.
+
+SALDO ACTUAL
+- Dashboard y CashFlowService::openingBalance(): saldo agregado de empresa = suma de opening_balance de todas las CashAccount de la empresa + ingresos posted - egresos posted anteriores a la fecha, sin filtrar cash_account_id.
+- Flujo mensual y semanal reutilizan ese opening agregado y luego suman buckets posted por empresa; no existe saldo individual reutilizable por cuenta.
+- La precisión actual del servicio es decimal a 2; la presentación CLP puede ser entera, pero no existe todavía un servicio de saldo por cuenta con regla explícita de precisión monetaria.
+
+CASH MOVEMENTS
+- cash_account_id existe en CashMovement y la FK es nullable.
+- La configuración y CrudResourceRequest lo dejan nullable, por lo que hoy es posible crear un movimiento posted sin cuenta si se omite el campo.
+- Un movimiento posted es inmutable: CashMovementService bloquea update y delete; no se debe reasignar históricamente saltando esa protección.
+- Las opciones de cuenta se filtran por empresa y la validación HTTP de la relación exige company_id de la sesión. La protección de tenant existe en el flujo HTTP; CashMovementService no repite actualmente una validación explícita de cuenta activa/pertenencia.
+- Una cuenta inactiva deja de aparecer para nuevas selecciones; un movimiento posted existente no se modifica al desactivarla.
+- CashAccount contiene código, nombre, banco, tipo de cuenta, moneda, opening_balance e is_active. Tiene currency_id/catálogo y también currency legado en la tabla.
+
+PRODUCCIÓN READ-ONLY
+- Cuentas de caja/banco visibles: ninguna; la pantalla mostró “Sin registros” para la empresa activa.
+- Movimientos visibles: MOV-000013, MOV-000012, MOV-000011, MOV-000010 y MOV-000009.
+- La columna Cuenta no quedó visible en el viewport horizontal de la tabla; por lo tanto la cantidad de movimientos con cash_account_id null es: NO DETERMINABLE DESDE UI. No se usó SQL.
+- No se modificaron datos.
+
+BLOCKERS
+1. No puede calcularse saldo confiable por cuenta mientras los movimientos posted puedan carecer de cuenta y el saldo actual ignore cash_account_id.
+2. No existe control de moneda por movimiento: CashMovement no tiene moneda propia y no valida compatibilidad con CashAccount. El saldo de caja se trata implícitamente como CLP; UF/USD/EUR no son seguros para conciliación sin una decisión FX explícita.
+
+IMPORTANTE
+- La validación HTTP protege tenant para cash_account_id, pero el servicio de dominio no exige explícitamente cuenta activa y perteneciente a la empresa. Debe reforzarse antes de admitir nuevas vías de creación posted.
+- CashFlowService suma también opening_balance de cuentas inactivas; debe definirse si una cuenta inactiva sigue siendo relevante para el saldo histórico antes de cambiar el Dashboard.
+
+DISEÑO V1 RECOMENDADO
+- Crear CashAccountBalanceService: saldo al día = opening_balance de la cuenta + SUM(income posted) - SUM(expense posted), filtrando company_id, cash_account_id y movement_date <= fecha. Excluir draft; redondear según moneda, inicialmente CLP entero.
+- Para nuevos movimientos posted, cuenta obligatoria, activa y de la misma empresa. Un draft puede carecer de cuenta si el negocio lo requiere.
+- Mantener nullable en BD temporalmente para compatibilidad histórica, sin backfill automático.
+- Crear una conciliación mínima con company_id, cash_account_id, reconciliation_date, bank_balance, system_balance_snapshot, difference, status, notes, created_by_user_id y timestamps; unicidad company_id + cash_account_id + reconciliation_date. Estados draft/reconciled; marcar reconciled solo con diferencia cero o justificación explícita si se decide permitir excepciones.
+- No crear bank_reconciliation_items todavía: para V1 basta saldo banco, saldo sistema, diferencia, estado, notas y listado read-only de movimientos de la cuenta.
+- Restringir V1 a cuentas CLP. Dejar FX/multimoneda fuera hasta definir moneda y conversión por movimiento.
+
+HISTÓRICOS SIN CUENTA
+- Recomendación: dejarlos como “Sin cuenta asignada” y exponer un pendiente de clasificación. No asignar cuenta por defecto ni editar posted por CRUD.
+- Si se requiere corregirlos, crear posteriormente un flujo administrativo exclusivo de clasificación que solo cambie cash_account_id, con auditoría, autorización y sin cambiar fecha, monto, documento o status. Antes de activar conciliación, bloquear el cierre de una cuenta mientras existan históricos sin clasificar o mostrar la diferencia como no conciliable.
+
+MIGRACIONES FUTURAS
+- Sí, probablemente una tabla bank_reconciliations y, si se endurece el dominio, índices/constraints o campos auxiliares para clasificación. No crear en esta auditoría.
+
+RIESGO DASHBOARD
+- Detalle: cambiar openingBalance() a suma por cuentas activas podría cambiar cifras históricas porque hoy incluye todas las cuentas y movimientos sin cuenta. El futuro saldo disponible debe ser compatible con la suma de saldos por cuenta más una categoría “Sin cuenta asignada”, hasta completar clasificación.
+
+IMPLEMENTACIÓN ESTIMADA
+- Archivos futuros: CashAccountBalanceService, CashMovementService/CrudResourceRequest, controlador y vista de conciliación, modelos/migración bank_reconciliations, tests focalizados de tenant, cuenta obligatoria, posted inmutable, saldo por cuenta y multimoneda CLP.
+- Complejidad: media. No se modificó código en esta pasada.
+
+Próximo paso exacto: acordar tratamiento de históricos sin cuenta y alcance CLP-only; después implementar primero el servicio de saldo por cuenta y validación de cuenta activa/tenant, antes de crear la pantalla de conciliación.
+
+Código modificado: solo docs/HANDOFF.md. SQL: no. Deploy: no.
