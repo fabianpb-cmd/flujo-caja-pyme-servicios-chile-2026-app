@@ -703,3 +703,14 @@ El Dashboard ahora reutiliza FinancialAgendaService para mostrar el bloque "Qué
 Cobertura: FinancialAgendaTest + FinancialAgendaDashboardTest, 3 tests / 24 assertions PASS. Se verifican resumen por cobrar/pagar, prioridades, límite de ocho filas, exclusión de pagados a través del servicio existente, aislamiento y montos CLP sin decimales. view:cache PASS. git diff --check PASS.
 
 Archivos agregados/modificados: app/Http/Controllers/ManagementController.php, resources/views/management/dashboard.blade.php, tests/Feature/FinancialAgendaDashboardTest.php y docs/HANDOFF.md. Sin SQL ni migraciones. Pendiente deploy.
+AGENDA FINANCIERA + DASHBOARD PRODUCTIVO - 2026-09-12
+
+Smoke read-only PASS / CERRADO sobre los commits 79c242e6af3804a8e0a3f59814366bcf216db127 y e29fe1c13e7f0a504dd74c26a04a31581ccddfaa.
+
+Dashboard: PASS. Se visualizo "Qué requiere atención", los cinco indicadores, hasta ocho compromisos prioritarios ordenados con vencidos primero, montos CLP sin decimales y enlace "Ver agenda completa".
+
+Agenda financiera: PASS en /gestion/agenda-financiera. Resumen consistente con Dashboard; filas con prioridad, vencimiento, tipo, documento, contraparte, proyecto, saldo y accion Ver. Se observaron vencidos y compromisos a 30 dias sin errores.
+
+EGR-000007 Pagado con saldo 0 fue correctamente excluido tanto del Dashboard como de la Agenda. Links read-only de CxC y CxP navegaron correctamente. Sidebar Gestion -> Agenda financiera visible y funcional.
+
+Browser: JS 0 errores visibles; HTTP 500 0; HTTP 419 0; HTTP 404 de Agenda 0. Datos modificados: 0. SQL: no. Migraciones: no. Deploy adicional: no.
