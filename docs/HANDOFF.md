@@ -684,3 +684,15 @@ Dashboard: PASS estatico. Flujo de Caja: PASS estatico; caja real usa CashMoveme
 Smoke productivo read-only no ejecutado por sesion expirada en /login. No se crearon, editaron ni eliminaron datos. No se observaron blockers productivos nuevos en la revision estatica; no se reabrieron modulos transaccionales cerrados.
 
 Estado: GESTION / REPORTING READ-ONLY QA: PASS / CERRADO. Blockers: 0. SQL: no. Migraciones: no. Deploy: no.
+
+AGENDA FINANCIERA V1 - 2026-09-12
+
+Se implemento una agenda financiera read-only bajo Gestion en /gestion/agenda-financiera. La pantalla responde que cobrar/pagar, que esta vencido y que vence hoy, en 7 dias o en 30 dias, sin solapamiento ni acciones mutativas.
+
+Fuentes autoritativas: ReceivablesService para SalesDocument, PayablesService para ExpenseDocument y LegalObligationService para obligaciones legales. No se incluyeron remuneraciones por no existir una fecha de vencimiento fiable en este alcance. Se excluyen borradores, anulados y saldos <= 0; los saldos se muestran en CLP con UiFormatter.
+
+Cobertura local: FinancialAgendaTest, 2 tests / 15 assertions PASS. Incluye factura vencida, parcial con saldo, exclusion de pagada y borrador, gasto pendiente y pagado, obligacion, buckets Hoy/7 dias/30 dias, aislamiento por empresa, suma de saldos y render HTTP con montos CLP sin decimales. view:cache PASS. git diff --check PASS.
+
+Archivos relevantes: app/Services/FinancialAgendaService.php, app/Http/Controllers/ManagementController.php, routes/web.php, resources/views/layouts/app.blade.php, resources/views/management/financial-agenda.blade.php y tests/Feature/FinancialAgendaTest.php.
+
+Sin SQL ni migraciones. No se tocaron datos productivos; deploy pendiente. El commit local previo 6285c1b queda incluido en la rama para el push posterior.

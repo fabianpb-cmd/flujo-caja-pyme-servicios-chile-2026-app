@@ -15,6 +15,7 @@ use App\Services\CashFlowService;
 use App\Services\DashboardService;
 use App\Services\LegalObligationService;
 use App\Services\LegalParameterService;
+use App\Services\FinancialAgendaService;
 use App\Services\ProfitabilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -30,6 +31,7 @@ class ManagementController extends Controller
         private readonly BudgetService $budgets,
         private readonly LegalObligationService $obligations,
         private readonly LegalParameterService $legalParameters,
+        private readonly FinancialAgendaService $agenda,
     ) {
     }
 
@@ -149,6 +151,11 @@ class ManagementController extends Controller
             ->withQueryString();
 
         return view('management.obligations', compact('rows', 'period'));
+    }
+
+    public function financialAgenda(Request $request): View
+    {
+        return view('management.financial-agenda', $this->agenda->forCompany((int) $request->user()->company_id));
     }
 
     public function budgets(Request $request): View

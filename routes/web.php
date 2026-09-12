@@ -40,6 +40,7 @@ Route::middleware(['auth', 'absolute.session'])->group(function (): void {
 Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(ManagementController::class)->group(function (): void {
     Route::get('/dashboard', 'dashboard')->name('dashboard');
     Route::get('/gestion/obligaciones', 'obligations')->name('management.obligations');
+    Route::get('/gestion/agenda-financiera', 'financialAgenda')->name('management.financial-agenda');
     Route::get('/gestion/presupuesto', 'budgets')->name('management.budgets');
     Route::get('/gestion/flujos', 'flows')->name('management.flows');
     Route::get('/gestion/rentabilidad', 'profitability')->name('management.profitability');

@@ -72,6 +72,7 @@
         [
             'title' => 'Gestión',
             'items' => [
+                $sidebarItem('Agenda financiera', 'bi bi-calendar2-check', 'management.financial-agenda'),
                 $sidebarItem('Obligaciones', 'bi bi-clipboard2-check', 'management.obligations'),
                 $sidebarItem('Presupuesto', 'bi bi-calculator', 'management.budgets'),
                 $sidebarItem('Flujo de caja', 'bi bi-graph-up-arrow', 'management.flows'),
@@ -193,6 +194,7 @@
     } else {
         $managementMap = [
             'management.obligations' => ['Gestión', 'Obligaciones'],
+            'management.financial-agenda' => ['Gestión', 'Agenda financiera'],
             'management.budgets' => ['Gestión', 'Presupuesto'],
             'management.flows' => ['Gestión', 'Flujo de caja'],
             'management.profitability' => ['Gestión', 'Rentabilidad'],
