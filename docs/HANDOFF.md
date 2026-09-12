@@ -696,3 +696,10 @@ Cobertura local: FinancialAgendaTest, 2 tests / 15 assertions PASS. Incluye fact
 Archivos relevantes: app/Services/FinancialAgendaService.php, app/Http/Controllers/ManagementController.php, routes/web.php, resources/views/layouts/app.blade.php, resources/views/management/financial-agenda.blade.php y tests/Feature/FinancialAgendaTest.php.
 
 Sin SQL ni migraciones. No se tocaron datos productivos; deploy pendiente. El commit local previo 6285c1b queda incluido en la rama para el push posterior.
+AGENDA FINANCIERA EN DASHBOARD - 2026-09-12
+
+El Dashboard ahora reutiliza FinancialAgendaService para mostrar el bloque "Qué requiere atención", cinco indicadores de agenda y hasta ocho compromisos prioritarios, con enlace a management.financial-agenda. No se duplicaron cálculos ni se agregaron automatizaciones, notificaciones, jobs ni cambios financieros.
+
+Cobertura: FinancialAgendaTest + FinancialAgendaDashboardTest, 3 tests / 24 assertions PASS. Se verifican resumen por cobrar/pagar, prioridades, límite de ocho filas, exclusión de pagados a través del servicio existente, aislamiento y montos CLP sin decimales. view:cache PASS. git diff --check PASS.
+
+Archivos agregados/modificados: app/Http/Controllers/ManagementController.php, resources/views/management/dashboard.blade.php, tests/Feature/FinancialAgendaDashboardTest.php y docs/HANDOFF.md. Sin SQL ni migraciones. Pendiente deploy.

@@ -45,6 +45,43 @@
     <x-kpi-card title="Cuentas por Pagar" :value="\App\Support\UiFormatter::formatMoney($kpis['payables'])" icon="bi bi-wallet2" tone="warning" :subtitle="$dashboardMeta['payable_documents'].' documentos'" />
 </div>
 
+<div class="app-panel section-card mb-4">
+    <div class="section-card-header">
+        <div>
+            <h2 class="section-card-title">Qué requiere atención</h2>
+            <div class="section-card-note">Compromisos financieros abiertos y próximos</div>
+        </div>
+        <a class="btn btn-sm btn-outline-primary" href="{{ route('management.financial-agenda') }}">Ver agenda completa</a>
+    </div>
+    <div class="row g-3 mb-3">
+        <div class="col-md-6 col-xl-2"><div class="small text-muted">Por cobrar vencido</div><div class="fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($financialAgenda['summary']['receivable_overdue']) }}</div></div>
+        <div class="col-md-6 col-xl-2"><div class="small text-muted">Por pagar vencido</div><div class="fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($financialAgenda['summary']['payable_overdue']) }}</div></div>
+        <div class="col-md-6 col-xl-2"><div class="small text-muted">Por cobrar próximos 7 días</div><div class="fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($financialAgenda['summary']['receivable_next_7']) }}</div></div>
+        <div class="col-md-6 col-xl-2"><div class="small text-muted">Por pagar próximos 7 días</div><div class="fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($financialAgenda['summary']['payable_next_7']) }}</div></div>
+        <div class="col-md-6 col-xl-2"><div class="small text-muted">Neto próximos 30 días</div><div class="fw-semibold amount-cell">{{ \App\Support\UiFormatter::formatMoney($financialAgenda['summary']['net_next_30']) }}</div></div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Prioridad</th><th>Vencimiento</th><th>Tipo</th><th>Documento</th><th>Contraparte</th><th class="text-end">Saldo</th><th></th></tr></thead>
+            <tbody>
+            @forelse ($financialAgenda['items']->take(8) as $item)
+                <tr>
+                    <td>{{ $item['priority'] }}</td>
+                    <td>{{ \App\Support\UiFormatter::formatDate($item['due_date']) }}</td>
+                    <td>{{ $item['type'] }}</td>
+                    <td>{{ $item['code'] }}</td>
+                    <td>{{ $item['counterparty'] }}</td>
+                    <td class="text-end amount-cell">{{ \App\Support\UiFormatter::formatMoney($item['balance']) }}</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ $item['action_url'] }}">Ver</a></td>
+                </tr>
+            @empty
+                <tr><td colspan="7" class="text-center text-muted py-3">Sin compromisos financieros próximos.</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <div class="app-panel p-3 mb-4">
     @if (! empty($ufInfo))
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">

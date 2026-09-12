@@ -41,6 +41,7 @@ class ManagementController extends Controller
         $scenario = $request->string('scenario')->toString() ?: null;
 
         $data = $this->dashboard->data($companyId, $scenario);
+        $agenda = $this->agenda->forCompany($companyId);
         $flows = collect($data['flows']);
         $profitability = collect($data['profitability']);
         $monthStart = now()->startOfMonth();
@@ -134,6 +135,7 @@ class ManagementController extends Controller
                 ->take(5)
                 ->values(),
             'actions' => $actions->values(),
+            'financialAgenda' => $agenda,
         ]);
     }
 
