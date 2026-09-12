@@ -101,3 +101,7 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->prefix('operacion/
     Route::patch('/{record}/active', 'toggleActive')->name('toggle-active');
     Route::delete('/{record}', 'destroy')->name('destroy');
 });
+
+Route::post('/operacion/uf-values/import', [OperationalCrudController::class, 'importUf'])
+    ->middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])
+    ->name('operational.uf-values.import');

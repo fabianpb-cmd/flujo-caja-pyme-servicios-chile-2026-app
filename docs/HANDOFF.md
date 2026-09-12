@@ -714,3 +714,12 @@ Agenda financiera: PASS en /gestion/agenda-financiera. Resumen consistente con D
 EGR-000007 Pagado con saldo 0 fue correctamente excluido tanto del Dashboard como de la Agenda. Links read-only de CxC y CxP navegaron correctamente. Sidebar Gestion -> Agenda financiera visible y funcional.
 
 Browser: JS 0 errores visibles; HTTP 500 0; HTTP 419 0; HTTP 404 de Agenda 0. Datos modificados: 0. SQL: no. Migraciones: no. Deploy adicional: no.
+IMPORTADOR CSV UF SII - 2026-09-12
+
+Se implemento importacion reutilizable de archivos SII en Administracion -> UF mediante POST /operacion/uf-values/import, protegido por auth, absolute.session, admin.2fa y admin. El parser soporta encabezado Día/Ene...Dic, separador punto y coma, BOM UTF-8, miles con punto y decimales con coma. El año es obligatorio y las celdas vacias se omiten.
+
+La persistencia usa una transaccion y upsert por company_id + value_date; crea o actualiza valor, source/source_name SII y active=true, preserva notes, no elimina fechas ausentes y es idempotente. Se mantiene el aislamiento por empresa y LegalParameterService continua leyendo UfValue sin cambios semanticos.
+
+UfCsvImportTest: 4 tests / 16 assertions PASS. view:cache PASS. git diff --check PASS. No se cargo CSV en produccion; importacion productiva pendiente. Sin SQL, sin migraciones y sin seeders.
+
+Archivos: app/Services/UfCsvImportService.php, app/Http/Controllers/OperationalCrudController.php, routes/web.php, resources/views/operational/index.blade.php, tests/Feature/UfCsvImportTest.php y docs/HANDOFF.md.

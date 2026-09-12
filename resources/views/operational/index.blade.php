@@ -74,6 +74,19 @@
     @endif
 @endif
 
+@if ($resource === 'uf-values')
+    <div class="app-panel p-3 mb-3">
+        <h2 class="h5 mb-2">Importar valores UF desde SII</h2>
+        <p class="small text-muted">El archivo SII utiliza columnas Día/Ene...Dic. Las celdas vacías se omiten y los valores existentes se actualizan por fecha.</p>
+        <form method="POST" action="{{ route('operational.uf-values.import') }}" enctype="multipart/form-data" class="d-flex flex-wrap align-items-end gap-2">
+            @csrf
+            <div><label class="form-label small text-muted mb-1" for="uf-import-year">Año</label><input id="uf-import-year" class="form-control" type="number" name="year" value="{{ old('year', now()->year) }}" required></div>
+            <div><label class="form-label small text-muted mb-1" for="uf-import-file">Archivo CSV SII</label><input id="uf-import-file" class="form-control" type="file" name="file" accept=".csv,.txt" required></div>
+            <button class="btn btn-primary" type="submit">Importar valores UF</button>
+        </form>
+    </div>
+@endif
+
 @if ($resource === 'sales-documents')
     @php
         $prefactProjects = \App\Models\Project::query()

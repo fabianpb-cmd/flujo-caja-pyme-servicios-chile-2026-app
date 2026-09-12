@@ -31,6 +31,7 @@ use App\Services\SalesPrefacturationService;
 use App\Services\SalesDocumentService;
 use App\Services\ReceivablesService;
 use App\Services\TimeEntryPeriodService;
+use App\Services\UfCsvImportService;
 use App\Support\MassAssignment;
 use App\Support\UiFormatter;
 use DomainException;
@@ -66,6 +67,7 @@ class OperationalCrudController extends Controller
         private readonly FinancialDocumentGuard $financialDocuments,
         private readonly BillingStrategyService $billingStrategies,
         private readonly SalesDocumentService $salesDocuments,
+        private readonly UfCsvImportService $ufImports,
     ) {
     }
 
@@ -124,6 +126,25 @@ class OperationalCrudController extends Controller
         }
 
         return view('operational.index', compact('resource', 'config', 'items', 'search', 'sort', 'direction', 'sorts'));
+    }
+
+    public function importUf(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'year' => ['required', 'integer', 'between:1900,2200'],
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+        ]);
+
+        try {
+            $summary = $this->ufImports->import($request->file('file'), (int) $request->user()->company_id, (int) $validated['year']);
+        } catch (DomainException $exception) {
+            return back()->withInput()->withErrors(['uf_import' => $exception->getMessage()]);
+        }
+
+        return back()->with('status', sprintf(
+            'UF importadas: %d procesadas, %d creadas, %d actualizadas y %d sin cambios.',
+            $summary['processed'], $summary['created'], $summary['updated'], $summary['unchanged']
+        ));
     }
 
     public function create(Request $request, string $resource): View
