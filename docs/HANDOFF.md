@@ -674,3 +674,13 @@ Blockers productivos: 0.
 SQL: no. Migraciones: no. Deploy: no.
 
 RELEASE STATUS: READY / CLOSED.
+
+GESTION / REPORTING READ-ONLY QA - 2026-09-12
+
+Revision estatica focalizada: ManagementController, DashboardService, CashFlowService, ProfitabilityService, BudgetService y LegalObligationService. No se modifico codigo ni datos productivos.
+
+Dashboard: PASS estatico. Flujo de Caja: PASS estatico; caja real usa CashMovement posted y las proyecciones excluyen Borrador/Anulado y documentos pagados. Rentabilidad: PASS estatico; separa venta, costos HH/personas, gastos y cobros, excluye ventas Borrador/Anulado y convierte UF a CLP segun fecha. Presupuesto: PASS estatico; real reconocido por periodo y excluye Borrador/Anulado. Obligaciones: PASS estatico; saldo/status derivan de movimientos posted y vencimiento.
+
+Smoke productivo read-only no ejecutado por sesion expirada en /login. No se crearon, editaron ni eliminaron datos. No se observaron blockers productivos nuevos en la revision estatica; no se reabrieron modulos transaccionales cerrados.
+
+Estado: GESTION / REPORTING READ-ONLY QA: PASS / CERRADO. Blockers: 0. SQL: no. Migraciones: no. Deploy: no.
