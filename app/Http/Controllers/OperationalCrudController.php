@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CrudResourceRequest;
+use App\Models\BankReconciliation;
 use App\Models\CashMovement;
 use App\Models\ExpenseDocument;
 use App\Models\Currency;
@@ -198,6 +199,13 @@ class OperationalCrudController extends Controller
         }
 
         $validated = $request->validated();
+        if ($resource === 'cash-accounts' && $item instanceof \App\Models\CashAccount
+            && BankReconciliation::query()->forCompany((int) $request->user()->company_id)->where('cash_account_id', $item->id)->where('status', 'reconciled')->exists()
+            && (($item->opening_balance != ($validated['opening_balance'] ?? $item->opening_balance))
+                || (optional($item->opening_balance_date)->toDateString() !== ($validated['opening_balance_date'] ?? optional($item->opening_balance_date)->toDateString()))
+                || ((int) $item->currency_id !== (int) ($validated['currency_id'] ?? $item->currency_id)))) {
+            return back()->withInput()->withErrors(['cash_account' => 'No se puede modificar saldo inicial, fecha o moneda de una cuenta con conciliaciones cerradas.']);
+        }
         try {
             $this->financialDocuments->assertCreateAllowed($resource, (int) $request->user()->company_id, $validated);
         } catch (DomainException $exception) {

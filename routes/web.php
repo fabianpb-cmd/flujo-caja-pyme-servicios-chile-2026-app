@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountSecurityController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BankReconciliationController;
 use App\Http\Controllers\GeographyController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\OperationalCrudController;
@@ -44,6 +45,12 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(Managem
     Route::get('/gestion/presupuesto', 'budgets')->name('management.budgets');
     Route::get('/gestion/flujos', 'flows')->name('management.flows');
     Route::get('/gestion/rentabilidad', 'profitability')->name('management.profitability');
+});
+
+Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(BankReconciliationController::class)->group(function (): void {
+    Route::get('/tesoreria/conciliacion-bancaria', 'index')->name('bank-reconciliation.index');
+    Route::post('/tesoreria/conciliacion-bancaria', 'store')->name('bank-reconciliation.store');
+    Route::post('/tesoreria/conciliacion-bancaria/{reconciliation}/conciliar', 'reconcile')->name('bank-reconciliation.reconcile');
 });
 
 Route::middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])->prefix('administracion/usuarios')->name('admin.users.')->controller(UserManagementController::class)->group(function (): void {

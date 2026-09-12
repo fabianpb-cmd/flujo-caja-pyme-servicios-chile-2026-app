@@ -779,3 +779,20 @@ IMPLEMENTACIÓN ESTIMADA
 Próximo paso exacto: acordar tratamiento de históricos sin cuenta y alcance CLP-only; después implementar primero el servicio de saldo por cuenta y validación de cuenta activa/tenant, antes de crear la pantalla de conciliación.
 
 Código modificado: solo docs/HANDOFF.md. SQL: no. Deploy: no.
+CONCILIACIÓN BANCARIA V1 - PASS LOCAL - 2026-09-12
+
+Se implementó la V1 local de conciliación bancaria sobre el diseño previo 2fc40158. Se agregó opening_balance_date como fecha de cutover y la tabla bank_reconciliations con estados draft/reconciled, snapshot de saldo sistema, diferencia, notas y trazabilidad de usuarios. No se creó tabla de items.
+
+CashAccountBalanceService calcula saldo por cuenta usando opening_balance al cierre de opening_balance_date más movimientos posted de la misma empresa/cuenta con fecha posterior al cutover y hasta la fecha consultada. Excluye draft, otras cuentas y movimientos sin cuenta; la fecha anterior al cutover es no conciliable. CashFlowService conserva el cálculo legacy cuando no hay cutover y evita doble conteo cuando existe una cuenta con cutover.
+
+CashMovementService ahora exige para posted una cuenta activa de la misma empresa, CLP, con fecha de saldo inicial, movimiento posterior al cutover y posterior a toda conciliación cerrada. Draft puede carecer de cuenta; si informa cuenta se valida el tenant. Posted permanece inmutable. Las cuentas con conciliación reconciled no pueden cambiar saldo inicial, fecha de cutover ni moneda desde el CRUD.
+
+La pantalla /tesoreria/conciliacion-bancaria permite seleccionar cuenta CLP, fecha, saldo banco, guardar borrador, recalcular/mostrar saldo sistema, diferencia, conciliar solo con diferencia cero y consultar conciliaciones/movimientos read-only. Muestra diagnóstico de movimientos posted sin cuenta sin modificarlos. No hay integración bancaria, importación de cartolas ni matching automático.
+
+Tests focalizados: BankReconciliationTest, 8 tests / 25 assertions PASS; CashFlowServiceTest, 8 tests / 25 assertions PASS. view:cache PASS. git diff --check PASS. CashMovementSourceDocumentSelectorTest no se modificó: su ejecución mantiene 3 errores históricos por all() sobre array, ajenos a esta implementación.
+
+Migración local: database/migrations/2026_09_12_000100_add_bank_reconciliation_v1.php, agrega cash_accounts.opening_balance_date y bank_reconciliations. No ejecutada en producción. Históricos sin cuenta no modificados ni clasificados. Alcance inicial CLP. Deploy pendiente.
+
+Archivos funcionales: app/Models/CashAccount.php, app/Models/BankReconciliation.php, app/Services/CashAccountBalanceService.php, app/Services/BankReconciliationService.php, app/Services/CashMovementService.php, app/Services/CashFlowService.php, app/Http/Controllers/BankReconciliationController.php, app/Http/Controllers/OperationalCrudController.php, config/operational.php, routes/web.php, resources/views/layouts/app.blade.php, resources/views/treasury/bank-reconciliation.blade.php, migración y tests/Feature/BankReconciliationTest.php.
+
+Próximo paso: revisar/aprobar el deploy de la migración y ejecutar smoke productivo read-only antes de crear la primera cuenta con cutover o conciliación.

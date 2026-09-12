@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\CashMovement;
+use App\Models\CashAccount;
+use App\Models\BankReconciliation;
 use App\Models\ExpenseDocument;
 use App\Models\LegalObligation;
 use App\Models\PayrollRecord;
@@ -12,6 +14,7 @@ use App\Support\MassAssignment;
 use App\Support\UiFormatter;
 use DomainException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
 class CashMovementService
 {
@@ -45,8 +48,11 @@ class CashMovementService
             $this->assertSupportedStatus($data['status']);
 
             if ($data['status'] === 'posted') {
+                $this->validateCashAccountForPosting($data);
                 $this->rejectClosedPeriod($data);
                 $this->validateAgainstDocument($data);
+            } elseif (filled($data['cash_account_id'] ?? null)) {
+                $this->validateCashAccountOwnership($data);
             }
 
             $movement = MassAssignment::create(CashMovement::class, $data);
@@ -94,8 +100,11 @@ class CashMovementService
             $this->assertSupportedStatus($data['status']);
 
             if ($data['status'] === 'posted') {
+                $this->validateCashAccountForPosting($data);
                 $this->rejectClosedPeriod($data);
                 $this->validateAgainstDocument($data);
+            } elseif (filled($data['cash_account_id'] ?? null)) {
+                $this->validateCashAccountOwnership($data);
             }
 
             MassAssignment::fillAndSave($locked, $data);
@@ -136,6 +145,45 @@ class CashMovementService
         }
 
         $this->financialDocuments->assertPeriodOpen((int) $data['company_id'], $data['movement_date']);
+    }
+
+    private function validateCashAccountOwnership(array $data): CashAccount
+    {
+        $account = CashAccount::query()->forCompany((int) $data['company_id'])->find((int) $data['cash_account_id']);
+        if (! $account) {
+            throw new DomainException('La cuenta de caja no pertenece a la empresa activa.');
+        }
+        return $account;
+    }
+
+    private function validateCashAccountForPosting(array $data): void
+    {
+        if (! filled($data['cash_account_id'] ?? null)) {
+            throw new DomainException('Un movimiento contabilizado requiere una cuenta de caja activa.');
+        }
+        $account = $this->validateCashAccountOwnership($data);
+        if (! $account->is_active) {
+            throw new DomainException('La cuenta de caja seleccionada está inactiva.');
+        }
+        $currency = $account->currencyCatalog?->code ?: $account->currency ?: 'CLP';
+        if (strtoupper($currency) !== 'CLP') {
+            throw new DomainException('La conciliación V1 solo admite cuentas CLP.');
+        }
+        if (! $account->opening_balance_date) {
+            throw new DomainException('La cuenta requiere una fecha de saldo inicial antes de contabilizar movimientos.');
+        }
+        $movementDate = Carbon::parse($data['movement_date'])->startOfDay();
+        if ($movementDate->lte($account->opening_balance_date->copy()->startOfDay())) {
+            throw new DomainException('La fecha del movimiento debe ser posterior a la fecha de saldo inicial.');
+        }
+        $lastReconciled = BankReconciliation::query()
+            ->forCompany($account->company_id)
+            ->where('cash_account_id', $account->id)
+            ->where('status', 'reconciled')
+            ->max('reconciliation_date');
+        if ($lastReconciled && $movementDate->lte(Carbon::parse($lastReconciled)->startOfDay())) {
+            throw new DomainException('El movimiento pertenece a un período bancario ya conciliado.');
+        }
     }
 
     private function assertSupportedStatus(string $status): void

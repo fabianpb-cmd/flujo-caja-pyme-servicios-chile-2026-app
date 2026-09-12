@@ -20,6 +20,7 @@ class CashAccount extends Model
     {
         return [
             'opening_balance' => 'decimal:2',
+            'opening_balance_date' => 'date',
             'is_active' => 'boolean',
         ];
     }

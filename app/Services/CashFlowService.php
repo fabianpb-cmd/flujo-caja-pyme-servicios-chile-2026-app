@@ -136,15 +136,39 @@ class CashFlowService
     public function openingBalance(int $companyId, CarbonInterface|string $asOf): float
     {
         $asOf = Carbon::parse($asOf)->startOfDay();
-        $opening = (float) CashAccount::query()->forCompany($companyId)->sum('opening_balance');
-        $net = (float) CashMovement::query()
+        $accounts = CashAccount::query()->forCompany($companyId)->get();
+        if (! $accounts->contains(fn (CashAccount $account): bool => $account->opening_balance_date !== null)) {
+            $opening = (float) $accounts->sum('opening_balance');
+            $net = (float) CashMovement::query()->forCompany($companyId)->where('status', 'posted')->whereDate('movement_date', '<', $asOf->toDateString())->selectRaw('COALESCE(SUM(income - expense), 0) as balance')->value('balance');
+            return round($opening + $net, 2);
+        }
+
+        $balance = 0.0;
+        $legacyAccountIds = [];
+        $accountBalances = app(CashAccountBalanceService::class);
+        foreach ($accounts as $account) {
+            if ($account->opening_balance_date) {
+                if ($asOf->lte($account->opening_balance_date->copy()->startOfDay())) {
+                    $balance += (float) $account->opening_balance;
+                } else {
+                    $balance += $accountBalances->balanceAt($account, $asOf->copy()->subDay());
+                }
+            } else {
+                $legacyAccountIds[] = $account->id;
+                $balance += (float) $account->opening_balance;
+            }
+        }
+        $legacyNet = CashMovement::query()
             ->forCompany($companyId)
             ->where('status', 'posted')
             ->whereDate('movement_date', '<', $asOf->toDateString())
+            ->where(function ($query) use ($legacyAccountIds): void {
+                $query->whereNull('cash_account_id')->orWhereIn('cash_account_id', $legacyAccountIds);
+            })
             ->selectRaw('COALESCE(SUM(income - expense), 0) as balance')
             ->value('balance');
 
-        return round($opening + $net, 2);
+        return round($balance + (float) $legacyNet, 2);
     }
 
     private function realBuckets(int $companyId, Carbon $start, Carbon $end): array

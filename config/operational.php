@@ -386,6 +386,7 @@ return [
             'bank_account_type_id' => ['label' => 'Tipo cuenta', 'type' => 'relation', 'model' => BankAccountType::class, 'display' => 'name'],
             'currency_id' => ['label' => 'Moneda', 'type' => 'relation', 'model' => Currency::class, 'display' => 'name', 'relation_name' => 'currencyCatalog'],
             'opening_balance' => ['label' => 'Saldo inicial', 'type' => 'money', 'currency_relation' => 'currencyCatalog'],
+            'opening_balance_date' => ['label' => 'Fecha saldo inicial', 'type' => 'date', 'help' => 'Saldo de cierre bancario a esta fecha.'],
             'is_active' => ['label' => 'Activa', 'type' => 'checkbox'],
         ],
         'rules' => [
@@ -395,6 +396,7 @@ return [
             'bank_account_type_id' => ['nullable', 'integer'],
             'currency_id' => ['required', 'integer'],
             'opening_balance' => ['required', 'numeric'],
+            'opening_balance_date' => ['nullable', 'date'],
             'is_active' => ['nullable', 'boolean'],
         ],
     ],
