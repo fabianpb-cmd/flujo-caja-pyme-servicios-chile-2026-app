@@ -31,7 +31,7 @@ class BankReconciliationController extends Controller
             } catch (DomainException) {
                 $systemBalance = null;
             }
-            $movements = CashMovement::query()->forCompany($companyId)->where('cash_account_id', $selected->id)->where('status', 'posted')->whereDate('movement_date', '<=', $date)->latest('movement_date')->latest('id')->limit(20)->get();
+            $movements = CashMovement::query()->forCompany($companyId)->where('cash_account_id', $selected->id)->where('status', 'posted')->whereDate('movement_date', '>', $selected->opening_balance_date->toDateString())->whereDate('movement_date', '<=', $date)->latest('movement_date')->latest('id')->limit(20)->get();
         }
         return view('treasury.bank-reconciliation', ['accounts' => $accounts, 'selected' => $selected, 'date' => $date, 'systemBalance' => $systemBalance, 'movements' => $movements, 'reconciliations' => BankReconciliation::query()->forCompany($companyId)->with(['cashAccount', 'reconciledBy'])->latest('reconciliation_date')->limit(30)->get(), 'unassigned' => $this->reconciliations->unassignedSummary($companyId)]);
     }

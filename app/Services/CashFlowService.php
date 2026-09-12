@@ -10,6 +10,7 @@ use App\Models\PayrollRecord;
 use App\Models\SalesDocument;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class CashFlowService
 {
@@ -25,7 +26,8 @@ class CashFlowService
     {
         $scenario = $this->scenarios->activeForCompany($companyId, $scenarioCode);
         $cursor = Carbon::parse($start)->startOfMonth();
-        $openingReal = $this->openingBalance($companyId, $cursor);
+        $accounts = CashAccount::query()->forCompany($companyId)->get();
+        $openingReal = $this->openingBalance($companyId, $cursor, $accounts);
         $openingProjected = $openingReal;
         $rows = [];
 
@@ -33,7 +35,7 @@ class CashFlowService
             $periodStart = $cursor->copy()->addMonths($i);
             $periodEnd = $periodStart->copy()->endOfMonth();
 
-            $reals = $this->realBuckets($companyId, $periodStart, $periodEnd);
+            $reals = $this->realBuckets($companyId, $periodStart, $periodEnd, $accounts);
             $projected = $this->projectedBuckets($companyId, $periodStart, $periodEnd, $scenario->code);
 
             $netReal = round($reals['income_real'] - $reals['other_real'] - $reals['personnel_real'] - $reals['legal_real'], 2);
@@ -73,14 +75,15 @@ class CashFlowService
     {
         $scenario = $this->scenarios->activeForCompany($companyId, $scenarioCode);
         $cursor = Carbon::parse($start)->startOfWeek(Carbon::MONDAY);
-        $openingReal = $this->openingBalance($companyId, $cursor);
+        $accounts = CashAccount::query()->forCompany($companyId)->get();
+        $openingReal = $this->openingBalance($companyId, $cursor, $accounts);
         $openingProjected = $openingReal;
         $rows = [];
 
         for ($i = 0; $i < $weeks; $i++) {
             $weekStart = $cursor->copy()->addWeeks($i);
             $weekEnd = $weekStart->copy()->endOfWeek(Carbon::SUNDAY);
-            $reals = $this->realBuckets($companyId, $weekStart, $weekEnd);
+            $reals = $this->realBuckets($companyId, $weekStart, $weekEnd, $accounts);
             $projected = $this->projectedBuckets($companyId, $weekStart, $weekEnd, $scenario->code);
             $netReal = round($reals['income_real'] - $reals['other_real'] - $reals['personnel_real'] - $reals['legal_real'], 2);
             $netProjected = round($projected['income_projected'] - $projected['other_projected'] - $projected['personnel_projected'] - $projected['legal_projected'], 2);
@@ -133,10 +136,10 @@ class CashFlowService
         ];
     }
 
-    public function openingBalance(int $companyId, CarbonInterface|string $asOf): float
+    public function openingBalance(int $companyId, CarbonInterface|string $asOf, ?Collection $accounts = null): float
     {
         $asOf = Carbon::parse($asOf)->startOfDay();
-        $accounts = CashAccount::query()->forCompany($companyId)->get();
+        $accounts ??= CashAccount::query()->forCompany($companyId)->get();
         if (! $accounts->contains(fn (CashAccount $account): bool => $account->opening_balance_date !== null)) {
             $opening = (float) $accounts->sum('opening_balance');
             $net = (float) CashMovement::query()->forCompany($companyId)->where('status', 'posted')->whereDate('movement_date', '<', $asOf->toDateString())->selectRaw('COALESCE(SUM(income - expense), 0) as balance')->value('balance');
@@ -171,12 +174,38 @@ class CashFlowService
         return round($balance + (float) $legacyNet, 2);
     }
 
-    private function realBuckets(int $companyId, Carbon $start, Carbon $end): array
+    private function realBuckets(int $companyId, Carbon $start, Carbon $end, Collection $accounts): array
     {
         $base = CashMovement::query()
             ->forCompany($companyId)
             ->where('status', 'posted')
             ->whereBetween('movement_date', [$start, $end]);
+
+        // A cutover opening balance already includes that account's prior history.
+        if ($accounts->contains(fn (CashAccount $account): bool => $account->opening_balance_date !== null)) {
+            $legacyAccountIds = $accounts
+                ->filter(fn (CashAccount $account): bool => $account->opening_balance_date === null)
+                ->pluck('id')
+                ->all();
+            $cutoverAccounts = $accounts
+                ->filter(fn (CashAccount $account): bool => $account->opening_balance_date !== null);
+
+            $base->where(function ($query) use ($legacyAccountIds, $cutoverAccounts): void {
+                $query->whereNull('cash_account_id');
+
+                if ($legacyAccountIds !== []) {
+                    $query->orWhereIn('cash_account_id', $legacyAccountIds);
+                }
+
+                foreach ($cutoverAccounts as $account) {
+                    $query->orWhere(function ($accountQuery) use ($account): void {
+                        $accountQuery
+                            ->where('cash_account_id', $account->id)
+                            ->whereDate('movement_date', '>', $account->opening_balance_date->toDateString());
+                    });
+                }
+            });
+        }
 
         return [
             'income_real' => (float) (clone $base)->sum('income'),

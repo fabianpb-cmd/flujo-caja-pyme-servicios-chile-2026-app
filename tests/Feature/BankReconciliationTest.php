@@ -100,6 +100,17 @@ class BankReconciliationTest extends TestCase
         $update->assertSessionHasErrors('cash_account');
         $this->assertSame(1000000.0, (float) $account->fresh()->opening_balance);
 
+        $rename = $this->actingAs($admin)->put(route('operational.update', ['cash-accounts', $account->id]), [
+            'code' => $account->code,
+            'name' => 'Cuenta renombrada',
+            'currency_id' => $account->currency_id,
+            'opening_balance' => 1000000,
+            'opening_balance_date' => '2026-09-30',
+            'is_active' => true,
+        ]);
+        $rename->assertRedirect();
+        $this->assertSame('Cuenta renombrada', $account->fresh()->name);
+
         $delete = $this->actingAs($admin)->delete(route('operational.destroy', ['cash-accounts', $account->id]));
         $delete->assertSessionHasErrors('dependencies');
         $this->assertStringContainsString('conciliaciones bancarias', $this->dependencyError($delete));
@@ -155,6 +166,37 @@ class BankReconciliationTest extends TestCase
         }
     }
 
+    public function test_closed_reconciliation_rejects_reopening_but_allows_posting_after_its_date(): void
+    {
+        [$company, $account] = $this->account('BANK-AFTER', 5000000, '2026-09-30');
+        $admin = User::query()->create(['company_id' => $company->id, 'name' => 'Admin After', 'email' => 'after@example.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
+        $service = app(BankReconciliationService::class);
+        $closed = $service->reconcile($service->saveDraft($company->id, $account->id, '2026-10-01', 5000000, null, $admin), $company->id, $admin);
+
+        $posted = app(CashMovementService::class)->create(['company_id' => $company->id, 'code' => 'M-AFTER', 'movement_type' => 'Otro', 'cash_account_id' => $account->id, 'movement_date' => '2026-10-02', 'income' => 1, 'expense' => 0, 'status' => 'posted']);
+
+        $this->assertSame('posted', $posted->status);
+        $this->assertDomain(fn () => $service->saveDraft($company->id, $account->id, '2026-10-01', 5000000, null, $admin), 'cerrada');
+        $this->assertDomain(fn () => $service->reconcile($closed, $company->id, $admin), 'ya no está en borrador');
+    }
+
+    public function test_draft_is_unique_per_account_and_date_and_unassigned_summary_is_company_scoped(): void
+    {
+        [$company, $account] = $this->account('BANK-UNIQUE', 1000, '2026-09-30');
+        [$otherCompany] = $this->account('BANK-UNIQUE-OTHER', 1000, '2026-09-30');
+        $service = app(BankReconciliationService::class);
+
+        $service->saveDraft($company->id, $account->id, '2026-10-01', 1000, 'Inicial');
+        $updated = $service->saveDraft($company->id, $account->id, '2026-10-01', 1200, 'Actualizado');
+        $this->movement($company, null, 'M-UNASSIGNED-IN', '2026-10-01', 100, 0, 'posted');
+        $this->movement($company, null, 'M-UNASSIGNED-OUT', '2026-10-01', 0, 40, 'posted');
+        $this->movement($otherCompany, null, 'M-UNASSIGNED-OTHER', '2026-10-01', 900, 0, 'posted');
+
+        $this->assertSame(1, BankReconciliation::query()->forCompany($company->id)->where('cash_account_id', $account->id)->whereDate('reconciliation_date', '2026-10-01')->count());
+        $this->assertSame('1200.00', (string) $updated->bank_balance);
+        $this->assertSame(['count' => 2, 'income' => 100.0, 'expense' => 40.0, 'net' => 60.0], $service->unassignedSummary($company->id));
+    }
+
     public function test_http_screen_is_tenant_scoped_and_exposes_reconciliation_form(): void
     {
         [$company, $account] = $this->account('BANK-G', 1000000, '2026-09-30');
@@ -163,6 +205,23 @@ class BankReconciliationTest extends TestCase
         $response->assertOk()->assertSee('Conciliación bancaria')->assertSee($account->name)->assertSee('Guardar borrador');
         $otherCompany = Company::query()->create(['code' => 'BANK-H', 'name' => 'Otra empresa', 'status' => 'active']);
         $this->assertFalse($response->getContent() !== '' && str_contains($response->getContent(), $otherCompany->name));
+        $otherAdmin = User::query()->create(['company_id' => $otherCompany->id, 'name' => 'Admin Other', 'email' => 'other-recon@example.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
+        $draft = app(BankReconciliationService::class)->saveDraft($company->id, $account->id, '2026-10-01', 1000000, null, $admin);
+        $this->actingAs($otherAdmin)->post(route('bank-reconciliation.reconcile', $draft))->assertNotFound();
+    }
+
+    public function test_http_screen_lists_only_movements_after_the_account_cutover(): void
+    {
+        [$company, $account] = $this->account('BANK-LIST', 1000000, '2026-09-30');
+        $admin = User::query()->create(['company_id' => $company->id, 'name' => 'Admin List', 'email' => 'list@example.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
+        $this->movement($company, $account, 'M-LIST-BEFORE', '2026-09-30', 1, 0, 'posted');
+        $this->movement($company, $account, 'M-LIST-AFTER', '2026-10-01', 1, 0, 'posted');
+
+        $this->actingAs($admin)
+            ->get(route('bank-reconciliation.index', ['cash_account_id' => $account->id, 'reconciliation_date' => '2026-10-01']))
+            ->assertOk()
+            ->assertSee('M-LIST-AFTER')
+            ->assertDontSee('M-LIST-BEFORE');
     }
 
     private function account(string $code, int $opening, string $date): array

@@ -373,6 +373,71 @@ class CashFlowServiceTest extends TestCase
         $this->assertSame(3300000.0, $row['closing_real']);
     }
 
+    public function test_cash_flow_applies_cutovers_per_account_without_double_counting_historical_movements(): void
+    {
+        $this->cashAccount->update([
+            'opening_balance' => 100000,
+            'opening_balance_date' => '2026-09-12',
+        ]);
+        $legacy = CashAccount::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'BANK-LEGACY-CFS',
+            'name' => 'Banco histórico',
+            'currency' => 'CLP',
+            'opening_balance' => 200000,
+            'is_active' => true,
+        ]);
+        $secondCutover = CashAccount::query()->create([
+            'company_id' => $this->company->id,
+            'code' => 'BANK-CUTOVER-2-CFS',
+            'name' => 'Banco segundo corte',
+            'currency' => 'CLP',
+            'opening_balance' => 300000,
+            'opening_balance_date' => '2026-09-20',
+            'is_active' => true,
+        ]);
+        $otherCompany = Company::query()->create(['code' => 'CMP-CFS-OTHER', 'name' => 'Otra empresa', 'status' => 'active']);
+
+        foreach ([
+            [$this->cashAccount->id, 'MOV-CFS-BEFORE', '2026-09-05', 20000, 'posted'],
+            [$this->cashAccount->id, 'MOV-CFS-AT-CUTOVER', '2026-09-12', 10000, 'posted'],
+            [$this->cashAccount->id, 'MOV-CFS-AFTER', '2026-09-13', 5000, 'posted'],
+            [$legacy->id, 'MOV-CFS-LEGACY', '2026-09-05', 30000, 'posted'],
+            [null, 'MOV-CFS-UNASSIGNED', '2026-09-10', 7000, 'posted'],
+            [$secondCutover->id, 'MOV-CFS-CUTOVER-2-BEFORE', '2026-09-13', 11000, 'posted'],
+            [$secondCutover->id, 'MOV-CFS-CUTOVER-2-AFTER', '2026-09-21', 15000, 'posted'],
+            [$this->cashAccount->id, 'MOV-CFS-DRAFT', '2026-09-13', 90000, 'draft'],
+        ] as [$cashAccountId, $code, $date, $income, $status]) {
+            CashMovement::query()->forceCreate([
+                'company_id' => $this->company->id,
+                'code' => $code,
+                'movement_type' => 'income',
+                'cash_account_id' => $cashAccountId,
+                'movement_date' => $date,
+                'income' => $income,
+                'expense' => 0,
+                'status' => $status,
+            ]);
+        }
+        CashMovement::query()->forceCreate([
+            'company_id' => $otherCompany->id,
+            'code' => 'MOV-CFS-OTHER-COMPANY',
+            'movement_type' => 'income',
+            'movement_date' => '2026-09-21',
+            'income' => 999999,
+            'expense' => 0,
+            'status' => 'posted',
+        ]);
+
+        $monthly = app(CashFlowService::class)->monthly($this->company->id, '2026-09-01', 1)[0];
+        $weekly = app(CashFlowService::class)->weekly($this->company->id, '2026-09-07', 3);
+
+        $this->assertSame(57000.0, $monthly['income_real']);
+        $this->assertSame(657000.0, $monthly['closing_real']);
+        $this->assertSame(12000.0, $weekly[0]['income_real']);
+        $this->assertSame(15000.0, $weekly[2]['income_real']);
+    }
+
     public function test_cash_flow_scenario_delay_moves_projection_without_affecting_real_cash(): void
     {
         Scenario::query()->create([
