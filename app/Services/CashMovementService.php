@@ -147,11 +147,18 @@ class CashMovementService
         $this->financialDocuments->assertPeriodOpen((int) $data['company_id'], $data['movement_date']);
     }
 
-    private function validateCashAccountOwnership(array $data): CashAccount
+    private function validateCashAccountOwnership(array $data, bool $lock = false): CashAccount
     {
-        $account = CashAccount::query()->forCompany((int) $data['company_id'])->find((int) $data['cash_account_id']);
+        $query = CashAccount::query()->forCompany((int) $data['company_id']);
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $account = $query->find((int) $data['cash_account_id']);
         if (! $account) {
             throw new DomainException('La cuenta de caja no pertenece a la empresa activa.');
+        }
+        if (! $account->is_active) {
+            throw new DomainException('La cuenta de caja seleccionada está inactiva.');
         }
         return $account;
     }
@@ -159,18 +166,15 @@ class CashMovementService
     private function validateCashAccountForPosting(array $data): void
     {
         if (! filled($data['cash_account_id'] ?? null)) {
-            throw new DomainException('Un movimiento contabilizado requiere una cuenta de caja activa.');
+            throw new DomainException('Un movimiento de caja contabilizado requiere una cuenta de caja activa.');
         }
-        $account = $this->validateCashAccountOwnership($data);
-        if (! $account->is_active) {
-            throw new DomainException('La cuenta de caja seleccionada está inactiva.');
-        }
+        $account = $this->validateCashAccountOwnership($data, true);
         $currency = $account->currencyCatalog?->code ?: $account->currency ?: 'CLP';
         if (strtoupper($currency) !== 'CLP') {
-            throw new DomainException('La conciliación V1 solo admite cuentas CLP.');
+            return;
         }
         if (! $account->opening_balance_date) {
-            throw new DomainException('La cuenta requiere una fecha de saldo inicial antes de contabilizar movimientos.');
+            return;
         }
         $movementDate = Carbon::parse($data['movement_date'])->startOfDay();
         if ($movementDate->lte($account->opening_balance_date->copy()->startOfDay())) {

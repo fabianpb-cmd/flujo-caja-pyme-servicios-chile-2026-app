@@ -20,7 +20,8 @@ class BankReconciliationService
     public function saveDraft(int $companyId, int $accountId, string $date, float|int|string $bankBalance, ?string $notes, ?User $user = null): BankReconciliation
     {
         return DB::transaction(function () use ($companyId, $accountId, $date, $bankBalance, $notes, $user): BankReconciliation {
-            $account = $this->eligibleAccount($companyId, $accountId, $date);
+            // Serializes the find-or-create path for one account; the unique key remains the final guard.
+            $account = $this->eligibleAccount($companyId, $accountId, $date, true);
             $reconciliationDate = Carbon::parse($date)->toDateString();
             $systemBalance = $this->balances->balanceAt($account, $reconciliationDate);
             $bank = UiFormatter::roundAmount($bankBalance, 'CLP');
@@ -49,7 +50,7 @@ class BankReconciliationService
             if ($locked->status !== 'draft') {
                 throw new DomainException('La conciliación ya no está en borrador.');
             }
-            $account = $this->eligibleAccount($companyId, (int) $locked->cash_account_id, $locked->reconciliation_date->toDateString());
+            $account = $this->eligibleAccount($companyId, (int) $locked->cash_account_id, $locked->reconciliation_date->toDateString(), true);
             $systemBalance = $this->balances->balanceAt($account, $locked->reconciliation_date);
             $difference = UiFormatter::roundAmount((float) $locked->bank_balance - $systemBalance, 'CLP');
             if ($difference !== 0.0) {
@@ -66,9 +67,13 @@ class BankReconciliationService
         return ['count' => (clone $query)->count(), 'income' => (float) (clone $query)->sum('income'), 'expense' => (float) (clone $query)->sum('expense'), 'net' => (float) (clone $query)->sum(DB::raw('income - expense'))];
     }
 
-    private function eligibleAccount(int $companyId, int $accountId, string $date): CashAccount
+    private function eligibleAccount(int $companyId, int $accountId, string $date, bool $lock = false): CashAccount
     {
-        $account = CashAccount::query()->forCompany($companyId)->with('currencyCatalog')->find($accountId);
+        $query = CashAccount::query()->forCompany($companyId)->with('currencyCatalog');
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $account = $query->find($accountId);
         if (! $account || ! $account->is_active) {
             throw new DomainException('Seleccione una cuenta CLP activa de la empresa.');
         }

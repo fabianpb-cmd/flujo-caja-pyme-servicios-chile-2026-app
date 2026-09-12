@@ -15,7 +15,7 @@ return new class extends Migration
         Schema::create('bank_reconciliations', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('company_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('cash_account_id')->constrained('cash_accounts')->cascadeOnDelete();
+            $table->foreignId('cash_account_id')->constrained('cash_accounts')->restrictOnDelete();
             $table->date('reconciliation_date');
             $table->decimal('bank_balance', 18, 2);
             $table->decimal('system_balance_snapshot', 18, 2);

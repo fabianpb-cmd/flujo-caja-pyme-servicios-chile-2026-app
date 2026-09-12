@@ -44,24 +44,20 @@ class BankReconciliationTest extends TestCase
         app(CashAccountBalanceService::class)->balanceAt($account, '2026-09-29');
     }
 
-    public function test_posted_requires_active_same_company_clp_account_and_valid_date(): void
+    public function test_new_posted_movement_requires_an_account_while_legacy_unassigned_rows_and_drafts_remain_supported(): void
     {
         [$company, $account] = $this->account('BANK-D', 1000000, '2026-09-30');
         $service = app(CashMovementService::class);
-        try {
-            $service->create(['company_id' => $company->id, 'code' => 'M-NO-ACCOUNT', 'movement_date' => '2026-10-01', 'income' => 1, 'expense' => 0, 'status' => 'posted']);
-            $this->fail('Expected account requirement.');
-        } catch (DomainException $exception) {
-            $this->assertStringContainsString('requiere una cuenta', $exception->getMessage());
-        }
+        $legacy = $this->movement($company, null, 'M-LEGACY-NO-ACCOUNT', '2026-09-01', 1, 0, 'posted');
+        $this->assertNull($legacy->cash_account_id);
+        $this->assertDomain(fn () => $service->create(['company_id' => $company->id, 'code' => 'M-NO-ACCOUNT', 'movement_type' => 'Otro', 'movement_date' => '2026-10-01', 'income' => 1, 'expense' => 0, 'status' => 'posted']), 'requiere una cuenta');
         $draft = $service->create(['company_id' => $company->id, 'code' => 'M-DRAFT', 'movement_type' => 'Otro', 'movement_date' => '2026-09-01', 'income' => 1, 'expense' => 0, 'status' => 'draft']);
         $this->assertSame('draft', $draft->status);
         $account->update(['is_active' => false]);
-        $this->expectException(DomainException::class);
-        $service->create(['company_id' => $company->id, 'code' => 'M-INACTIVE', 'cash_account_id' => $account->id, 'movement_date' => '2026-10-01', 'income' => 1, 'expense' => 0, 'status' => 'posted']);
+        $this->assertDomain(fn () => $service->create(['company_id' => $company->id, 'code' => 'M-DRAFT-INACTIVE', 'movement_type' => 'Otro', 'cash_account_id' => $account->id, 'movement_date' => '2026-10-01', 'income' => 1, 'expense' => 0, 'status' => 'draft']), 'inactiva');
     }
 
-    public function test_posted_rejects_foreign_non_clp_missing_cutover_and_pre_cutover_accounts(): void
+    public function test_posted_rejects_foreign_and_reconciliation_period_violations_without_restricting_legacy_or_non_clp_accounts(): void
     {
         [$company, $account] = $this->account('BANK-I', 1000000, '2026-09-30');
         [, $foreign] = $this->account('BANK-J', 1000000, '2026-09-30');
@@ -71,9 +67,53 @@ class BankReconciliationTest extends TestCase
         $service = app(CashMovementService::class);
         $payload = fn (CashAccount $item, string $code, string $date = '2026-10-01'): array => ['company_id' => $company->id, 'code' => $code, 'movement_type' => 'Otro', 'cash_account_id' => $item->id, 'movement_date' => $date, 'income' => 1, 'expense' => 0, 'status' => 'posted'];
         $this->assertDomain(fn () => $service->create($payload($foreign, 'M-FOREIGN')), 'empresa activa');
-        $this->assertDomain(fn () => $service->create($payload($nonClp, 'M-USD')), 'solo admite cuentas CLP');
-        $this->assertDomain(fn () => $service->create($payload($missingDate, 'M-NODATE')), 'fecha de saldo inicial');
-        $this->assertDomain(fn () => $service->create($payload($account, 'M-BEFORE', '2026-09-30')), 'posterior a la fecha');
+        $this->assertSame('posted', $service->create($payload($nonClp, 'M-USD'))->status);
+        $this->assertSame('posted', $service->create($payload($missingDate, 'M-NODATE'))->status);
+        $nonClp->update(['is_active' => false]);
+        $this->assertDomain(fn () => $service->create($payload($nonClp, 'M-USD-INACTIVE')), 'inactiva');
+        $this->assertDomain(fn () => $service->create($payload($account, 'M-BEFORE', '2026-09-29')), 'posterior a la fecha');
+        $this->assertDomain(fn () => $service->create($payload($account, 'M-AT-CUTOVER', '2026-09-30')), 'posterior a la fecha');
+    }
+
+    public function test_reconciled_account_cannot_be_changed_or_deleted_and_new_account_creation_still_works(): void
+    {
+        [$company, $account] = $this->account('BANK-LOCK', 1000000, '2026-09-30');
+        $admin = User::query()->create(['company_id' => $company->id, 'name' => 'Admin Lock', 'email' => 'lock@example.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
+        BankReconciliation::query()->forceCreate([
+            'company_id' => $company->id,
+            'cash_account_id' => $account->id,
+            'reconciliation_date' => '2026-10-01',
+            'bank_balance' => 1000000,
+            'system_balance_snapshot' => 1000000,
+            'difference' => 0,
+            'status' => 'reconciled',
+        ]);
+
+        $update = $this->actingAs($admin)->put(route('operational.update', ['cash-accounts', $account->id]), [
+            'code' => $account->code,
+            'name' => $account->name,
+            'currency_id' => $account->currency_id,
+            'opening_balance' => 2000000,
+            'opening_balance_date' => '2026-09-30',
+            'is_active' => true,
+        ]);
+        $update->assertSessionHasErrors('cash_account');
+        $this->assertSame(1000000.0, (float) $account->fresh()->opening_balance);
+
+        $delete = $this->actingAs($admin)->delete(route('operational.destroy', ['cash-accounts', $account->id]));
+        $delete->assertSessionHasErrors('dependencies');
+        $this->assertStringContainsString('conciliaciones bancarias', $this->dependencyError($delete));
+        $this->assertDatabaseHas('cash_accounts', ['id' => $account->id]);
+
+        $created = $this->actingAs($admin)->post(route('operational.store', 'cash-accounts'), [
+            'code' => 'BANK-NEW',
+            'name' => 'Cuenta nueva',
+            'currency_id' => $account->currency_id,
+            'opening_balance' => 0,
+            'is_active' => true,
+        ]);
+        $created->assertRedirect();
+        $this->assertDatabaseHas('cash_accounts', ['company_id' => $company->id, 'code' => 'BANK-NEW']);
     }
 
     public function test_http_store_creates_draft_snapshot_for_current_tenant(): void
@@ -146,5 +186,10 @@ class BankReconciliationTest extends TestCase
         } catch (DomainException $exception) {
             $this->assertStringContainsString($message, $exception->getMessage());
         }
+    }
+
+    private function dependencyError($response): string
+    {
+        return (string) $response->getSession()->get('errors')->get('dependencies')[0];
     }
 }
