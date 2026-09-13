@@ -67,9 +67,9 @@
             'items' => [
                 $sidebarItem('Cuentas', 'bi bi-bank', 'operational.index', ['cash-accounts'], ['resource' => 'cash-accounts', 'operational_fallback' => true]),
                 $sidebarItem('Movimientos de caja', 'bi bi-arrow-left-right', 'operational.index', ['cash-movements'], ['resource' => 'cash-movements', 'operational_fallback' => true]),
-                $sidebarItem('Conciliación bancaria', 'bi bi-check2-square', 'bank-reconciliation.index'),
-                $sidebarItem('Regularización bancaria', 'bi bi-journal-check', 'bank-regularization.index'),
                 $sidebarItem('Cartolas bancarias', 'bi bi-file-earmark-spreadsheet', 'bank-statements.index'),
+                $sidebarItem('Regularización bancaria', 'bi bi-journal-check', 'bank-regularization.index'),
+                $sidebarItem('Conciliación bancaria', 'bi bi-check2-square', 'bank-reconciliation.index'),
             ],
         ],
         [
@@ -196,6 +196,10 @@
         $breadcrumb = collect([$section, $group, $resourceTitle, $action])->filter()->values()->all();
     } else {
         $managementMap = [
+            'sales-documents.index' => ['Ventas', 'Facturas / Ingresos'],
+            'receivables.index' => ['Ventas', 'Cuentas por cobrar'],
+            'expense-documents.index' => ['Gastos', 'Egresos / Gastos'],
+            'payables.index' => ['Gastos', 'Cuentas por pagar'],
             'management.obligations' => ['Gestión', 'Obligaciones'],
             'management.financial-agenda' => ['Gestión', 'Agenda financiera'],
             'bank-reconciliation.index' => ['Tesorería', 'Conciliación bancaria'],

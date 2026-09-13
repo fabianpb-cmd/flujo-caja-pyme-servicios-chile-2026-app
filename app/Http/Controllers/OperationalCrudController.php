@@ -121,7 +121,19 @@ class OperationalCrudController extends Controller
             }, fn ($query) => $query->latest('id'));
 
         if ($resource === 'time-entries') {
-            $items = $this->paginateTimeEntryBlocks($this->presentTimeEntryBlocks($items->get()), 15, $request);
+            $items = $this->paginateCollection($this->presentTimeEntryBlocks($items->get()), 15, $request);
+        } elseif ($routeName === 'receivables.index') {
+            $items = $this->paginateCollection(
+                $items->get()->filter(fn (SalesDocument $document): bool => $this->isOpenReceivable($document)),
+                15,
+                $request,
+            );
+        } elseif ($routeName === 'payables.index') {
+            $items = $this->paginateCollection(
+                $items->get()->filter(fn (ExpenseDocument $document): bool => $this->isOpenPayable($document)),
+                15,
+                $request,
+            );
         } else {
             $items = $items->paginate(15)->withQueryString();
         }
@@ -915,7 +927,7 @@ class OperationalCrudController extends Controller
             ->values();
     }
 
-    private function paginateTimeEntryBlocks(Collection $rows, int $perPage, Request $request): LengthAwarePaginator
+    private function paginateCollection(Collection $rows, int $perPage, Request $request): LengthAwarePaginator
     {
         $page = max(1, (int) $request->integer('page', 1));
         $total = $rows->count();
@@ -931,6 +943,23 @@ class OperationalCrudController extends Controller
                 'query' => $request->query(),
             ],
         );
+    }
+
+    private function isOpenReceivable(SalesDocument $document): bool
+    {
+        $status = strtolower(trim((string) $document->status));
+
+        return ! $document->is_voided
+            && ! in_array($status, ['borrador', 'anulado', 'pagado', 'draft', 'voided', 'paid'], true)
+            && $this->receivables->balance($document) > 0.00001;
+    }
+
+    private function isOpenPayable(ExpenseDocument $document): bool
+    {
+        $status = strtolower(trim((string) $document->payment_status));
+
+        return ! in_array($status, ['borrador', 'anulado', 'pagado', 'draft', 'voided', 'paid'], true)
+            && $this->payables->balance($document) > 0.00001;
     }
 
     private function presentTimeEntryBlock(TimeEntry $entry, ?Collection $group = null): TimeEntry
