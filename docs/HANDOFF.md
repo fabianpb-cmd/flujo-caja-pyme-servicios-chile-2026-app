@@ -72,7 +72,9 @@ CxC y CxP ya no son aliases semánticos de los listados generales:
 
 ### Cockpit financiero por proyecto V1 — 2026-09-13
 
-- **IMPLEMENTADO LOCALMENTE / PENDIENTE QA INDEPENDIENTE.** No desplegado ni pusheado.
+- **CERRADO / PASS EN PRODUCCIÓN.** Commit funcional `6c9c8c4eceb3fb09862d2554f7b8a7e1b0d96dca`.
+- QA independiente: PASS; 57 tests / 315 assertions PASS en QA dirigida.
+- Un fallo histórico UF de `ProjectCommitmentServiceTest`, no regresión. P0: ninguno. P1: ninguno. P2 nuevo: ninguno.
 - Integrado como bloque read-only `Resumen financiero` en el detalle existente de Proyecto; no agrega menú, rutas ni mutaciones financieras.
 - Compone `ProfitabilityService`, `ProjectCommitmentService`, `ReceivablesService`, `BillingStrategyService` y `ProjectBillingMilestoneService`.
 - Bases explícitas: `Facturado neto` viene de rentabilidad; `Cobrado` son ingresos posted; `Saldo por cobrar` se obtiene por documento con la lógica autoritativa CxC sobre base bruta. No se calcula por resta entre neto y bruto.
@@ -81,7 +83,10 @@ CxC y CxP ya no son aliases semánticos de los listados generales:
 - Cobertura nueva: `ProjectFinancialCockpitTest` — 4 tests / 31 assertions PASS (tenant, proyecto vacío Por Hora, UF contractual, documentos borrador/anulado, CxC parcial/completa, costos, HH, hitos y estados derivados).
 - Regresiones dirigidas PASS: `ProfitabilityServiceTest` 8/32, `FinancialNavigationTest` 3/22, `SalesDocumentConfirmationTest` 11/42, `CashMovementSourceDocumentSelectorTest` 5/74. `ProjectCommitmentServiceTest` mantiene 1 fallo histórico de fixture UF sin insumo de conversión (14/15, 53 assertions), no causado por este desarrollo.
 - Suite completa: 404/426 PASS, 2 fallos históricos de Agenda/Compromiso dependientes de fixture UF, 5 errores históricos/entorno (`ZipArchive` y `all()` sobre arrays en UI/SecurityGate), 7 skips. Sin regresiones nuevas atribuidas al cockpit.
-- Sin migraciones ni SQL. Producción no tocada.
+- Smoke productivo: PASS; sin 404/500; read-only confirmado; tenant, net/gross, currency y regresión de otros recursos PASS.
+- PRY-000012: venta contractual UF 180,00; equivalente CLP de proyección $7.391.768; facturado neto $7.665.770; cobrado $6.129.997; saldo CxC $2.992.270; estado PARCIALMENTE COBRADO; costo real $0; margen actual $7.665.770 / 100%; horas trabajadas 9,75, aprobadas 9,75, facturadas 9,75, pendientes 0; hitos 3/3 facturados y 100% contractual.
+- PRY-000013 Por Hora: PASS. PRY-000017 proyecto vacío: PASS / SIN FACTURAR.
+- Sin migraciones ni SQL. Producción validada en modo read-only.
 
 ÚNICA fuente de continuidad. No crear otro handoff. No repetir tareas cerradas salvo incidente, nueva release o evidencia nueva.
 
