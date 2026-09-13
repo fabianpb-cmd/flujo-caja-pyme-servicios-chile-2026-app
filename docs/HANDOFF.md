@@ -70,9 +70,18 @@ CxC y CxP ya no son aliases semánticos de los listados generales:
 - CxP muestra documentos pagables con saldo mayor que cero.
 - Pagados, borradores y anulados no aparecen como pendientes.
 
-### Próximo desarrollo
+### Cockpit financiero por proyecto V1 — 2026-09-13
 
-Cockpit financiero por proyecto V1 — **NO INICIADO**.
+- **IMPLEMENTADO LOCALMENTE / PENDIENTE QA INDEPENDIENTE.** No desplegado ni pusheado.
+- Integrado como bloque read-only `Resumen financiero` en el detalle existente de Proyecto; no agrega menú, rutas ni mutaciones financieras.
+- Compone `ProfitabilityService`, `ProjectCommitmentService`, `ReceivablesService`, `BillingStrategyService` y `ProjectBillingMilestoneService`.
+- Bases explícitas: `Facturado neto` viene de rentabilidad; `Cobrado` son ingresos posted; `Saldo por cobrar` se obtiene por documento con la lógica autoritativa CxC sobre base bruta. No se calcula por resta entre neto y bruto.
+- Muestra venta contractual y equivalente de proyección cuando existe, costos reales, compromiso de personal, márgenes, HH, hitos o modalidad Por Hora, alertas, próximos hitos/cobros y estado financiero derivado sin persistir (`SIN FACTURAR`, `PARCIALMENTE FACTURADO`, `FACTURADO`, `PARCIALMENTE COBRADO`, `COBRADO`).
+- `ReceivablesService::balancesForDocuments()` resuelve saldos de varios documentos en una sola consulta de movimientos posted para evitar N+1 en el cockpit.
+- Cobertura nueva: `ProjectFinancialCockpitTest` — 4 tests / 31 assertions PASS (tenant, proyecto vacío Por Hora, UF contractual, documentos borrador/anulado, CxC parcial/completa, costos, HH, hitos y estados derivados).
+- Regresiones dirigidas PASS: `ProfitabilityServiceTest` 8/32, `FinancialNavigationTest` 3/22, `SalesDocumentConfirmationTest` 11/42, `CashMovementSourceDocumentSelectorTest` 5/74. `ProjectCommitmentServiceTest` mantiene 1 fallo histórico de fixture UF sin insumo de conversión (14/15, 53 assertions), no causado por este desarrollo.
+- Suite completa: 404/426 PASS, 2 fallos históricos de Agenda/Compromiso dependientes de fixture UF, 5 errores históricos/entorno (`ZipArchive` y `all()` sobre arrays en UI/SecurityGate), 7 skips. Sin regresiones nuevas atribuidas al cockpit.
+- Sin migraciones ni SQL. Producción no tocada.
 
 ÚNICA fuente de continuidad. No crear otro handoff. No repetir tareas cerradas salvo incidente, nueva release o evidencia nueva.
 

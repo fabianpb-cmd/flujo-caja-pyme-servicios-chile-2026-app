@@ -43,6 +43,37 @@ class ReceivablesService
         return max(0, UiFormatter::roundAmount((float) $document->gross_amount - $this->collectedAmount($document, $asOf), 'CLP'));
     }
 
+    /**
+     * Resolve balances in one query when a screen needs several documents.
+     * The individual balance() method remains the authoritative single-document API.
+     *
+     * @param iterable<SalesDocument> $documents
+     * @return array<int, float>
+     */
+    public function balancesForDocuments(iterable $documents, CarbonInterface|string|null $asOf = null): array
+    {
+        $documents = collect($documents)->filter(fn ($document) => $document instanceof SalesDocument)->values();
+        if ($documents->isEmpty()) {
+            return [];
+        }
+
+        $companyId = (int) $documents->first()->company_id;
+        $codes = $documents->pluck('code')->filter()->unique()->values();
+        $payments = CashMovement::query()
+            ->forCompany($companyId)
+            ->selectRaw('source_document_code, SUM(income) as collected_amount')
+            ->where('source_document_type', 'sales_document')
+            ->whereIn('source_document_code', $codes)
+            ->where('status', 'posted')
+            ->when($asOf, fn ($query) => $query->whereDate('movement_date', '<=', Carbon::parse($asOf)->toDateString()))
+            ->groupBy('source_document_code')
+            ->pluck('collected_amount', 'source_document_code');
+
+        return $documents->mapWithKeys(fn (SalesDocument $document): array => [
+            $document->id => max(0, UiFormatter::roundAmount((float) $document->gross_amount - (float) ($payments[$document->code] ?? 0), 'CLP')),
+        ])->all();
+    }
+
     public function forecastAmount(SalesDocument $document): float
     {
         $probability = $document->payment_probability === null ? 1.0 : (float) $document->payment_probability;

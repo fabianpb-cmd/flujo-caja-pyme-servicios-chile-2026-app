@@ -28,6 +28,7 @@ use App\Services\OperationalDependencyService;
 use App\Services\PayablesService;
 use App\Services\PayrollService;
 use App\Services\ProjectCommitmentService;
+use App\Services\ProjectFinancialCockpitService;
 use App\Services\SalesPrefacturationService;
 use App\Services\SalesDocumentService;
 use App\Services\ReceivablesService;
@@ -58,6 +59,7 @@ class OperationalCrudController extends Controller
         private readonly PayrollService $payroll,
         private readonly LegalObligationService $obligations,
         private readonly ProjectCommitmentService $commitments,
+        private readonly ProjectFinancialCockpitService $projectCockpit,
         private readonly SalesPrefacturationService $salesPrefacturation,
         private readonly HourlyRateService $hourlyRates,
         private readonly HourlyCostService $hourlyCosts,
@@ -284,12 +286,13 @@ class OperationalCrudController extends Controller
             }
         }
 
-        $projectCommitment = $resource === 'projects' ? $this->commitments->summarizeProject($item) : null;
+        $projectFinancialCockpit = $resource === 'projects' ? $this->projectCockpit->summarize($item) : null;
+        $projectCommitment = $projectFinancialCockpit['commitment'] ?? null;
         $billingService = app(\App\Services\ProjectBillingMilestoneService::class);
         $billingStrategy = $resource === 'projects' ? $this->billingStrategies->forProject($item) : null;
         $billingPlan = $resource === 'projects' && $billingStrategy === BillingStrategyService::CLOSED_PROJECT ? $billingService->plan($item) : null;
 
-        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment', 'billingPlan', 'billingStrategy'));
+        return view('operational.show', compact('resource', 'config', 'item', 'payrollHourlyCost', 'payrollCalculationBreakdown', 'salesCalculationBreakdown', 'payrollFormState', 'projectCommitment', 'projectFinancialCockpit', 'billingPlan', 'billingStrategy'));
     }
 
     public function edit(Request $request, string $resource, int $record): View|RedirectResponse

@@ -143,6 +143,36 @@
         </div>
     @endif
 
+    @if ($resource === 'projects' && ! empty($projectFinancialCockpit))
+        @php($cockpit = $projectFinancialCockpit)
+        @php($cockpitProfitability = $cockpit['profitability'])
+        @php($cockpitCommitment = $cockpit['commitment'])
+        @php($cockpitSaleCurrency = data_get($cockpitCommitment, 'sale_net_currency_code', 'CLP'))
+        <div class="app-panel p-3 mb-4" id="project-financial-cockpit">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div class="section-title mb-0">Resumen financiero</div>
+                <span class="badge text-bg-{{ in_array($cockpit['financial_status'], ['COBRADO', 'FACTURADO']) ? 'success' : ($cockpit['financial_status'] === 'SIN FACTURAR' ? 'secondary' : 'warning') }}">{{ $cockpit['financial_status'] }}</span>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-xl-3"><div class="border rounded p-2 h-100"><div class="text-muted small">Venta contratada</div><div class="fw-semibold">{{ $cockpitCommitment['sale_net_contractual'] !== null ? \App\Support\UiFormatter::formatMoney($cockpitCommitment['sale_net_contractual'], $cockpitSaleCurrency) : 'No disponible' }}</div>@if($cockpitSaleCurrency !== 'CLP' && $cockpitCommitment['sale_net_clp'] !== null)<div class="small text-muted">Equivalente proyección: {{ \App\Support\UiFormatter::formatMoney($cockpitCommitment['sale_net_clp']) }}</div>@endif</div></div>
+                <div class="col-6 col-xl-3"><div class="border rounded p-2 h-100"><div class="text-muted small">Facturado neto</div><div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($cockpitProfitability['facturado']) }}</div><div class="small text-muted">Avance: {{ $cockpit['invoice_advance'] !== null ? \App\Support\UiFormatter::formatPercent($cockpit['invoice_advance']) : 'No disponible' }}</div></div></div>
+                <div class="col-6 col-xl-3"><div class="border rounded p-2 h-100"><div class="text-muted small">Cobrado</div><div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($cockpitProfitability['cobrado']) }}</div><div class="small text-muted">Avance: {{ $cockpit['collection_advance'] !== null ? \App\Support\UiFormatter::formatPercent($cockpit['collection_advance']) : 'No disponible' }}</div></div></div>
+                <div class="col-6 col-xl-3"><div class="border rounded p-2 h-100"><div class="text-muted small">Saldo por cobrar</div><div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($cockpit['receivable_balance']) }}</div><div class="small text-muted">Base bruta CxC</div></div></div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-xl-3"><div class="text-muted small">Costo real</div><div class="fw-semibold">{{ \App\Support\UiFormatter::formatMoney($cockpitProfitability['total_cost']) }}</div><div class="small text-muted">Personal: {{ \App\Support\UiFormatter::formatMoney($cockpitProfitability['cost_personal']) }} · Otros: {{ \App\Support\UiFormatter::formatMoney($cockpitProfitability['other_costs']) }}</div></div>
+                <div class="col-6 col-xl-3"><div class="text-muted small">Personal comprometido</div><div class="fw-semibold">{{ $cockpitCommitment['personnel_committed_cost'] !== null ? \App\Support\UiFormatter::formatMoney($cockpitCommitment['personnel_committed_cost']) : 'No disponible' }}</div></div>
+                <div class="col-6 col-xl-3"><div class="text-muted small">Margen actual</div><div class="fw-semibold {{ $cockpitProfitability['margin'] < 0 ? 'text-danger' : 'text-success' }}">{{ \App\Support\UiFormatter::formatMoney($cockpitProfitability['margin']) }}</div><div class="small text-muted">{{ \App\Support\UiFormatter::formatPercent($cockpitProfitability['margin_pct']) }}</div></div>
+                <div class="col-6 col-xl-3"><div class="text-muted small">Margen proyectado de personal</div><div class="fw-semibold {{ ($cockpitCommitment['projected_personnel_margin'] ?? 0) < 0 ? 'text-danger' : 'text-success' }}">{{ $cockpitCommitment['projected_personnel_margin'] !== null ? \App\Support\UiFormatter::formatMoney($cockpitCommitment['projected_personnel_margin']) : 'No disponible' }}</div></div>
+            </div>
+            <div class="row g-3">
+                <div class="col-lg-6"><div class="border rounded p-3 h-100"><div class="fw-semibold mb-2">{{ $cockpit['billing'] ? 'Facturación / Hitos' : 'Horas' }}</div>@if($cockpit['billing'])<div class="small">{{ $cockpit['billing']['invoiced'] }} de {{ $cockpit['billing']['total'] }} hitos facturados · {{ \App\Support\UiFormatter::formatPercent($cockpit['billing']['invoiced_percentage'] / 100, 1) }} contractual facturado</div>@if($cockpit['billing']['next'])<div class="small text-muted mt-2">Próximo: {{ $cockpit['billing']['next']['model']->name }} · {{ \App\Support\UiFormatter::formatPercent($cockpit['billing']['next']['model']->percentage / 100, 1) }} · {{ $cockpit['billing']['next']['model']->planned_invoice_date ? \App\Support\UiFormatter::formatDate($cockpit['billing']['next']['model']->planned_invoice_date) : 'Sin fecha prevista' }}</div>@endif @else <div class="small">HH trabajadas: {{ \App\Support\UiFormatter::formatHours($cockpitProfitability['hours_worked']) }} · Aprobadas: {{ \App\Support\UiFormatter::formatHours($cockpitProfitability['hours']) }}</div><div class="small text-muted">Facturadas: {{ \App\Support\UiFormatter::formatHours($cockpitProfitability['hours_billed']) }} · Pendientes: {{ \App\Support\UiFormatter::formatHours($cockpitProfitability['hours_pending']) }}</div>@if($cockpitProfitability['contracted_rate'] !== null)<div class="small text-muted">Tarifa comercial HH: {{ \App\Support\UiFormatter::formatMoney($cockpitProfitability['contracted_rate'], $item->salesCurrency ?: 'CLP') }}</div>@endif @endif</div></div>
+                <div class="col-lg-6"><div class="border rounded p-3 h-100"><div class="fw-semibold mb-2">Próximos hitos / cobros</div>@forelse($cockpit['events'] as $event)<div class="small d-flex justify-content-between gap-2"><span>{{ $event['date'] ? \App\Support\UiFormatter::formatDate($event['date']) : 'Sin fecha' }} · {{ $event['type'] }} · {{ $event['label'] }}</span><strong>{{ \App\Support\UiFormatter::formatMoney($event['amount']) }}</strong></div>@empty<div class="small text-muted">Sin eventos financieros próximos.</div>@endforelse</div></div>
+            </div>
+            @if(!empty($cockpit['alerts']))<div class="alert alert-warning py-2 mt-3 mb-0"><div class="fw-semibold small">Alertas</div><ul class="mb-0 ps-3 small">@foreach($cockpit['alerts'] as $alert)<li>{{ $alert }}</li>@endforeach</ul></div>@endif
+        </div>
+    @endif
+
     @if ($resource === 'projects' && ! empty($projectCommitment))
         @php($projectCommitmentExchangeRateNote = data_get($projectCommitment, 'exchange_rate_note'))
         @php($projectCommitmentSaleCurrencyCode = data_get($projectCommitment, 'sale_net_currency_code', 'CLP'))

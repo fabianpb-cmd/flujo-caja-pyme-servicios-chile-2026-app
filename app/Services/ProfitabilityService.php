@@ -131,6 +131,8 @@ class ProfitabilityService
                     'committed_percentage' => $commitment['committed_percentage'],
                     'commitment_calculation_complete' => $commitment['calculation_complete'],
                     'commitment_warnings' => $projectedAlerts,
+                    'commitment_exchange_rate_note' => $commitment['exchange_rate_note'],
+                    'commitment_negative_margin' => $commitment['negative_margin'],
                     'status' => $marginPct < 0 ? 'Pérdida' : ($marginPct < $minimumMargin ? 'Bajo mínimo' : 'OK'),
                     'calculation_breakdown' => [
                         'result' => [
