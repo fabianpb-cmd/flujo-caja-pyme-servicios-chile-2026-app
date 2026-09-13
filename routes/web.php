@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountSecurityController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BankReconciliationController;
 use App\Http\Controllers\BankRegularizationController;
+use App\Http\Controllers\BankStatementController;
 use App\Http\Controllers\GeographyController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\OperationalCrudController;
@@ -58,6 +59,14 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(BankReg
     Route::get('/tesoreria/regularizacion-bancaria', 'index')->name('bank-regularization.index');
     Route::post('/tesoreria/regularizacion-bancaria/asignar', 'assign')->name('bank-regularization.assign');
     Route::post('/tesoreria/regularizacion-bancaria/{assignment}/revertir', 'reverse')->name('bank-regularization.reverse');
+});
+
+Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(BankStatementController::class)->group(function (): void {
+    Route::get('/tesoreria/cartolas-bancarias', 'index')->name('bank-statements.index');
+    Route::post('/tesoreria/cartolas-bancarias/importar', 'import')->name('bank-statements.import');
+    Route::post('/tesoreria/cartolas-bancarias/matching', 'match')->name('bank-statements.match');
+    Route::post('/tesoreria/cartolas-bancarias/matching/{match}/revertir', 'reverse')->name('bank-statements.reverse');
+    Route::post('/tesoreria/cartolas-bancarias/lineas/{line}/ignorar', 'ignore')->name('bank-statements.ignore');
 });
 
 Route::middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])->prefix('administracion/usuarios')->name('admin.users.')->controller(UserManagementController::class)->group(function (): void {

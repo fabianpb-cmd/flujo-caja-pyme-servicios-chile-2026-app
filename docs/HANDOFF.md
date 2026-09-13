@@ -796,3 +796,22 @@ Migración local: database/migrations/2026_09_12_000100_add_bank_reconciliation_
 Archivos funcionales: app/Models/CashAccount.php, app/Models/BankReconciliation.php, app/Services/CashAccountBalanceService.php, app/Services/BankReconciliationService.php, app/Services/CashMovementService.php, app/Services/CashFlowService.php, app/Http/Controllers/BankReconciliationController.php, app/Http/Controllers/OperationalCrudController.php, config/operational.php, routes/web.php, resources/views/layouts/app.blade.php, resources/views/treasury/bank-reconciliation.blade.php, migración y tests/Feature/BankReconciliationTest.php.
 
 Próximo paso: revisar/aprobar el deploy de la migración y ejecutar smoke productivo read-only antes de crear la primera cuenta con cutover o conciliación.
+CONCILIACIÓN BANCARIA V1.2 - CARTOLAS CSV Y MATCHING ASISTIDO - 2026-09-13
+
+Se implementó V1.2 localmente sobre V1/V1.1. Agrega importación de cartolas CSV, persistencia normalizada de líneas y matching manual 1:1 contra movimientos de caja posted. No crea ni modifica CashMovement, no modifica fechas/montos/referencias de caja y no altera CashFlow ni el saldo conciliable por el solo hecho de vincular una línea.
+
+Arquitectura y reglas:
+- Nueva migración `2026_09_13_000100_create_bank_statement_matching_v12.php`: `bank_statement_imports`, `bank_statement_lines` y `bank_statement_matches`; FKs de evidencia con RESTRICT, tenant explícito y columnas generadas `active_marker` que fuerzan en DB un único matching activo por línea y por CashMovement.
+- CSV solamente, máximo 2 MB y sin almacenamiento permanente del archivo. Soporta BOM UTF-8, delimitador `;` o `,`, formato canónico `fecha, descripcion, referencia, ingreso, egreso`, aliases inequívocos y monto firmado seguro. Headers, fechas y montos inválidos se rechazan antes de persistir.
+- Hash SHA-256 de archivo por empresa/cuenta; línea con `external_id` confiable se deduplica por ese identificador. Sin `external_id`, se usa huella de campos normalizados más ocurrencia, preservando transacciones legítimas idénticas dentro de la misma cartola.
+- Sugerencias no mutativas: misma empresa, cuenta efectiva V1.1, posted, monto/sentido exacto, ventana de tres días y sin matching activo. Vínculos post-cutover por overlay se incluyen; pre-cutover no se vuelve candidato.
+- Confirmar, revertir e ignorar usan transacciones, locks ordenados Cuenta -> Línea -> Movimiento -> Match cuando aplica, validan período no conciliado y registran auditoría `bank_statement.imported`, `bank_statement_line.matched`, `bank_statement_line.match_reversed` y `bank_statement_line.ignored`. Revertir e ignorar exigen motivo y nunca eliminan evidencia.
+- Nueva pantalla Tesorería -> Cartolas bancarias y resumen read-only de cobertura en Conciliación bancaria. El cierre de conciliación mantiene la regla de diferencia cero; V1.2 solo informa matched/unmatched.
+
+Cobertura local V1.2:
+- `BankStatementMatchingTest`: 14 tests / 65 assertions PASS. Cubre BOM, delimitadores, monto firmado, headers/fecha/monto inválidos, dedupe de archivo/línea, IDs confiables, tenant/IDOR, sugerencias, cuenta directa, overlay post/pre-cutover, match/manual y unicidad activa DB, reversión, ignore, período cerrado, auditoría, resumen y UI.
+- Regresiones: `CashMovementBankRegularizationTest` 7/44 PASS; `BankReconciliationTest` 12/49 PASS; `CashFlowServiceTest` 9/29 PASS; `FinancialTransactionIntegrityTest` 13/155 PASS; `OperationalDependencyIntegrityTest` 4/27 PASS; `FinancialCoreTest` 32/111 PASS.
+- `php artisan view:clear`, `php artisan view:cache` y `git diff --check`: PASS.
+- Suite completa una vez: 419 tests, 397 PASS, 2 failures, 5 errors, 7 skipped, 2561 assertions. Fallos históricos ajenos a V1.2: FinancialAgenda/ProjectCommitment por fixtures/UF, OperationalUi de Horas/Asignaciones, `all()` sobre arrays en OperationalUi/SecurityGate y entorno local sin `ZipArchive`. No se observó regresión nueva de V1.2.
+
+Pendiente: commit local, QA independiente y deploy posterior. No se accedió a producción, no se ejecutó SQL remoto, no se modificaron datos productivos y no se hizo push.

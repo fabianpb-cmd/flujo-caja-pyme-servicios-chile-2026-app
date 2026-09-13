@@ -45,4 +45,14 @@ class CashAccount extends Model
     {
         return $this->hasMany(CashMovementBankAssignment::class);
     }
+
+    public function bankStatementImports(): HasMany
+    {
+        return $this->hasMany(BankStatementImport::class);
+    }
+
+    public function bankStatementLines(): HasMany
+    {
+        return $this->hasMany(BankStatementLine::class);
+    }
 }

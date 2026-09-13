@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Budget;
 use App\Models\BankReconciliation;
+use App\Models\BankStatementImport;
+use App\Models\BankStatementLine;
 use App\Models\CashAccount;
 use App\Models\CashMovement;
 use App\Models\CashMovementBankAssignment;
@@ -123,6 +125,8 @@ class OperationalDependencyService
                 $this->dependency(CashMovement::class, 'cash_account_id', 'movimientos de caja'),
                 $this->dependency(CashMovementBankAssignment::class, 'cash_account_id', 'regularizaciones bancarias'),
                 $this->dependency(BankReconciliation::class, 'cash_account_id', 'conciliaciones bancarias'),
+                $this->dependency(BankStatementImport::class, 'cash_account_id', 'cartolas bancarias'),
+                $this->dependency(BankStatementLine::class, 'cash_account_id', 'líneas de cartola'),
             ],
             Scenario::class => [
                 $this->dependency(Budget::class, 'scenario_id', 'presupuestos'),

@@ -47,6 +47,16 @@ class CashMovement extends Model
         return $this->hasOne(CashMovementBankAssignment::class)->where('status', 'active');
     }
 
+    public function bankStatementMatches(): HasMany
+    {
+        return $this->hasMany(BankStatementMatch::class);
+    }
+
+    public function activeBankStatementMatch(): HasOne
+    {
+        return $this->hasOne(BankStatementMatch::class)->where('status', 'active');
+    }
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);

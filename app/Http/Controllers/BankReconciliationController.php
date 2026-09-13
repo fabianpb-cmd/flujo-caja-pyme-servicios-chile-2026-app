@@ -6,6 +6,7 @@ use App\Models\BankReconciliation;
 use App\Models\CashAccount;
 use App\Services\BankReconciliationService;
 use App\Services\CashMovementBankRegularizationService;
+use App\Services\BankStatementMatchingService;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ class BankReconciliationController extends Controller
     public function __construct(
         private readonly BankReconciliationService $reconciliations,
         private readonly CashMovementBankRegularizationService $regularizations,
+        private readonly BankStatementMatchingService $matching,
     )
     {
     }
@@ -41,9 +43,9 @@ class BankReconciliationController extends Controller
                     ->whereDate('movement_date', '>', $selected->opening_balance_date->toDateString())
                     ->whereDate('movement_date', '<=', $date),
                 $selected
-            )->latest('movement_date')->latest('id')->limit(20)->get();
+            )->with('activeBankStatementMatch.bankStatementLine')->latest('movement_date')->latest('id')->limit(20)->get();
         }
-        return view('treasury.bank-reconciliation', ['accounts' => $accounts, 'selected' => $selected, 'date' => $date, 'systemBalance' => $systemBalance, 'movements' => $movements, 'reconciliations' => BankReconciliation::query()->forCompany($companyId)->with(['cashAccount', 'reconciledBy'])->latest('reconciliation_date')->limit(30)->get(), 'unassigned' => $this->reconciliations->unassignedSummary($companyId)]);
+        return view('treasury.bank-reconciliation', ['accounts' => $accounts, 'selected' => $selected, 'date' => $date, 'systemBalance' => $systemBalance, 'movements' => $movements, 'reconciliations' => BankReconciliation::query()->forCompany($companyId)->with(['cashAccount', 'reconciledBy'])->latest('reconciliation_date')->limit(30)->get(), 'unassigned' => $this->reconciliations->unassignedSummary($companyId), 'statementSummary' => $selected ? $this->matching->summary($selected, $companyId, $date) : null]);
     }
 
     public function store(Request $request): RedirectResponse
