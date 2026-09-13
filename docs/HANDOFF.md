@@ -2,6 +2,78 @@
 
 Ãšltima actualizaciÃ³n: 2026-09-07.
 
+## ESTADO ACTUAL AUTORITATIVO â€” 2026-09-13
+
+Esta secciÃ³n representa el estado vigente de producciÃ³n y supera cualquier bloque histÃ³rico anterior que indique trabajo pendiente, pausado o no desplegado. La historia posterior se conserva como registro histÃ³rico.
+
+### ProducciÃ³n
+
+- URL: `https://licitaciones.tdatconsulting.cl`
+- BD: `tdatcons_flujo_stg`
+- Rama: `main`
+- Baseline funcional previa al checkpoint: `2e144d3399ae9ee04778049066c5d63d566814c1`
+
+### Estado funcional
+
+- ConciliaciÃ³n Bancaria V1.0: **CERRADA / PASS** en producciÃ³n.
+- RegularizaciÃ³n Bancaria V1.1: **CERRADA / PASS** en producciÃ³n.
+- Cartolas bancarias + matching V1.2: **CERRADA / PASS** en producciÃ³n.
+- MenÃº productivo: **CERRADO / PASS**.
+- Cuentas por cobrar: semÃ¡ntica productiva validada.
+- Cuentas por pagar: semÃ¡ntica productiva validada.
+- Breadcrumbs, active states y sidebar responsive: **PASS**.
+- RegresiÃ³n V1 / V1.1 / V1.2: **PASS**.
+
+### Calidad conocida
+
+- P0 conocidos: ninguno.
+- P1 conocidos: ninguno.
+- Regresiones nuevas conocidas: ninguna.
+- Esto no constituye una afirmaciÃ³n de cero bugs.
+- Existe deuda/test histÃ³rico date-sensitive de `FinancialAgendaTest`.
+- Existen fallos histÃ³ricos o de entorno previamente documentados, incluido `ZipArchive` local, que no corresponden a regresiones nuevas.
+
+### QA productiva relevante
+
+Fixtures QA que deben mantenerse documentadas:
+
+- `CTA-000007`: QA conciliaciÃ³n histÃ³rica.
+- `CTA-000008`: QA conciliaciÃ³n post-cutover.
+- `CTA-000009`: QA V1.1 Post Overlay.
+- `CTA-000010`: QA V1.2 Statement Matching.
+- `MOV-000012` / `MOV-000013`: QA histÃ³rico V1.1.
+- `MOV-000014`: QA conciliaciÃ³n.
+- `MOV-000015`: QA V1.2, ingreso `12.345` del `2026-09-13`.
+
+No modificar como parte de QA:
+
+- `MOV-000009`.
+- `MOV-000011`.
+
+### V1.2
+
+El smoke productivo final validÃ³ import CSV con BOM y `;`, dedupe, sugerencia con score 90, matching, reversiÃ³n, rematch, ignore, inmutabilidad de `CashMovement`, saldo esperado/observado `1.012.345`, Cash Flow sin doble conteo, conciliaciÃ³n cerrada y bloqueo correcto de la reversiÃ³n posterior.
+
+### MenÃº
+
+Orden productivo final de TesorerÃ­a:
+
+1. Cuentas
+2. Movimientos de caja
+3. Cartolas bancarias
+4. RegularizaciÃ³n bancaria
+5. ConciliaciÃ³n bancaria
+
+CxC y CxP ya no son aliases semÃ¡nticos de los listados generales:
+
+- CxC muestra documentos cobrables con saldo mayor que cero.
+- CxP muestra documentos pagables con saldo mayor que cero.
+- Pagados, borradores y anulados no aparecen como pendientes.
+
+### PrÃ³ximo desarrollo
+
+Cockpit financiero por proyecto V1 â€” **NO INICIADO**.
+
 ÃšNICA fuente de continuidad. No crear otro handoff. No repetir tareas cerradas salvo incidente, nueva release o evidencia nueva.
 
 ## ProducciÃ³n
@@ -338,52 +410,52 @@ ConclusiÃ³n: la emisiÃ³n del Hito 1 de `Alerta MatrÃ­culas` quedÃ³ correctamente
 
 Estado: **SMOKE PRODUCTIVO HITO 1 CERRADO / PASS**. No emitir Hito 2 ni registrar cobros/estados adicionales sin una validaciÃ³n funcional separada. Antes de cualquier nuevo cambio local ejecutar `git fetch origin` y rebasear sobre `origin/main` si corresponde, ya que este checkpoint documental se escribiÃ³ directamente en `main`.
 
-## Deploy confirmación explícita de facturas — 2026-09-07
+## Deploy confirmaciÃ³n explÃ­cita de facturas â€” 2026-09-07
 
 Commit funcional desplegado:
-`006ac05b3293575c2cb6b991fa86e41aae7bb9ba` — `fix: add explicit sales invoice confirmation`.
+`006ac05b3293575c2cb6b991fa86e41aae7bb9ba` â€” `fix: add explicit sales invoice confirmation`.
 
-Upload manual a producción confirmado de exactamente:
+Upload manual a producciÃ³n confirmado de exactamente:
 - `app/Http/Controllers/OperationalCrudController.php`
 - `app/Services/SalesDocumentService.php`
 - `routes/web.php`
 - `resources/views/operational/show.blade.php`
 
-No se subieron tests ni documentación. Sin migraciones y sin SQL.
+No se subieron tests ni documentaciÃ³n. Sin migraciones y sin SQL.
 
-La edición genérica de Facturas/Ingresos ya no transforma implícitamente `Borrador -> Pendiente`. La transición se realiza únicamente mediante la acción dedicada `Emitir factura`.
+La ediciÃ³n genÃ©rica de Facturas/Ingresos ya no transforma implÃ­citamente `Borrador -> Pendiente`. La transiciÃ³n se realiza Ãºnicamente mediante la acciÃ³n dedicada `Emitir factura`.
 
-Validación local previa:
-- `SalesDocumentConfirmationTest`: 6 tests / 26 assertions — PASS.
+ValidaciÃ³n local previa:
+- `SalesDocumentConfirmationTest`: 6 tests / 26 assertions â€” PASS.
 - `git diff --check`: PASS.
 
-Producción contiene el código, pero todavía NO se ha ejecutado la nueva acción sobre `ING-000007`.
+ProducciÃ³n contiene el cÃ³digo, pero todavÃ­a NO se ha ejecutado la nueva acciÃ³n sobre `ING-000007`.
 
-Estado: **FIX CONFIRMACIÓN FACTURA DESPLEGADO / SMOKE PRODUCTIVO PENDIENTE**. Antes de emitir `ING-000007`, verificar visualmente botón, estado Borrador y completar de forma controlada el N° de documento. No emitir Hito 2.
+Estado: **FIX CONFIRMACIÃ“N FACTURA DESPLEGADO / SMOKE PRODUCTIVO PENDIENTE**. Antes de emitir `ING-000007`, verificar visualmente botÃ³n, estado Borrador y completar de forma controlada el NÂ° de documento. No emitir Hito 2.
 
-## UX emisión con N° documento — validación local 2026-09-07
+## UX emisiÃ³n con NÂ° documento â€” validaciÃ³n local 2026-09-07
 
-Se corrigió la UX de confirmación de Facturas/Ingresos para permitir ingresar o reutilizar `document_number` directamente en el flujo dedicado de `Emitir factura`, sin pasar por la edición genérica.
+Se corrigiÃ³ la UX de confirmaciÃ³n de Facturas/Ingresos para permitir ingresar o reutilizar `document_number` directamente en el flujo dedicado de `Emitir factura`, sin pasar por la ediciÃ³n genÃ©rica.
 
-La operación guarda `document_number` y realiza la transición `Borrador -> Pendiente` dentro de la misma transacción y bajo lock. Si falla una validación, no se persiste el número ni cambia el estado.
+La operaciÃ³n guarda `document_number` y realiza la transiciÃ³n `Borrador -> Pendiente` dentro de la misma transacciÃ³n y bajo lock. Si falla una validaciÃ³n, no se persiste el nÃºmero ni cambia el estado.
 
-Se preservan montos, IVA, fechas, billing_source, billing_snapshot, vínculo al hito y ausencia de vínculos HH.
+Se preservan montos, IVA, fechas, billing_source, billing_snapshot, vÃ­nculo al hito y ausencia de vÃ­nculos HH.
 
-Validación focalizada:
-- `SalesDocumentConfirmationTest`: 7 tests / 30 assertions — PASS.
+ValidaciÃ³n focalizada:
+- `SalesDocumentConfirmationTest`: 7 tests / 30 assertions â€” PASS.
 - `git diff --check`: PASS.
 - Sin migraciones.
 - Sin SQL.
-- Producción todavía NO contiene este ajuste UX.
-- `ING-000007` permanece en Borrador en producción.
+- ProducciÃ³n todavÃ­a NO contiene este ajuste UX.
+- `ING-000007` permanece en Borrador en producciÃ³n.
 - Hito 2 no tocado.
 
-Estado: **UX EMISIÓN CON N° DOCUMENTO VALIDADA LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.
+Estado: **UX EMISIÃ“N CON NÂ° DOCUMENTO VALIDADA LOCALMENTE / PUSH Y DEPLOY PENDIENTES**.
 
-## Cierre productivo UX emisión de factura — 2026-09-07
+## Cierre productivo UX emisiÃ³n de factura â€” 2026-09-07
 
 Commit funcional desplegado:
-`b35314be942610d45ec0bafc6b999ce366081035` — `fix: collect invoice number during confirmation`.
+`b35314be942610d45ec0bafc6b999ce366081035` â€” `fix: collect invoice number during confirmation`.
 
 Upload manual confirmado de:
 - `app/Http/Controllers/OperationalCrudController.php`
@@ -391,18 +463,18 @@ Upload manual confirmado de:
 - `resources/views/operational/show.blade.php`
 
 Smoke productivo sobre `ING-000007`:
-- campo N° documento visible junto a Emitir factura: PASS;
-- emisión sin número fue rechazada y mantuvo Borrador: PASS;
-- número QA utilizado: `QA-0001`;
-- emisión con número: PASS;
+- campo NÂ° documento visible junto a Emitir factura: PASS;
+- emisiÃ³n sin nÃºmero fue rechazada y mantuvo Borrador: PASS;
+- nÃºmero QA utilizado: `QA-0001`;
+- emisiÃ³n con nÃºmero: PASS;
 - estado `Borrador -> Pendiente`: PASS;
 - tipo Factura preservado;
 - fechas y montos preservados;
-- botón Emitir factura desaparece después de confirmar.
+- botÃ³n Emitir factura desaparece despuÃ©s de confirmar.
 
 Sin migraciones ni SQL para este ajuste.
 
-Estado: **FLUJO DE EMISIÓN HITO 1 CERRADO / PASS**. Próximo paso: validar ciclo de cobro de `QA-0001` antes de emitir Hito 2.
+Estado: **FLUJO DE EMISIÃ“N HITO 1 CERRADO / PASS**. PrÃ³ximo paso: validar ciclo de cobro de `QA-0001` antes de emitir Hito 2.
 
 ## UX de cobros y pagos â€” patch local
 
