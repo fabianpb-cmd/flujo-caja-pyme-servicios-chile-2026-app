@@ -3,8 +3,11 @@
 @section('content')
 <div class="page-header"><div><h1 class="page-title">Conciliación bancaria</h1><p class="page-subtitle">Comparación manual entre saldo bancario y saldo del sistema.</p></div></div>
 
-@if ($unassigned['count'] > 0)
-    <div class="alert alert-warning app-panel">Movimientos contabilizados sin cuenta: {{ $unassigned['count'] }} · Ingresos {{ \App\Support\UiFormatter::formatMoney($unassigned['income']) }} · Egresos {{ \App\Support\UiFormatter::formatMoney($unassigned['expense']) }} · Neto {{ \App\Support\UiFormatter::formatMoney($unassigned['net']) }}</div>
+@if ($unassigned['unregularized']['count'] > 0)
+    <div class="alert alert-warning app-panel">Movimientos contabilizados sin cuenta y sin regularizar: {{ $unassigned['unregularized']['count'] }} · Ingresos {{ \App\Support\UiFormatter::formatMoney($unassigned['unregularized']['income']) }} · Egresos {{ \App\Support\UiFormatter::formatMoney($unassigned['unregularized']['expense']) }} · Neto {{ \App\Support\UiFormatter::formatMoney($unassigned['unregularized']['net']) }}</div>
+@endif
+@if ($unassigned['regularized_pre_cutover']['count'] > 0)
+    <div class="alert alert-secondary app-panel">Históricos clasificados pre-cutover: {{ $unassigned['regularized_pre_cutover']['count'] }}. Están incluidos en el saldo inicial y no afectan el saldo conciliable.</div>
 @endif
 
 <div class="app-panel p-3 mb-4">

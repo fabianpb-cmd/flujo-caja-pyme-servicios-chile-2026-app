@@ -7,6 +7,8 @@ use App\Models\Concerns\GuardsSensitiveAttributes;
 use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CashMovement extends Model
 {
@@ -33,5 +35,20 @@ class CashMovement extends Model
     public function movementType(): BelongsTo
     {
         return $this->belongsTo(CashMovementType::class);
+    }
+
+    public function bankAssignments(): HasMany
+    {
+        return $this->hasMany(CashMovementBankAssignment::class);
+    }
+
+    public function activeBankAssignment(): HasOne
+    {
+        return $this->hasOne(CashMovementBankAssignment::class)->where('status', 'active');
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 }

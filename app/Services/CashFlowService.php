@@ -19,6 +19,7 @@ class CashFlowService
         private readonly PayablesService $payables,
         private readonly ScenarioService $scenarios,
         private readonly PayrollService $payroll,
+        private readonly CashMovementBankRegularizationService $regularizations,
     ) {
     }
 
@@ -166,7 +167,12 @@ class CashFlowService
             ->where('status', 'posted')
             ->whereDate('movement_date', '<', $asOf->toDateString())
             ->where(function ($query) use ($legacyAccountIds): void {
-                $query->whereNull('cash_account_id')->orWhereIn('cash_account_id', $legacyAccountIds);
+                $this->regularizations->withoutActivePostCutoverAssignment(
+                    $query->whereNull('cash_account_id')
+                );
+                if ($legacyAccountIds !== []) {
+                    $query->orWhereIn('cash_account_id', $legacyAccountIds);
+                }
             })
             ->selectRaw('COALESCE(SUM(income - expense), 0) as balance')
             ->value('balance');
@@ -191,7 +197,9 @@ class CashFlowService
                 ->filter(fn (CashAccount $account): bool => $account->opening_balance_date !== null);
 
             $base->where(function ($query) use ($legacyAccountIds, $cutoverAccounts): void {
-                $query->whereNull('cash_account_id');
+                $this->regularizations->withoutActivePostCutoverAssignment(
+                    $query->whereNull('cash_account_id')
+                );
 
                 if ($legacyAccountIds !== []) {
                     $query->orWhereIn('cash_account_id', $legacyAccountIds);
@@ -199,8 +207,8 @@ class CashFlowService
 
                 foreach ($cutoverAccounts as $account) {
                     $query->orWhere(function ($accountQuery) use ($account): void {
-                        $accountQuery
-                            ->where('cash_account_id', $account->id)
+                        $this->regularizations
+                            ->forEffectiveAccount($accountQuery, $account)
                             ->whereDate('movement_date', '>', $account->opening_balance_date->toDateString());
                     });
                 }

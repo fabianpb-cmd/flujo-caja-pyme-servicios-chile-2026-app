@@ -11,6 +11,10 @@ use DomainException;
 
 class CashAccountBalanceService
 {
+    public function __construct(private readonly CashMovementBankRegularizationService $regularizations)
+    {
+    }
+
     public function balanceAt(CashAccount $account, CarbonInterface|string $date): float
     {
         $date = Carbon::parse($date)->startOfDay();
@@ -22,12 +26,13 @@ class CashAccountBalanceService
             throw new DomainException('La fecha consultada es anterior a la fecha de saldo inicial.');
         }
 
-        $net = CashMovement::query()
+        $movements = CashMovement::query()
             ->forCompany($account->company_id)
-            ->where('cash_account_id', $account->id)
             ->where('status', 'posted')
             ->whereDate('movement_date', '>', $cutover->toDateString())
-            ->whereDate('movement_date', '<=', $date->toDateString())
+            ->whereDate('movement_date', '<=', $date->toDateString());
+        $net = $this->regularizations
+            ->forEffectiveAccount($movements, $account)
             ->selectRaw('COALESCE(SUM(income - expense), 0) as net')
             ->value('net');
 

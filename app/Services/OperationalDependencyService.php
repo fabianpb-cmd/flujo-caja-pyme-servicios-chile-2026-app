@@ -6,6 +6,7 @@ use App\Models\Budget;
 use App\Models\BankReconciliation;
 use App\Models\CashAccount;
 use App\Models\CashMovement;
+use App\Models\CashMovementBankAssignment;
 use App\Models\Client;
 use App\Models\ExpenseDocument;
 use App\Models\LegalObligation;
@@ -120,6 +121,7 @@ class OperationalDependencyService
             ],
             CashAccount::class => [
                 $this->dependency(CashMovement::class, 'cash_account_id', 'movimientos de caja'),
+                $this->dependency(CashMovementBankAssignment::class, 'cash_account_id', 'regularizaciones bancarias'),
                 $this->dependency(BankReconciliation::class, 'cash_account_id', 'conciliaciones bancarias'),
             ],
             Scenario::class => [

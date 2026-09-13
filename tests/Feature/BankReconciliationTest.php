@@ -194,7 +194,11 @@ class BankReconciliationTest extends TestCase
 
         $this->assertSame(1, BankReconciliation::query()->forCompany($company->id)->where('cash_account_id', $account->id)->whereDate('reconciliation_date', '2026-10-01')->count());
         $this->assertSame('1200.00', (string) $updated->bank_balance);
-        $this->assertSame(['count' => 2, 'income' => 100.0, 'expense' => 40.0, 'net' => 60.0], $service->unassignedSummary($company->id));
+        $this->assertSame([
+            'unregularized' => ['count' => 2, 'income' => 100.0, 'expense' => 40.0, 'net' => 60.0],
+            'regularized_pre_cutover' => ['count' => 0, 'income' => 0.0, 'expense' => 0.0, 'net' => 0.0],
+            'regularized_post_cutover' => ['count' => 0, 'income' => 0.0, 'expense' => 0.0, 'net' => 0.0],
+        ], $service->unassignedSummary($company->id));
     }
 
     public function test_http_screen_is_tenant_scoped_and_exposes_reconciliation_form(): void

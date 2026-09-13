@@ -68,6 +68,7 @@
                 $sidebarItem('Cuentas', 'bi bi-bank', 'operational.index', ['cash-accounts'], ['resource' => 'cash-accounts', 'operational_fallback' => true]),
                 $sidebarItem('Movimientos de caja', 'bi bi-arrow-left-right', 'operational.index', ['cash-movements'], ['resource' => 'cash-movements', 'operational_fallback' => true]),
                 $sidebarItem('Conciliación bancaria', 'bi bi-check2-square', 'bank-reconciliation.index'),
+                $sidebarItem('Regularización bancaria', 'bi bi-journal-check', 'bank-regularization.index'),
             ],
         ],
         [
@@ -197,6 +198,7 @@
             'management.obligations' => ['Gestión', 'Obligaciones'],
             'management.financial-agenda' => ['Gestión', 'Agenda financiera'],
             'bank-reconciliation.index' => ['Tesorería', 'Conciliación bancaria'],
+            'bank-regularization.index' => ['Tesorería', 'Regularización bancaria'],
             'management.budgets' => ['Gestión', 'Presupuesto'],
             'management.flows' => ['Gestión', 'Flujo de caja'],
             'management.profitability' => ['Gestión', 'Rentabilidad'],

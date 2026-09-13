@@ -7,6 +7,7 @@ use App\Models\Concerns\GuardsSensitiveAttributes;
 use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CashAccount extends Model
 {
@@ -38,5 +39,10 @@ class CashAccount extends Model
     public function currencyCatalog(): BelongsTo
     {
         return $this->belongsTo(Currency::class, 'currency_id');
+    }
+
+    public function bankAssignments(): HasMany
+    {
+        return $this->hasMany(CashMovementBankAssignment::class);
     }
 }

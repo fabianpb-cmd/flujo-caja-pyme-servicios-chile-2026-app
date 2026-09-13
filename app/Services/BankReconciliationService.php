@@ -13,7 +13,10 @@ use Illuminate\Support\Facades\DB;
 
 class BankReconciliationService
 {
-    public function __construct(private readonly CashAccountBalanceService $balances)
+    public function __construct(
+        private readonly CashAccountBalanceService $balances,
+        private readonly CashMovementBankRegularizationService $regularizations,
+    )
     {
     }
 
@@ -46,11 +49,16 @@ class BankReconciliationService
     public function reconcile(BankReconciliation $reconciliation, int $companyId, ?User $user = null): BankReconciliation
     {
         return DB::transaction(function () use ($reconciliation, $companyId, $user): BankReconciliation {
+            // Keep the same account -> reconciliation order as bank regularization.
+            $seed = BankReconciliation::query()->forCompany($companyId)->whereKey($reconciliation->id)->firstOrFail();
+            $account = $this->eligibleAccount($companyId, (int) $seed->cash_account_id, $seed->reconciliation_date->toDateString(), true);
             $locked = BankReconciliation::query()->forCompany($companyId)->whereKey($reconciliation->id)->lockForUpdate()->firstOrFail();
             if ($locked->status !== 'draft') {
                 throw new DomainException('La conciliación ya no está en borrador.');
             }
-            $account = $this->eligibleAccount($companyId, (int) $locked->cash_account_id, $locked->reconciliation_date->toDateString(), true);
+            if ($locked->cash_account_id !== $account->id) {
+                throw new DomainException('La conciliación ya no corresponde a la cuenta seleccionada.');
+            }
             $systemBalance = $this->balances->balanceAt($account, $locked->reconciliation_date);
             $difference = UiFormatter::roundAmount((float) $locked->bank_balance - $systemBalance, 'CLP');
             if ($difference !== 0.0) {
@@ -63,8 +71,7 @@ class BankReconciliationService
 
     public function unassignedSummary(int $companyId): array
     {
-        $query = CashMovement::query()->forCompany($companyId)->where('status', 'posted')->whereNull('cash_account_id');
-        return ['count' => (clone $query)->count(), 'income' => (float) (clone $query)->sum('income'), 'expense' => (float) (clone $query)->sum('expense'), 'net' => (float) (clone $query)->sum(DB::raw('income - expense'))];
+        return $this->regularizations->regularizationSummary($companyId);
     }
 
     private function eligibleAccount(int $companyId, int $accountId, string $date, bool $lock = false): CashAccount
