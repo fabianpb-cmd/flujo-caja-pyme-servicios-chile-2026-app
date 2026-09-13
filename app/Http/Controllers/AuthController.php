@@ -8,16 +8,21 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
+use App\Services\SecurityEventLogger;
+use App\Support\Security\AuthenticationRateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AuthController extends Controller
 {
-    private const LOGIN_MAX_ATTEMPTS = 5;
-    private const LOGIN_DECAY_SECONDS = 60;
     private const SESSION_EXPIRED_MESSAGE = 'Tu sesión expiró por seguridad. Ingresa nuevamente.';
+
+    public function __construct(
+        private readonly AuthenticationRateLimiter $rateLimiter,
+        private readonly SecurityEventLogger $securityEvents,
+    ) {
+    }
 
     public function home(Request $request): View|RedirectResponse|Response
     {
@@ -38,11 +43,10 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $throttleKey = $this->throttleKey($request);
-
-        if (RateLimiter::tooManyAttempts($throttleKey, self::LOGIN_MAX_ATTEMPTS)) {
-            $seconds = RateLimiter::availableIn($throttleKey);
+        if ($this->rateLimiter->loginIsLimited($request)) {
+            $seconds = $this->rateLimiter->loginAvailableIn($request);
             $message = "Demasiados intentos de acceso. Intente nuevamente en {$seconds} segundos.";
+            $this->securityEvents->record('SECURITY_LOGIN_RATE_LIMITED', $request, email: $credentials['email']);
 
             return response()
                 ->view('auth.login', [
@@ -57,7 +61,8 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check((string) $credentials['password'], (string) $user->password)) {
-            RateLimiter::hit($throttleKey, self::LOGIN_DECAY_SECONDS);
+            $this->rateLimiter->hitLogin($request);
+            $this->securityEvents->record('SECURITY_LOGIN_FAILED', $request, $user, $credentials['email']);
 
             throw ValidationException::withMessages([
                 'email' => __('Las credenciales no coinciden con nuestros registros.'),
@@ -65,7 +70,7 @@ class AuthController extends Controller
         }
 
         if ($user->hasEnabledTwoFactorAuthentication()) {
-            RateLimiter::clear($throttleKey);
+            $this->rateLimiter->clearLogin($request);
 
             $request->session()->put([
                 'login.id' => $user->getKey(),
@@ -76,9 +81,10 @@ class AuthController extends Controller
         }
 
         Auth::login($user, false);
-        RateLimiter::clear($throttleKey);
+        $this->rateLimiter->clearLogin($request);
         $request->session()->regenerate();
         $request->session()->put('auth_session_started_at', now()->timestamp);
+        $this->securityEvents->record('SECURITY_LOGIN_SUCCESS', $request, $user);
 
         if ($user->role === 'admin' && ! $user->hasEnabledTwoFactorAuthentication()) {
             return redirect()->route('account.security');
@@ -107,10 +113,5 @@ class AuthController extends Controller
     public static function sessionExpiredMessage(): string
     {
         return self::SESSION_EXPIRED_MESSAGE;
-    }
-
-    private function throttleKey(Request $request): string
-    {
-        return Str::lower(trim((string) $request->input('email'))).'|'.$request->ip();
     }
 }

@@ -9,6 +9,7 @@ use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\EnforceAbsoluteSessionLifetime;
 use App\Http\Middleware\RequireAdminTwoFactor;
+use App\Http\Middleware\SensitiveNoStoreHeaders;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -48,6 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'absolute.session' => EnforceAbsoluteSessionLifetime::class,
             'admin' => EnsureAdmin::class,
             'admin.2fa' => RequireAdminTwoFactor::class,
+            'sensitive.no-store' => SensitiveNoStoreHeaders::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

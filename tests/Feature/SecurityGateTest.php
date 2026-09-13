@@ -561,13 +561,17 @@ class SecurityGateTest extends TestCase
 
         $response->assertOk();
         $response->assertHeader('X-Content-Type-Options', 'nosniff');
-        $response->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+        $response->assertHeader('X-Frame-Options', 'DENY');
+        $response->assertHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        $response->assertHeader('X-Permitted-Cross-Domain-Policies', 'none');
         $response->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->assertHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         $response->assertHeader('Content-Security-Policy');
         $csp = (string) $response->headers->get('Content-Security-Policy');
         $this->assertStringContainsString("script-src 'self' 'nonce-", $csp);
         $this->assertStringNotContainsString("script-src 'self' 'unsafe-inline'", $csp);
+        $this->assertStringContainsString("frame-ancestors 'none'", $csp);
+        $this->assertStringNotContainsString('cdn.jsdelivr.net', $csp);
     }
 
     public function test_sensitive_user_attributes_are_not_mass_assignable_during_http_requests(): void

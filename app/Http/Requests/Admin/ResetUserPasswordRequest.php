@@ -3,7 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
+use App\Support\Security\PasswordPolicy;
 
 class ResetUserPasswordRequest extends FormRequest
 {
@@ -15,7 +15,7 @@ class ResetUserPasswordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'password' => ['required', 'string', Password::min(12)->letters()->mixedCase()->numbers()->symbols(), 'confirmed'],
+            'password' => ['required', ...PasswordPolicy::rules(), 'confirmed'],
         ];
     }
 }

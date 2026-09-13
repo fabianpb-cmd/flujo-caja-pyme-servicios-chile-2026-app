@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\AuditService;
+use App\Services\SecurityEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -18,20 +19,22 @@ class AccountSecurityController extends Controller
     public function show(Request $request): View
     {
         $user = $request->user()->fresh();
+        $passwordRecentlyConfirmed = $this->passwordRecentlyConfirmed($request);
+        $canRevealTwoFactorSecrets = $passwordRecentlyConfirmed && ! is_null($user->two_factor_secret);
 
         return view('account.security', [
             'user' => $user,
             'isAdmin' => $user->role === 'admin',
             'twoFactorEnabled' => $user->hasEnabledTwoFactorAuthentication(),
             'twoFactorPending' => ! is_null($user->two_factor_secret) && is_null($user->two_factor_confirmed_at),
-            'manualSecret' => $user->two_factor_secret ? Fortify::currentEncrypter()->decrypt($user->two_factor_secret) : null,
-            'qrSvg' => $user->two_factor_secret ? $user->twoFactorQrCodeSvg() : null,
-            'recoveryCodes' => $user->hasEnabledTwoFactorAuthentication() ? $user->recoveryCodes() : [],
-            'passwordRecentlyConfirmed' => $this->passwordRecentlyConfirmed($request),
+            'manualSecret' => $canRevealTwoFactorSecrets ? Fortify::currentEncrypter()->decrypt($user->two_factor_secret) : null,
+            'qrSvg' => $canRevealTwoFactorSecrets ? $user->twoFactorQrCodeSvg() : null,
+            'recoveryCodes' => $canRevealTwoFactorSecrets && $user->hasEnabledTwoFactorAuthentication() ? $user->recoveryCodes() : [],
+            'passwordRecentlyConfirmed' => $passwordRecentlyConfirmed,
         ]);
     }
 
-    public function enable(Request $request, EnableTwoFactorAuthentication $enable, AuditService $auditService): RedirectResponse
+    public function enable(Request $request, EnableTwoFactorAuthentication $enable, AuditService $auditService, SecurityEventLogger $securityEvents): RedirectResponse
     {
         $this->ensurePasswordConfirmed($request);
 
@@ -39,6 +42,7 @@ class AccountSecurityController extends Controller
         $enable($user, true);
 
         $auditService->record('2FA_ENABLED', $user, $user, ['enabled' => false], ['enabled' => false, 'pending_confirmation' => true]);
+        $securityEvents->record('SECURITY_2FA_ENABLED', $request, $user);
 
         return redirect()
             ->route('account.security')
@@ -69,7 +73,7 @@ class AccountSecurityController extends Controller
             ->with('status', 'La autenticación en dos pasos quedó activada correctamente.');
     }
 
-    public function disable(Request $request, DisableTwoFactorAuthentication $disable, AuditService $auditService): RedirectResponse
+    public function disable(Request $request, DisableTwoFactorAuthentication $disable, AuditService $auditService, SecurityEventLogger $securityEvents): RedirectResponse
     {
         $this->ensurePasswordConfirmed($request);
 
@@ -77,13 +81,14 @@ class AccountSecurityController extends Controller
         $disable($user);
 
         $auditService->record('2FA_DISABLED', $user->fresh(), $user, ['enabled' => true], ['enabled' => false]);
+        $securityEvents->record('SECURITY_2FA_DISABLED', $request, $user);
 
         return redirect()
             ->route('account.security')
             ->with('status', 'La autenticación en dos pasos fue desactivada. Como administrador, deberás configurarla nuevamente para volver a operar.');
     }
 
-    public function regenerateRecoveryCodes(Request $request, GenerateNewRecoveryCodes $generate, AuditService $auditService): RedirectResponse
+    public function regenerateRecoveryCodes(Request $request, GenerateNewRecoveryCodes $generate, AuditService $auditService, SecurityEventLogger $securityEvents): RedirectResponse
     {
         $this->ensurePasswordConfirmed($request);
 
@@ -91,6 +96,7 @@ class AccountSecurityController extends Controller
         $generate($user);
 
         $auditService->record('RECOVERY_CODES_REGENERATED', $user->fresh(), $user);
+        $securityEvents->record('SECURITY_RECOVERY_CODES_REGENERATED', $request, $user);
 
         return redirect()
             ->route('account.security')

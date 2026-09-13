@@ -46,7 +46,7 @@
                         </form>
                         <a class="btn btn-sm btn-outline-secondary" href="{{ route('admin.users.password.edit', $userItem) }}">Restablecer contraseña</a>
                         @if ($userItem->two_factor_secret)
-                            <form method="POST" action="{{ route('admin.users.two-factor.reset', $userItem) }}" onsubmit="return confirm('Se eliminará la configuración 2FA del usuario.');">
+                            <form method="POST" action="{{ route('admin.users.two-factor.reset', $userItem) }}" data-confirm-message="Se eliminará la configuración 2FA del usuario.">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="btn btn-sm btn-outline-danger">Resetear 2FA</button>

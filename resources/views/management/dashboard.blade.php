@@ -301,7 +301,7 @@
 @endsection
 
 @push('scripts')
-<script nonce="{{ $cspNonce ?? '' }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script nonce="{{ $cspNonce ?? '' }}" src="{{ asset('vendor/chartjs/chart.umd.min.js') }}"></script>
 <script nonce="{{ $cspNonce ?? '' }}">
     const flowLabels = @json($flows->map(fn ($row) => \Illuminate\Support\Carbon::parse($row['period'])->format('M Y'))->all());
     const flowReal = @json($flows->pluck('closing_real')->all());

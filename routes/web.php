@@ -17,27 +17,25 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Laravel\Fortify\Http\Controllers\ConfirmablePasswordController;
 
-Route::get('/', [AuthController::class, 'home'])->name('home');
-Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
-Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+Route::get('/', [AuthController::class, 'home'])->middleware('sensitive.no-store')->name('home');
+Route::get('/login', [AuthController::class, 'showLogin'])->middleware('sensitive.no-store')->name('login');
+Route::post('/login', [AuthController::class, 'login'])->middleware('sensitive.no-store')->name('login.attempt');
+Route::post('/logout', [AuthController::class, 'logout'])->middleware(['auth', 'sensitive.no-store'])->name('logout');
 
-Route::middleware(['guest'])->group(function (): void {
+Route::middleware(['guest', 'sensitive.no-store'])->group(function (): void {
     Route::get('/two-factor-challenge', [TwoFactorChallengeController::class, 'create'])->name('two-factor.login');
-    Route::post('/two-factor-challenge', [TwoFactorChallengeController::class, 'store'])
-        ->middleware('throttle:two-factor')
-        ->name('two-factor.login.store');
+    Route::post('/two-factor-challenge', [TwoFactorChallengeController::class, 'store'])->name('two-factor.login.store');
 });
 
 Route::middleware(['auth', 'absolute.session'])->group(function (): void {
-    Route::get('/mi-cuenta/seguridad', [AccountSecurityController::class, 'show'])->name('account.security');
-    Route::post('/mi-cuenta/seguridad/two-factor', [AccountSecurityController::class, 'enable'])->name('account.security.enable-2fa');
-    Route::post('/mi-cuenta/seguridad/two-factor/confirm', [AccountSecurityController::class, 'confirm'])->name('account.security.confirm-2fa');
-    Route::delete('/mi-cuenta/seguridad/two-factor', [AccountSecurityController::class, 'disable'])->name('account.security.disable-2fa');
-    Route::post('/mi-cuenta/seguridad/two-factor/recovery-codes', [AccountSecurityController::class, 'regenerateRecoveryCodes'])->name('account.security.regenerate-recovery-codes');
+    Route::get('/mi-cuenta/seguridad', [AccountSecurityController::class, 'show'])->middleware('sensitive.no-store')->name('account.security');
+    Route::post('/mi-cuenta/seguridad/two-factor', [AccountSecurityController::class, 'enable'])->middleware('sensitive.no-store')->name('account.security.enable-2fa');
+    Route::post('/mi-cuenta/seguridad/two-factor/confirm', [AccountSecurityController::class, 'confirm'])->middleware('sensitive.no-store')->name('account.security.confirm-2fa');
+    Route::delete('/mi-cuenta/seguridad/two-factor', [AccountSecurityController::class, 'disable'])->middleware('sensitive.no-store')->name('account.security.disable-2fa');
+    Route::post('/mi-cuenta/seguridad/two-factor/recovery-codes', [AccountSecurityController::class, 'regenerateRecoveryCodes'])->middleware('sensitive.no-store')->name('account.security.regenerate-recovery-codes');
 
-    Route::get('/user/confirm-password', [ConfirmablePasswordController::class, 'show'])->name('password.confirm');
-    Route::post('/user/confirm-password', [ConfirmablePasswordController::class, 'store'])->name('password.confirm.store');
+    Route::get('/user/confirm-password', [ConfirmablePasswordController::class, 'show'])->middleware('sensitive.no-store')->name('password.confirm');
+    Route::post('/user/confirm-password', [ConfirmablePasswordController::class, 'store'])->middleware('sensitive.no-store')->name('password.confirm.store');
 });
 
 Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(ManagementController::class)->group(function (): void {
@@ -76,9 +74,9 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])->prefix('a
     Route::get('/{user}/editar', 'edit')->name('edit');
     Route::put('/{user}', 'update')->name('update');
     Route::patch('/{user}/estado', 'toggleActive')->name('toggle-active');
-    Route::get('/{user}/password', 'editPassword')->name('password.edit');
-    Route::put('/{user}/password', 'updatePassword')->name('password.update');
-    Route::delete('/{user}/two-factor', 'resetTwoFactor')->name('two-factor.reset');
+    Route::get('/{user}/password', 'editPassword')->middleware('sensitive.no-store')->name('password.edit');
+    Route::put('/{user}/password', 'updatePassword')->middleware('sensitive.no-store')->name('password.update');
+    Route::delete('/{user}/two-factor', 'resetTwoFactor')->middleware('sensitive.no-store')->name('two-factor.reset');
 });
 
 Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->group(function (): void {

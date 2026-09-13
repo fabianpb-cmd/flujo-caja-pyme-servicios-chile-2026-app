@@ -865,6 +865,7 @@ IMPLEMENTACIÓN ESTIMADA
 Próximo paso exacto: acordar tratamiento de históricos sin cuenta y alcance CLP-only; después implementar primero el servicio de saldo por cuenta y validación de cuenta activa/tenant, antes de crear la pantalla de conciliación.
 
 Código modificado: solo docs/HANDOFF.md. SQL: no. Deploy: no.
+
 CONCILIACIÓN BANCARIA V1 - PASS LOCAL - 2026-09-12
 
 Se implementó la V1 local de conciliación bancaria sobre el diseño previo 2fc40158. Se agregó opening_balance_date como fecha de cutover y la tabla bank_reconciliations con estados draft/reconciled, snapshot de saldo sistema, diferencia, notas y trazabilidad de usuarios. No se creó tabla de items.
@@ -901,3 +902,23 @@ Cobertura local V1.2:
 - Suite completa una vez: 419 tests, 397 PASS, 2 failures, 5 errors, 7 skipped, 2561 assertions. Fallos históricos ajenos a V1.2: FinancialAgenda/ProjectCommitment por fixtures/UF, OperationalUi de Horas/Asignaciones, `all()` sobre arrays en OperationalUi/SecurityGate y entorno local sin `ZipArchive`. No se observó regresión nueva de V1.2.
 
 Pendiente: commit local, QA independiente y deploy posterior. No se accedió a producción, no se ejecutó SQL remoto, no se modificaron datos productivos y no se hizo push.
+
+SECURITY HARDENING V1 - IMPLEMENTADO LOCALMENTE / QA INDEPENDIENTE PENDIENTE - 2026-09-13
+
+Se centralizó la política de contraseñas para creación y restablecimiento administrativo: mínimo 15, máximo 128, passphrases sin requisitos artificiales de composición y denegación local de claves extremadamente comunes. La comprobación remota de contraseñas comprometidas no se habilitó porque el verificador nativo depende de un servicio externo con timeout; el control local evita que la disponibilidad de ese servicio bloquee cambios de contraseña. Las contraseñas se siguen hasheando con Laravel y nunca se recortan.
+
+Autenticación y 2FA: login limita fallos por correo normalizado+IP (5/min), correo (20/15 min) e IP (60/10 min), limpia las tres claves tras un login correcto y mantiene mensajes no enumerables. El desafío 2FA registra fallos solo tras un código inválido y limita por usuario+IP y usuario, por lo que no se evade alterando sesión, formato de código o IP. Login y 2FA regeneran sesión al autenticarse. Se agregó logging estructurado `SECURITY_*` con email irreversible hash, IP y user-agent saneado, sin contraseñas, códigos, secretos ni recovery codes.
+
+La pantalla de seguridad calcula primero la confirmación reciente de contraseña: sin ella no descifra ni entrega secret manual, QR ni recovery codes. La autenticación 2FA, la recuperación, la desactivación y los resets administrativos conservan auditoría existente y añaden eventos de seguridad. Las protecciones tenant, último administrador activo y 2FA administrativa permanecen sin cambios funcionales.
+
+Defensa de navegador: nuevo middleware `sensitive.no-store` para login, desafío 2FA, confirmación de contraseña, seguridad de cuenta, logout y resets administrativos. Entrega `Cache-Control: no-store, no-cache, must-revalidate, private, max-age=0`, `Pragma: no-cache` y `Expires: 0` (Symfony normaliza el orden serializado de Cache-Control). `SecurityHeaders` ahora usa `X-Frame-Options: DENY`, `frame-ancestors 'none'`, COOP `same-origin` y `X-Permitted-Cross-Domain-Policies: none`; se eliminaron handlers inline remanentes y CDN de Bootstrap/Icons/Chart.js.
+
+Activos locales versionados: Bootstrap 5.3.3, Bootstrap Icons 1.11.3 (incluye fuentes/licencias) y Chart.js 4.4.3 con referencias locales desde el layout/dashboard. `package.json` y `package-lock.json` registran versiones exactas. `npm audit`: PASS, 0 vulnerabilidades. `npm run build`: PASS.
+
+Dependencias PHP: `composer audit` inicialmente encontró cuatro advisory HIGH en `league/commonmark` 2.9.0. Se actualizó de forma compatible a 2.10.1 (y `nette/schema` 1.3.6 transitivo); `composer audit --locked`: PASS, sin advisories.
+
+Cobertura local: `SecurityHardeningTest` 6 tests / 85 assertions PASS (política de contraseña, límites de login/2FA, regeneración de sesión, secretos 2FA, no-store, cabeceras y activos locales). Grupo dirigido `SecurityHardeningTest`, `SecurityGateTest`, `UserAdministrationTest`, `FinancialNavigationTest`, `ProjectFinancialCockpitTest`, `BankReconciliationTest`, `BankStatementMatchingTest` y `SalesDocumentConfirmationTest`: 93 tests, 92 PASS, 488 assertions; único error histórico conocido: `SecurityGateTest::test_calculated_time_entry_amounts_ignore_manipulated_request_values` por `all()` sobre array, ajeno a este patch. `view:clear`, `view:cache`, `git diff --check` y escaneo de secretos tracked: PASS; no se imprimieron secretos y no hubo coincidencias reales.
+
+Archivos funcionales relevantes: `app/Rules/NotCommonPassword.php`, `app/Support/Security/PasswordPolicy.php`, `app/Support/Security/AuthenticationRateLimiter.php`, `app/Services/SecurityEventLogger.php`, `app/Http/Middleware/SensitiveNoStoreHeaders.php`, controladores Auth/2FA/seguridad/usuarios, requests admin, `SecurityHeaders`, rutas, layout, dashboard y tests de seguridad. Sin migraciones, sin SQL, sin acceso ni cambios de producción, sin deploy ni push.
+
+Riesgo residual: el filtrado local de claves comunes no sustituye una consulta de breach corpus completo; se eligió deliberadamente para no depender de red en cambios de contraseña. Pendiente QA independiente y smoke de navegador para rutas de autenticación, 2FA y activos estáticos antes de deploy.

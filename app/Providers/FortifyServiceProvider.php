@@ -5,10 +5,8 @@ namespace App\Providers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
-use Illuminate\Cache\RateLimiting\Limit;
 use Laravel\Fortify\Contracts\FailedPasswordConfirmationResponse as FailedPasswordConfirmationResponseContract;
 use Laravel\Fortify\Fortify;
 
@@ -39,12 +37,6 @@ class FortifyServiceProvider extends ServiceProvider
             }
 
             return $user;
-        });
-
-        RateLimiter::for('two-factor', function (Request $request): Limit {
-            $challengedUser = (string) $request->session()->get('login.id', 'guest');
-
-            return Limit::perMinute(5)->by($challengedUser.'|'.$request->ip());
         });
     }
 }

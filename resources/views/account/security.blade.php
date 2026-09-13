@@ -93,7 +93,7 @@
                                 <button type="submit" class="btn btn-outline-primary">Regenerar códigos de recuperación</button>
                             </form>
 
-                            <form method="POST" action="{{ route('account.security.disable-2fa') }}" onsubmit="return confirm('Se desactivará la autenticación en dos pasos. Como administrador, deberás configurarla nuevamente para continuar operando.');">
+                            <form method="POST" action="{{ route('account.security.disable-2fa') }}" data-confirm-message="Se desactivará la autenticación en dos pasos. Como administrador, deberás configurarla nuevamente para continuar operando.">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="btn btn-outline-danger">Desactivar autenticación en dos pasos</button>

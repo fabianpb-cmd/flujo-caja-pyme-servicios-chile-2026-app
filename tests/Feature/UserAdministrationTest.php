@@ -72,16 +72,16 @@ class UserAdministrationTest extends TestCase
             'role' => 'user',
             'active' => '1',
             'company_id' => $otherCompany->id,
-            'password' => 'Segura12345$',
-            'password_confirmation' => 'Segura12345$',
+            'password' => 'frase segura para usuarios',
+            'password_confirmation' => 'frase segura para usuarios',
         ]);
 
         $response->assertRedirect(route('admin.users.index'));
 
         $user = User::query()->where('email', 'nuevo-usuario@test.local')->firstOrFail();
         $this->assertSame($company->id, $user->company_id);
-        $this->assertTrue(Hash::check('Segura12345$', $user->password));
-        $this->assertNotSame('Segura12345$', $user->password);
+        $this->assertTrue(Hash::check('frase segura para usuarios', $user->password));
+        $this->assertNotSame('frase segura para usuarios', $user->password);
     }
 
     public function test_admin_can_update_user_but_not_other_company_user(): void
@@ -146,11 +146,11 @@ class UserAdministrationTest extends TestCase
         $this->assertFalse($user->fresh()->active);
 
         $this->actingAs($admin)->put(route('admin.users.password.update', $user), [
-            'password' => 'NuevaSegura123$',
-            'password_confirmation' => 'NuevaSegura123$',
+            'password' => 'nueva frase segura para pruebas',
+            'password_confirmation' => 'nueva frase segura para pruebas',
         ])->assertRedirect(route('admin.users.index'));
 
-        $this->assertTrue(Hash::check('NuevaSegura123$', $user->fresh()->password));
+        $this->assertTrue(Hash::check('nueva frase segura para pruebas', $user->fresh()->password));
     }
 
     public function test_admin_can_reset_two_factor_configuration(): void
@@ -207,8 +207,8 @@ class UserAdministrationTest extends TestCase
             'email' => 'con-token@test.local',
             'role' => 'user',
             'active' => '1',
-            'password' => 'Segura12345$',
-            'password_confirmation' => 'Segura12345$',
+            'password' => 'frase segura para usuarios',
+            'password_confirmation' => 'frase segura para usuarios',
         ])->assertRedirect(route('admin.users.index'));
 
         $this->assertDatabaseHas('audit_logs', [

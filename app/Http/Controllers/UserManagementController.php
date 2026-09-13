@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
 use App\Services\AuditService;
+use App\Services\SecurityEventLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,7 @@ class UserManagementController extends Controller
 {
     public function __construct(
         private readonly AuditService $audit,
+        private readonly SecurityEventLogger $securityEvents,
     ) {
     }
 
@@ -136,6 +138,7 @@ class UserManagementController extends Controller
 
         $this->invalidateUserSessions($user, $request->user()->is($user) ? $request->session()->getId() : null);
         $this->audit->record('user.password_reset', $user->fresh(), $request->user(), null, ['password_reset' => true]);
+        $this->securityEvents->record('SECURITY_ADMIN_PASSWORD_RESET', $request, $user);
 
         return redirect()
             ->route('admin.users.index')
@@ -153,6 +156,7 @@ class UserManagementController extends Controller
 
         $this->invalidateUserSessions($user);
         $this->audit->record('user.2fa_reset', $user->fresh(), $request->user(), ['two_factor_enabled' => $hadTwoFactor], ['two_factor_enabled' => false]);
+        $this->securityEvents->record('SECURITY_ADMIN_2FA_RESET', $request, $user);
 
         return redirect()
             ->route('admin.users.index')

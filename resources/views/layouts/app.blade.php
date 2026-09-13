@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name', 'Flujo de Caja') }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/app-dashboard.css') }}?v={{ filemtime(public_path('css/app-dashboard.css')) }}" rel="stylesheet">
     @stack('styles')
 </head>
@@ -304,7 +304,7 @@
         </main>
     @endauth
 </div>
-<script nonce="{{ $cspNonce ?? '' }}" src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script nonce="{{ $cspNonce ?? '' }}" src="{{ asset('vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script nonce="{{ $cspNonce ?? '' }}">
     (() => {
         const collapseKey = 'sidebarCollapsed';
@@ -614,6 +614,15 @@
         window.ChileanRutUI = { normalize, format, isValid };
         bindRutInputs();
     })();
+</script>
+<script nonce="{{ $cspNonce ?? '' }}">
+    document.querySelectorAll('form[data-confirm-message]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (! window.confirm(form.dataset.confirmMessage)) {
+                event.preventDefault();
+            }
+        });
+    });
 </script>
 @stack('scripts')
 </body>
