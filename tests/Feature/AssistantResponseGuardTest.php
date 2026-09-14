@@ -12,6 +12,7 @@ class AssistantResponseGuardTest extends TestCase
         $guard = app(AssistantResponseGuard::class);
         $this->assertSame('NOT_DEFINED', $guard->guard(['status' => 'DEFINED', 'answer' => 'Respuesta', 'source_ids' => []], ['RULE'])['status']);
         $this->assertSame('NOT_DEFINED', $guard->guard(['status' => 'DEFINED', 'answer' => 'Guardé el documento.', 'source_ids' => ['RULE']], ['RULE'])['status']);
+        $this->assertSame('NOT_DEFINED', $guard->guard(['status' => 'DEFINED', 'answer' => 'Ingresa 1000000 como monto.', 'source_ids' => ['RULE']], ['RULE'])['status']);
         $this->assertSame('NOT_DEFINED', $guard->guard(['status' => 'CALCULATED', 'answer' => 'Monto', 'source_ids' => ['FAKE']], ['RULE'])['status']);
     }
 

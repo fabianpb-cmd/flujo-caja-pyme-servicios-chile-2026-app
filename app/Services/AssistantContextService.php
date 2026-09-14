@@ -6,7 +6,7 @@ use Illuminate\Validation\ValidationException;
 
 class AssistantContextService
 {
-    private const ALLOWED_IDS = ['client_id', 'project_id', 'milestone_id', 'cash_account_id'];
+    private const ALLOWED_IDS = ['client_id', 'project_id', 'milestone_id', 'cash_account_id', 'contract_type_id'];
     private const SAFE_VALUES = ['issue_date'];
     private const SENSITIVE = ['password', 'password_confirmation', 'two_factor', 'recovery', 'token', 'csrf', 'rut', 'email', 'phone', 'address', 'bank_account', 'document_number', 'notes'];
 

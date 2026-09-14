@@ -12,9 +12,10 @@ class AssistantResponseGuard
         $answer = trim(strip_tags((string) ($response['answer'] ?? '')));
         $sources = array_values(array_filter((array) ($response['source_ids'] ?? []), 'is_string'));
         $unsafeAction = preg_match('/\b(guard[eé]|actualic[eé]|cre[eé]|elimin[eé]|modifiqu[eé]|emit[ií])\b/ui', $answer) === 1;
+        $inventedValue = preg_match('/\b(pon|ingresa|escribe|selecciona)\s+(?:\$?\s*\d[\d.,]*|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})\b/ui', $answer) === 1;
         $validSources = $sources !== [] && count(array_diff($sources, $allowedSourceIds)) === 0;
 
-        if (! in_array($status, self::STATUSES, true) || $unsafeAction || (in_array($status, ['DEFINED', 'CALCULATED'], true) && ! $validSources)) {
+        if (! in_array($status, self::STATUSES, true) || $unsafeAction || $inventedValue || (in_array($status, ['DEFINED', 'CALCULATED'], true) && ! $validSources)) {
             return $this->notDefined();
         }
 

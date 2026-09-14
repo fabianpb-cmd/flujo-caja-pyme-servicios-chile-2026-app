@@ -43,7 +43,7 @@
         const send = panel.querySelector('[data-assistant-send]');
         const conversation = panel.querySelector('[data-assistant-conversation]');
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-        const allowedIds = new Set(['client_id', 'project_id', 'milestone_id', 'cash_account_id']);
+        const allowedIds = new Set(['client_id', 'project_id', 'milestone_id', 'cash_account_id', 'contract_type_id']);
         const sensitive = /(password|two_factor|recovery|token|csrf|rut|email|phone|address|bank_account|document_number|notes)/i;
         const history = [];
         let focusedField = '';

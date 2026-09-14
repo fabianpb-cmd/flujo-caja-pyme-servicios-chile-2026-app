@@ -18,7 +18,7 @@ class AssistantKnowledgeServiceTest extends TestCase
     public function test_unknown_question_only_has_global_rules(): void
     {
         $rules = app(AssistantKnowledgeService::class)->select('¿Cuál es la temperatura de Marte?', ['resource' => null, 'focused_field' => null, 'route' => 'dashboard']);
-        $this->assertSame(['GLOBAL-READONLY-001', 'GLOBAL-CATALOG-001', 'GLOBAL-READONLY-002'], array_column($rules, 'id'));
+        $this->assertSame(['GLOBAL-READONLY-001', 'GLOBAL-CATALOG-001', 'GLOBAL-READONLY-002', 'GLOBAL-FLOW-001'], array_column($rules, 'id'));
     }
 
     public function test_screen_keys_retrieve_contextual_rules_without_a_resource(): void
@@ -105,5 +105,14 @@ class AssistantKnowledgeServiceTest extends TestCase
 
         $this->assertContains('PROJECT-CONTRACT-HOURS-BANK-001', array_column($service->select('¿Qué significa Bolsa de horas y qué pasa si excedo la bolsa?', $context), 'id'));
         $this->assertContains('PROJECT-CONTRACT-MONTHLY-RECURRING-001', array_column($service->select('¿Qué es Mensual recurrente? ¿Se acumulan las horas no usadas?', $context), 'id'));
+    }
+
+    public function test_project_field_questions_retrieve_verified_semantic_rules(): void
+    {
+        $service = app(AssistantKnowledgeService::class);
+        $context = ['resource' => 'projects', 'focused_field' => 'sale_net', 'route' => 'operational.create'];
+
+        $this->assertContains('PROJECT-SALES-VALUES-001', array_column($service->select('¿Qué significa Venta neta?', $context), 'id'));
+        $this->assertContains('PROJECT-PAYMENT-001', array_column($service->select('¿Qué significa condición de pago?', ['resource' => 'projects', 'focused_field' => 'payment_term_id', 'route' => 'operational.create']), 'id'));
     }
 }

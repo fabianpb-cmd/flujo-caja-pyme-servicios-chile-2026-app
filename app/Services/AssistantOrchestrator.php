@@ -11,6 +11,7 @@ class AssistantOrchestrator
 {
     public function __construct(
         private readonly AssistantContextService $context,
+        private readonly AssistantScreenGuideService $screenGuide,
         private readonly AssistantKnowledgeService $knowledge,
         private readonly AssistantBusinessContextService $business,
         private readonly AssistantResponseGuard $guard,
@@ -26,18 +27,24 @@ class AssistantOrchestrator
 
         $this->rateLimit($user);
         $form = $this->context->build($input, $route);
+        $guide = $this->screenGuide->build($form, $user);
         $rules = $this->knowledge->select($input['question'], $form);
-        if (! collect($rules)->contains(fn (array $rule): bool => ($rule['module'] ?? 'global') !== 'global')) {
+        if ($guide === null && ! collect($rules)->contains(fn (array $rule): bool => ($rule['module'] ?? 'global') !== 'global')) {
             return $this->guard->notDefined();
         }
         $business = $this->business->forUser($user, $form['ids']);
-        $allowed = array_merge(array_column($rules, 'id'), data_get($business, 'milestone_preview.source_id') ? ['CONTEXT-MILESTONE-PREVIEW'] : []);
+        $allowed = array_merge(
+            array_column($rules, 'id'),
+            $guide ? [$guide['source_id']] : [],
+            data_get($business, 'milestone_preview.source_id') ? ['CONTEXT-MILESTONE-PREVIEW'] : [],
+        );
 
         try {
             return $this->guard->guard($this->provider->ask([
                 'question' => mb_substr((string) $input['question'], 0, 2000),
                 'KNOWLEDGE_RULES' => $rules,
                 'FORM_CONTEXT' => $form,
+                'FORM_GUIDE' => $guide,
                 'BUSINESS_CONTEXT' => $business,
             ]), $allowed);
         } catch (AssistantProviderException $exception) {

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Contracts\AiProvider;
 use App\Models\Company;
+use App\Models\ContractType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
@@ -59,5 +60,39 @@ class AssistantControllerTest extends TestCase
         config()->set('assistant.enabled', true);
         $this->app->bind(AiProvider::class, fn () => new class implements AiProvider { public function ask(array $context): array { throw new \RuntimeException('provider should not run'); } });
         $this->actingAs($this->user)->withHeader('Referer', url('/unknown-screen'))->postJson(route('assistant.ask'), ['question' => '¿Qué debo ingresar?'])->assertOk()->assertJsonPath('status', 'NOT_DEFINED');
+    }
+
+    public function test_project_screen_guide_is_sent_to_the_provider_with_safe_missing_field_states(): void
+    {
+        config()->set(['assistant.enabled' => true, 'assistant.per_minute' => 10, 'assistant.per_day' => 20]);
+        $provider = new class implements AiProvider {
+            public array $context = [];
+
+            public function ask(array $context): array
+            {
+                $this->context = $context;
+                return ['status' => 'DEFINED', 'answer' => 'Completa los campos requeridos visibles.', 'source_ids' => ['FORM-GUIDE:projects']];
+            }
+        };
+        $this->app->instance(AiProvider::class, $provider);
+        $monthly = ContractType::query()->create([
+            'company_id' => $this->user->company_id,
+            'domain' => 'commercial',
+            'code' => 'MENSUAL_RECURRENTE',
+            'name' => 'Mensual recurrente',
+            'active' => true,
+        ]);
+
+        $this->actingAs($this->user)->withHeader('Referer', route('operational.create', ['projects']))
+            ->postJson(route('assistant.ask'), [
+                'question' => '¿Cómo completo esta pantalla?',
+                'resource' => 'projects',
+                'form' => ['client_id' => '', 'name' => 'filled', 'project_status_id' => '', 'billing_status_id' => 'filled', 'contract_type_id' => (string) $monthly->id, 'sale_net' => '123456'],
+            ])->assertOk()->assertJsonPath('status', 'DEFINED')->assertJsonPath('source_ids.0', 'FORM-GUIDE:projects');
+
+        $this->assertSame('FORM-GUIDE:projects', $provider->context['FORM_GUIDE']['source_id']);
+        $this->assertContains('Cliente', $provider->context['FORM_GUIDE']['missing_required_fields']);
+        $this->assertSame('MONTHLY_RECURRING', $provider->context['FORM_GUIDE']['contract_strategy']['strategy']);
+        $this->assertStringNotContainsString('123456', json_encode($provider->context['FORM_GUIDE']));
     }
 }
