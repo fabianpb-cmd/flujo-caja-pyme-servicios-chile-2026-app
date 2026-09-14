@@ -960,3 +960,9 @@ Se corrigió el corte prematuro que devolvía `NOT_DEFINED` en pantallas sin `re
 Se agregaron reglas breves y auditables en `config/assistant_knowledge.php` para todas las pantallas indicadas. `AGENTS.md` ahora exige evaluar y actualizar esa base en el mismo ciclo de cualquier cambio funcional que modifique comportamiento consultable.
 
 Pruebas del ayudante: 16 tests / 55 assertions PASS. Incluyen Dashboard con provider invocado, pantalla desconocida sin provider, rutas de gestión/banca/CxC/CxP, mapeo de ruta, campo enfocado, sanitización, tenant/preview, guardia de fuentes y CSP. Regresiones: `GuidedSalesBillingTest`, `SecurityHardeningTest` y `FinancialNavigationTest`: 12 tests / 148 assertions PASS. `git diff --check` y `view:cache` PASS. Sin migraciones, sin SQL, sin deploy ni acceso a producción.
+
+DIAGNÓSTICO SEGURO DEL PROVIDER OPENAI - VALIDADO LOCALMENTE - 2026-09-14
+
+Se agregó diagnóstico temporal y seguro en `OpenAiResponsesProvider`. Ante HTTP no exitoso registra únicamente `http_status`, `error_type`, `error_code` y `request_id` mediante `Log::warning('Assistant OpenAI provider failure', ...)`. Para JSON inválido registra solo `error_code=invalid_json` y `request_id`; para timeout registra solo `error_code=timeout`. Nunca se registran API key, Authorization, request body, response body, pregunta ni contextos de conocimiento, formulario, negocio, personales o financieros. El mensaje al usuario permanece seguro y sin detalles del proveedor.
+
+`OpenAiResponsesProviderTest` cubre HTTP 400, 401, 429, JSON inválido y ausencia de secretos/prompt/cuerpo en el contexto del log mediante `Http::fake()` y spy de logging. Batería del asistente: 18 tests / 58 assertions PASS. `git diff --check` PASS. No se modificó `assistant_knowledge.php`, modelo, endpoint, proveedor configurado, UI, rate limit ni lógica financiera. Sin migraciones, sin SQL, sin deploy.
