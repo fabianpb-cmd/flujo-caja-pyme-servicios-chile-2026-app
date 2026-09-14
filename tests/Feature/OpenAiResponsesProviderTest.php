@@ -20,6 +20,34 @@ class OpenAiResponsesProviderTest extends TestCase
         Http::assertSent(fn ($request) => $request->url() === 'https://api.openai.test/v1/responses' && $request->hasHeader('Authorization', 'Bearer test-key'));
     }
 
+    public function test_it_skips_reasoning_items_and_reads_the_first_message(): void
+    {
+        config()->set('assistant.api_key', 'test-key');
+        Http::fake(['*' => Http::response(['output' => [
+            ['type' => 'reasoning', 'summary' => []],
+            ['type' => 'message', 'content' => [['type' => 'output_text', 'text' => json_encode(['status' => 'DEFINED', 'answer' => 'Regla', 'source_ids' => ['RULE']])]]],
+        ]])]);
+        $response = app(OpenAiResponsesProvider::class)->ask(['question' => 'x']);
+        $this->assertSame('DEFINED', $response['status']);
+    }
+
+    public function test_it_reads_a_message_at_output_zero(): void
+    {
+        config()->set('assistant.api_key', 'test-key');
+        Http::fake(['*' => Http::response(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => '{"status":"DEFINED","answer":"Regla","source_ids":["RULE"]}']]]]])]);
+        $this->assertSame('DEFINED', app(OpenAiResponsesProvider::class)->ask(['question' => 'x'])['status']);
+    }
+
+    public function test_it_concatenates_multiple_output_text_parts_in_order(): void
+    {
+        config()->set('assistant.api_key', 'test-key');
+        Http::fake(['*' => Http::response(['output' => [['type' => 'message', 'content' => [
+            ['type' => 'output_text', 'text' => '{"status":"DEFINED",'],
+            ['type' => 'output_text', 'text' => '"answer":"Regla","source_ids":["RULE"]}'],
+        ]]]])]);
+        $this->assertSame('Regla', app(OpenAiResponsesProvider::class)->ask(['question' => 'x'])['answer']);
+    }
+
     public function test_it_never_exposes_provider_bodies_on_failure(): void
     {
         config()->set('assistant.api_key', 'test-key');
@@ -58,5 +86,17 @@ class OpenAiResponsesProviderTest extends TestCase
 
         try { app(OpenAiResponsesProvider::class)->ask(['question' => 'PRIVATE PROMPT']); $this->fail('Expected invalid JSON.'); } catch (AssistantProviderException $exception) { $this->assertSame('invalid_json', $exception->getMessage()); }
 
+    }
+
+    public function test_output_without_message_or_output_text_is_invalid_json_and_safe(): void
+    {
+        config()->set('assistant.api_key', 'secret-api-key');
+        Log::spy();
+        Log::shouldReceive('warning')->once()->withArgs(function (string $message, array $context): bool {
+            return $message === 'Assistant OpenAI provider failure' && $context === ['error_code' => 'invalid_json', 'request_id' => 'req-empty'];
+        });
+        Http::fake(['*' => Http::response(['output' => [['type' => 'reasoning', 'summary' => [['text' => 'PRIVATE BODY']]]]], 200, ['x-request-id' => 'req-empty'])]);
+
+        try { app(OpenAiResponsesProvider::class)->ask(['question' => 'PRIVATE PROMPT', 'BUSINESS_CONTEXT' => ['value' => 'PRIVATE']]); $this->fail('Expected invalid JSON.'); } catch (AssistantProviderException $exception) { $this->assertSame('invalid_json', $exception->getMessage()); }
     }
 }

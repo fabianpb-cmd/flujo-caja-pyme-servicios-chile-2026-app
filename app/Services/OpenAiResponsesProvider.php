@@ -45,8 +45,8 @@ class OpenAiResponsesProvider implements AiProvider
             throw new AssistantProviderException('provider_'.$response->status());
         }
 
-        $text = (string) ($response->json('output_text') ?? data_get($response->json('output'), '0.content.0.text', ''));
-        $decoded = json_decode($text, true);
+        $text = $this->extractOutputText($response->json());
+        $decoded = is_string($text) && trim($text) !== '' ? json_decode($text, true) : null;
         if (! is_array($decoded)) {
             $this->logFailure([
                 'error_code' => 'invalid_json',
@@ -56,6 +56,29 @@ class OpenAiResponsesProvider implements AiProvider
         }
 
         return $decoded;
+    }
+
+    private function extractOutputText(array $response): ?string
+    {
+        $topLevel = $response['output_text'] ?? null;
+        if (is_string($topLevel) && trim($topLevel) !== '') {
+            return $topLevel;
+        }
+
+        $parts = [];
+        foreach (($response['output'] ?? []) as $item) {
+            if (! is_array($item) || ($item['type'] ?? null) !== 'message') {
+                continue;
+            }
+
+            foreach (($item['content'] ?? []) as $content) {
+                if (is_array($content) && ($content['type'] ?? null) === 'output_text' && is_string($content['text'] ?? null) && trim($content['text']) !== '') {
+                    $parts[] = $content['text'];
+                }
+            }
+        }
+
+        return $parts === [] ? null : implode('', $parts);
     }
 
     private function logFailure(array $context): void
