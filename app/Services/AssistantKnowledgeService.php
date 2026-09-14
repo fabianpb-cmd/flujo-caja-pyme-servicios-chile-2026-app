@@ -9,9 +9,13 @@ class AssistantKnowledgeService
         $rules = collect(config('assistant_knowledge', []));
         $haystack = mb_strtolower(implode(' ', [$question, $context['resource'] ?? '', $context['focused_field'] ?? '', $context['route'] ?? '']));
         $global = $rules->where('module', 'global');
+        if (blank($context['resource'] ?? null) && blank($context['page_key'] ?? null)) {
+            return $global->values()->all();
+        }
         $matched = $rules->reject(fn (array $rule) => $rule['module'] === 'global')
             ->map(function (array $rule) use ($haystack, $context): array {
                 $score = ($rule['module'] === ($context['resource'] ?? null) ? 4 : 0);
+                $score += (($rule['page_key'] ?? null) === ($context['page_key'] ?? null) ? 7 : 0);
                 foreach ($rule['keywords'] ?? [] as $keyword) {
                     $score += str_contains($haystack, mb_strtolower($keyword)) ? 1 : 0;
                 }

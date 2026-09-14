@@ -950,3 +950,13 @@ Provider y costos: feature flag `AI_ASSISTANT_ENABLED=false` por defecto; si est
 Cobertura local: `AssistantContextServiceTest`, `AssistantKnowledgeServiceTest`, `AssistantResponseGuardTest`, `AssistantControllerTest`, `AssistantBusinessContextTest` y `OpenAiResponsesProviderTest`: 12 tests / 36 assertions PASS. Cubre autenticación, feature flag, validación, sanitización, knowledge retrieval, no-invention guard, tenant/IDOR, preview de hito sin crear documentos, rate limiting, CSP nonce/sin handlers inline y Responses API mediante `Http::fake()`.
 
 Regresiones PASS: `GuidedSalesBillingTest` 3/41, `SecurityHardeningTest` 6/85, `ProjectBillingMilestoneServiceTest` 12/92, `SalesPrefacturationTest` 12/58 y `FinancialNavigationTest` 3/22. Total: 48 tests / 334 assertions PASS. `php artisan view:cache` y `git diff --check`: PASS. Sin migraciones, sin SQL, sin deploy ni acceso a producción.
+
+AYUDANTE TDAT V1 - COBERTURA CONTEXTUAL CERRADA LOCALMENTE - 2026-09-13
+
+Se corrigió el corte prematuro que devolvía `NOT_DEFINED` en pantallas sin `resource`. `AssistantContextService` deriva `page_key` usando el nombre real de la ruta resuelta server-side y un mapeo explícito para Dashboard, Agenda financiera, Obligaciones, Presupuesto, Flujo de caja, Rentabilidad, Cartolas, Regularización, Conciliación, CxC, CxP, Facturas/Ingresos y Egresos/Gastos. El valor `route` enviado por el navegador ya no determina el acceso a contexto.
+
+`AssistantKnowledgeService` prioriza reglas globales, `resource`, `page_key`, campo enfocado y keywords, manteniendo un máximo de 12 reglas. `AssistantOrchestrator` ya no depende del número fijo de reglas globales: exige al menos una fuente contextual no-global. Una pantalla desconocida queda en `NOT_DEFINED` y no invoca al proveedor. Las pantallas conocidas sí pueden responder preguntas generales y deben citar su regla de pantalla mediante `AssistantResponseGuard`.
+
+Se agregaron reglas breves y auditables en `config/assistant_knowledge.php` para todas las pantallas indicadas. `AGENTS.md` ahora exige evaluar y actualizar esa base en el mismo ciclo de cualquier cambio funcional que modifique comportamiento consultable.
+
+Pruebas del ayudante: 16 tests / 55 assertions PASS. Incluyen Dashboard con provider invocado, pantalla desconocida sin provider, rutas de gestión/banca/CxC/CxP, mapeo de ruta, campo enfocado, sanitización, tenant/preview, guardia de fuentes y CSP. Regresiones: `GuidedSalesBillingTest`, `SecurityHardeningTest` y `FinancialNavigationTest`: 12 tests / 148 assertions PASS. `git diff --check` y `view:cache` PASS. Sin migraciones, sin SQL, sin deploy ni acceso a producción.

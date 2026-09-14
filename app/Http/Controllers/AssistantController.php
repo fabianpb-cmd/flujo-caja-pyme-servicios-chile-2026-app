@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\AssistantOrchestrator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 class AssistantController extends Controller
 {
@@ -25,8 +26,27 @@ class AssistantController extends Controller
             'history.*.answer' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $screenRoute = (string) ($data['route'] ?? $request->route()?->getName());
+        $screenRoute = $this->screenRouteFromReferer($request) ?? '';
 
         return response()->json($this->assistant->ask($request->user(), $data, $screenRoute));
+    }
+
+    private function screenRouteFromReferer(Request $request): ?string
+    {
+        $referer = (string) $request->headers->get('referer');
+        if ($referer === '') {
+            return null;
+        }
+
+        $path = parse_url($referer, PHP_URL_PATH);
+        if (! is_string($path) || $path === '') {
+            return null;
+        }
+
+        try {
+            return Route::getRoutes()->match(Request::create($path, 'GET'))->getName();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

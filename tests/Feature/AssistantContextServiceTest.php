@@ -27,4 +27,12 @@ class AssistantContextServiceTest extends TestCase
         $context = app(AssistantContextService::class)->build(['resource' => 'projects', 'focused_field' => 'password'], 'x');
         $this->assertNull($context['focused_field']);
     }
+
+    public function test_it_maps_real_screen_routes_to_safe_page_keys(): void
+    {
+        $service = app(AssistantContextService::class);
+        $this->assertSame('dashboard', $service->pageKey('dashboard'));
+        $this->assertSame('bank-reconciliation', $service->pageKey('bank-reconciliation.index'));
+        $this->assertNull($service->pageKey('unknown.route'));
+    }
 }

@@ -44,4 +44,20 @@ class AssistantControllerTest extends TestCase
         $this->actingAs($this->user)->postJson(route('assistant.ask'), ['question' => 'otra', 'resource' => 'projects'])->assertStatus(429);
         RateLimiter::clear('assistant:minute:'.$this->user->id);
     }
+
+    public function test_dashboard_context_calls_provider_and_uses_screen_knowledge(): void
+    {
+        config()->set(['assistant.enabled' => true, 'assistant.per_minute' => 10, 'assistant.per_day' => 20]);
+        $this->app->bind(AiProvider::class, fn () => new class implements AiProvider {
+            public function ask(array $context): array { return ['status' => 'DEFINED', 'answer' => 'Dashboard es consulta.', 'source_ids' => ['PAGE-DASHBOARD-001']]; }
+        });
+        $this->actingAs($this->user)->withHeader('Referer', route('dashboard'))->postJson(route('assistant.ask'), ['question' => '¿Qué debo ingresar?'])->assertOk()->assertJsonPath('status', 'DEFINED')->assertJsonPath('source_ids.0', 'PAGE-DASHBOARD-001');
+    }
+
+    public function test_unknown_screen_does_not_call_provider(): void
+    {
+        config()->set('assistant.enabled', true);
+        $this->app->bind(AiProvider::class, fn () => new class implements AiProvider { public function ask(array $context): array { throw new \RuntimeException('provider should not run'); } });
+        $this->actingAs($this->user)->withHeader('Referer', url('/unknown-screen'))->postJson(route('assistant.ask'), ['question' => '¿Qué debo ingresar?'])->assertOk()->assertJsonPath('status', 'NOT_DEFINED');
+    }
 }

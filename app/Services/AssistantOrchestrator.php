@@ -27,7 +27,7 @@ class AssistantOrchestrator
         $this->rateLimit($user);
         $form = $this->context->build($input, $route);
         $rules = $this->knowledge->select($input['question'], $form);
-        if (count($rules) <= 3) {
+        if (! collect($rules)->contains(fn (array $rule): bool => ($rule['module'] ?? 'global') !== 'global')) {
             return $this->guard->notDefined();
         }
         $business = $this->business->forUser($user, $form['ids']);

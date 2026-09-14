@@ -45,6 +45,7 @@ class AssistantContextService
         return [
             'route' => $actualRoute,
             'resource' => $resource ?: null,
+            'page_key' => $resource ?: $this->pageKey($actualRoute),
             'title' => $config['title'] ?? null,
             'section' => $config['section'] ?? null,
             'focused_field' => $focused ?: null,
@@ -53,6 +54,27 @@ class AssistantContextService
             'ids' => $ids,
             'history' => $this->history($input['history'] ?? []),
         ];
+    }
+
+    public function pageKey(string $route): ?string
+    {
+        $map = [
+            'dashboard' => 'dashboard',
+            'management.financial-agenda' => 'management.financial-agenda',
+            'management.obligations' => 'management.obligations',
+            'management.budgets' => 'management.budgets',
+            'management.flows' => 'management.flows',
+            'management.profitability' => 'management.profitability',
+            'bank-statements.index' => 'bank-statements',
+            'bank-regularization.index' => 'bank-regularization',
+            'bank-reconciliation.index' => 'bank-reconciliation',
+            'sales-documents.index' => 'sales-documents',
+            'receivables.index' => 'receivables',
+            'expense-documents.index' => 'expense-documents',
+            'payables.index' => 'payables',
+        ];
+
+        return $map[$route] ?? null;
     }
 
     private function fieldDefinition(array $field, array $rules): array
