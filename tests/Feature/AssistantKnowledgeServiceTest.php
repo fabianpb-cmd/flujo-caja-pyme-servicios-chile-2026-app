@@ -36,4 +36,65 @@ class AssistantKnowledgeServiceTest extends TestCase
         $this->assertContains('PAGE-RECEIVABLES-001', array_column($service->select('Explícame esta pantalla', ['resource' => null, 'page_key' => 'receivables', 'route' => 'receivables.index']), 'id'));
         $this->assertContains('PAGE-PAYABLES-001', array_column($service->select('Explícame esta pantalla', ['resource' => null, 'page_key' => 'payables', 'route' => 'payables.index']), 'id'));
     }
+
+    public function test_assignment_question_without_focused_field_retrieves_hourly_cost_rule(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select(
+            'que son los Valor HH de costeo del proyecto',
+            ['resource' => 'assignments', 'focused_field' => null, 'route' => 'operational.edit'],
+        );
+
+        $this->assertContains('ASSIGNMENT-HOURLY-COST-001', array_column($rules, 'id'));
+    }
+
+    public function test_focused_assignment_field_prioritizes_its_verified_rule(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select(
+            '¿qué significa este campo?',
+            ['resource' => 'assignments', 'focused_field' => 'hourly_value', 'route' => 'operational.edit'],
+        );
+
+        $assignmentRules = array_values(array_filter($rules, fn (array $rule): bool => $rule['module'] === 'assignments'));
+        $this->assertSame('ASSIGNMENT-HOURLY-COST-001', $assignmentRules[0]['id']);
+    }
+
+    public function test_assignment_cost_and_commercial_question_retrieves_distinction_rule(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select(
+            '¿es lo mismo que la tarifa comercial?',
+            ['resource' => 'assignments', 'focused_field' => null, 'route' => 'operational.edit'],
+        );
+
+        $this->assertContains('ASSIGNMENT-COMMERCIAL-VS-COST-001', array_column($rules, 'id'));
+    }
+
+    public function test_assignment_project_value_question_retrieves_specific_rule(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select(
+            '¿qué significa monto pactado por proyecto/hito?',
+            ['resource' => 'assignments', 'focused_field' => null, 'route' => 'operational.edit'],
+        );
+
+        $this->assertContains('ASSIGNMENT-PROJECT-VALUE-001', array_column($rules, 'id'));
+    }
+
+    public function test_assignment_monthly_hours_question_retrieves_specific_rule(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select(
+            '¿qué son las horas mensuales comprometidas?',
+            ['resource' => 'assignments', 'focused_field' => null, 'route' => 'operational.edit'],
+        );
+
+        $this->assertContains('ASSIGNMENT-MONTHLY-HOURS-001', array_column($rules, 'id'));
+    }
+
+    public function test_unknown_assignment_question_does_not_retrieve_unrelated_rules(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select(
+            '¿qué porcentaje de descuento debo aplicar?',
+            ['resource' => 'assignments', 'focused_field' => null, 'route' => 'operational.edit'],
+        );
+
+        $this->assertSame([], array_values(array_filter(array_column($rules, 'module'), fn (string $module): bool => $module === 'assignments')));
+    }
 }

@@ -972,3 +972,11 @@ CORRECCIÓN RESPONSES API OUTPUT - VALIDADA LOCALMENTE - 2026-09-14
 Se confirmó en producción que Responses API puede devolver elementos `reasoning` antes del `message`; por ello `output[0]` no es una posición segura para extraer la respuesta. `OpenAiResponsesProvider` ahora usa un parser que prioriza `output_text` top-level y, si no existe, recorre todos los elementos `output`, considera únicamente `type=message`, concatena en orden sus partes `type=output_text` y degrada de forma segura a `invalid_json` cuando no encuentra texto.
 
 `OpenAiResponsesProviderTest`: 8 tests / 11 assertions PASS. Batería focalizada completa del asistente: 22 tests / 63 assertions PASS. Se mantienen los diagnósticos seguros y no se registran prompt, API key, body ni contexto de negocio/formulario. No cambian modelo, endpoint, knowledge, guardias, rate limits, UI ni lógica financiera. `git diff --check` PASS. Sin migraciones, sin SQL, sin deploy.
+
+AYUDANTE TDAT - CONOCIMIENTO DE CAMPOS DE ASIGNACIONES - 2026-09-14
+
+Se amplió `config/assistant_knowledge.php` con reglas auditables para Asignaciones: Valor HH de costeo, unidad/moneda del valor HH, monto pactado por proyecto/hito, horas mensuales comprometidas, vigencia y diferencia entre costo y tarifa comercial. Las reglas reflejan `docs/domain-contract.md` y distinguen explícitamente costo de asignación, tarifa comercial y remuneración.
+
+`AssistantKnowledgeService` ahora pondera `field_keys` del campo enfocado con prioridad fuerte y también recupera reglas por keywords cuando no hay foco explícito. Una pregunta desconocida no obtiene reglas del módulo únicamente por el recurso, preservando el comportamiento `NOT_DEFINED` sin inventar. No se modificó lógica financiera, UI, provider, guardias, rate limits ni persistencia.
+
+Validación focalizada: `AssistantKnowledgeServiceTest` 9 tests / 22 assertions PASS; batería del ayudante y regresiones (`AssistantKnowledgeServiceTest`, `AssistantContextServiceTest`, `AssistantResponseGuardTest`, `AssistantControllerTest`, `AssistantBusinessContextTest`, `OpenAiResponsesProviderTest`, `FinancialNavigationTest`, `ProjectBillingMilestoneServiceTest`) 43 tests / 183 assertions PASS. `view:cache` y `git diff --check` PASS. Sin migraciones, sin SQL, sin deploy.
