@@ -232,8 +232,13 @@
         </div>
     @endif
 
-    @if ($resource === 'projects' && ($billingStrategy ?? null) === \App\Services\BillingStrategyService::HOURLY)
-        <div class="app-panel p-3 mb-4"><div class="section-title">Plan de facturación</div><div>Facturación por HH aprobadas</div><div class="small text-muted">Tarifa comercial HH: {{ \App\Support\UiFormatter::formatMoney($item->contracted_hourly_rate, $item->salesCurrency ?: 'CLP') }} · Moneda: {{ \App\Support\UiFormatter::currencyCode($item->salesCurrency ?: 'CLP') }} · Periodicidad: Mensual · Condición de pago: {{ $item->paymentTerm?->name ?: 'No configurada' }}</div></div>
+    @if ($resource === 'projects' && in_array(($billingStrategy ?? null), [\App\Services\BillingStrategyService::HOURLY, \App\Services\BillingStrategyService::HOURS_BANK, \App\Services\BillingStrategyService::MONTHLY_RECURRING], true))
+        @php($billingDescription = match($billingStrategy) {
+            \App\Services\BillingStrategyService::HOURS_BANK => 'Bolsa total consumible por HH aprobadas; no se reinicia mensualmente.',
+            \App\Services\BillingStrategyService::MONTHLY_RECURRING => 'Bolsa mensual consumible por HH aprobadas; se reinicia cada mes y no acumula saldo.',
+            default => 'Facturación por HH aprobadas sin bolsa contractual.',
+        })
+        <div class="app-panel p-3 mb-4"><div class="section-title">Plan de facturación</div><div>Facturación por HH aprobadas</div><div class="small text-muted">{{ $billingDescription }} Tarifa comercial HH: {{ \App\Support\UiFormatter::formatMoney($item->contracted_hourly_rate, $item->salesCurrency ?: 'CLP') }} · Moneda: {{ \App\Support\UiFormatter::currencyCode($item->salesCurrency ?: 'CLP') }} · Periodicidad: Mensual · Condición de pago: {{ $item->paymentTerm?->name ?: 'No configurada' }}</div></div>
     @endif
 
     @if ($isTimeEntryBatch)

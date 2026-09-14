@@ -35,7 +35,7 @@ class AssistantBusinessContextService
                 'currency_code' => UiFormatter::currencyCode($project->salesCurrency ?: 'CLP'),
                 'has_payment_term' => (bool) ($project->payment_term_id || $project->client?->payment_term_id),
                 'pending_milestones' => $project->billingMilestones->filter(fn (ProjectBillingMilestone $milestone) => ! $milestone->salesDocuments->where('is_voided', false)->isNotEmpty())->count(),
-                'contracted_hourly_rate' => $strategy === BillingStrategyService::HOURLY ? (float) $project->contracted_hourly_rate : null,
+                'contracted_hourly_rate' => in_array($strategy, [BillingStrategyService::HOURLY, BillingStrategyService::HOURS_BANK, BillingStrategyService::MONTHLY_RECURRING], true) ? (float) $project->contracted_hourly_rate : null,
             ],
         ];
 

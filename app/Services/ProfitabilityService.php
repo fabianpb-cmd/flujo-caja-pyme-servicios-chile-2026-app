@@ -22,6 +22,7 @@ class ProfitabilityService
         private readonly ProjectCommitmentService $commitments,
         private readonly LegalParameterService $legalParameters,
         private readonly CurrencyConversionService $conversions,
+        private readonly BillingStrategyService $billingStrategies,
     )
     {
     }
@@ -39,7 +40,7 @@ class ProfitabilityService
 
         return Project::query()
             ->forCompany($companyId)
-            ->with(['client', 'projectStatus', 'salesCurrency'])
+            ->with(['client', 'projectStatus', 'salesCurrency', 'contractType'])
             ->when(! empty($filters['client_id']), fn ($query) => $query->where('client_id', $filters['client_id']))
             ->when(! empty($filters['project_id']), fn ($query) => $query->whereKey($filters['project_id']))
             ->when(! empty($filters['project_status']), function ($query) use ($filters) {
@@ -72,7 +73,9 @@ class ProfitabilityService
                 $laborCost = round((float) ($allocationRow['cost'] ?? 0.0), 2);
                 $vacationProvision = round((float) ($allocationRow['vacation_provision'] ?? 0.0), 2);
                 $directExpenses = round((float) ($expensesByProject[$project->id] ?? 0.0), 2);
-                $generatedSales = $this->projectSaleNetToClp($project, (float) ($project->sale_net ?? $salesRow['generated']), $period);
+                $generatedSales = $this->billingStrategies->forProject($project) === BillingStrategyService::MONTHLY_RECURRING
+                    ? (float) ($commitment['sale_net_clp'] ?? 0)
+                    : $this->projectSaleNetToClp($project, (float) ($project->sale_net ?? $salesRow['generated']), $period);
                 $invoicedSales = round((float) $salesRow['invoiced'], 2);
                 $collectedSales = round((float) ($collectedByProject[$project->id] ?? 0.0), 2);
                 $totalDirectCost = round($laborCost + $directExpenses, 2);

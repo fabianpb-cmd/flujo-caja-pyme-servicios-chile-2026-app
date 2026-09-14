@@ -29,6 +29,7 @@ use App\Services\PayablesService;
 use App\Services\PayrollService;
 use App\Services\ProjectCommitmentService;
 use App\Services\ProjectFinancialCockpitService;
+use App\Services\ProjectHoursCapacityService;
 use App\Services\SalesPrefacturationService;
 use App\Services\SalesDocumentService;
 use App\Services\ReceivablesService;
@@ -60,6 +61,7 @@ class OperationalCrudController extends Controller
         private readonly LegalObligationService $obligations,
         private readonly ProjectCommitmentService $commitments,
         private readonly ProjectFinancialCockpitService $projectCockpit,
+        private readonly ProjectHoursCapacityService $projectHoursCapacity,
         private readonly SalesPrefacturationService $salesPrefacturation,
         private readonly HourlyRateService $hourlyRates,
         private readonly HourlyCostService $hourlyCosts,
@@ -193,6 +195,7 @@ class OperationalCrudController extends Controller
             'payrollHourlyCost' => null,
             'assignmentCommitmentPreview' => $resource === 'assignments' ? $this->assignmentCommitmentPreviewData($request, $item) : null,
             'projectBillingPlanReadOnly' => false,
+            'projectHoursCapacity' => null,
         ]);
     }
 
@@ -253,6 +256,7 @@ class OperationalCrudController extends Controller
 
                     if ($model instanceof Project) {
                         $this->billingStrategies->validateProject($model->load(['contractType', 'projectStatus']), $billingRows);
+                        $this->projectHoursCapacity->assertExistingConsumptionWithinCapacity($model);
                         if ($this->billingStrategies->forProject($model) === BillingStrategyService::CLOSED_PROJECT) {
                             $this->billingStrategies->syncMilestones($model, $billingRows);
                         }
@@ -382,6 +386,7 @@ class OperationalCrudController extends Controller
             'salesCalculationBreakdown' => $resource === 'sales-documents' ? $this->salesPrefacturation->documentBreakdown($item) : null,
             'assignmentCommitmentPreview' => $resource === 'assignments' ? $this->assignmentCommitmentPreviewData($request, $item) : null,
             'projectBillingPlanReadOnly' => $projectBillingPlanReadOnly,
+            'projectHoursCapacity' => $resource === 'projects' && $item instanceof Project ? $this->projectHoursCapacity->summarize($item) : null,
         ]);
     }
 
@@ -578,6 +583,7 @@ class OperationalCrudController extends Controller
                 if ($item instanceof Project) {
                     $project = $item->refresh()->load(['contractType', 'projectStatus']);
                     $this->billingStrategies->validateProject($project, $billingRows);
+                    $this->projectHoursCapacity->assertExistingConsumptionWithinCapacity($project);
                     if ($this->billingStrategies->forProject($project) === BillingStrategyService::CLOSED_PROJECT) {
                         $this->billingStrategies->syncMilestones($project, $billingRows);
                     } elseif ($project->billingMilestones()->exists()) {
@@ -705,7 +711,7 @@ class OperationalCrudController extends Controller
             throw new DomainException('Este proyecto se factura mediante su plan de hitos. Seleccione un hito pendiente.');
         }
 
-        if ($this->billingStrategies->forProject($project) === BillingStrategyService::HOURLY) {
+        if (in_array($this->billingStrategies->forProject($project), [BillingStrategyService::HOURLY, BillingStrategyService::HOURS_BANK, BillingStrategyService::MONTHLY_RECURRING], true)) {
             throw new DomainException('Este proyecto se factura según HH aprobadas aún no facturadas. Use la facturación por horas.');
         }
     }

@@ -24,6 +24,7 @@ class SalesPrefacturationService
         private readonly ReceivablesService $receivables,
         private readonly HourlyRateService $hourlyRates,
         private readonly BillingStrategyService $billingStrategies,
+        private readonly ProjectHoursCapacityService $capacities,
     ) {
     }
 
@@ -44,6 +45,9 @@ class SalesPrefacturationService
         if ($strategy === BillingStrategyService::CLOSED_PROJECT) {
             throw new DomainException('Los proyectos Proyecto cerrado deben facturarse mediante su Plan de facturación / hitos.');
         }
+        if (! in_array($strategy, [BillingStrategyService::HOURLY, BillingStrategyService::HOURS_BANK, BillingStrategyService::MONTHLY_RECURRING], true)) {
+            throw new DomainException('El tipo de contrato no tiene una estrategia de facturación configurada.');
+        }
         if ($issue->startOfDay()->gt(Carbon::today())) {
             throw new DomainException('La fecha de emisión no puede ser futura.');
         }
@@ -59,6 +63,7 @@ class SalesPrefacturationService
         if ($entries->contains(fn (TimeEntry $entry): bool => $entry->entry_date && $entry->entry_date->startOfDay()->gt($issue->startOfDay()))) {
             throw new DomainException('No se pueden facturar HH posteriores a la fecha de emisión.');
         }
+        $capacity = $this->capacities->assertWithinCapacity($project, $period);
 
         $lines = $entries->map(fn (TimeEntry $entry): array => $this->lineForEntry($entry, $commercialCurrency, $issue));
         $netBeforeAdjustment = round($lines->sum('subtotal_clp'), 0, PHP_ROUND_HALF_UP);
@@ -92,6 +97,7 @@ class SalesPrefacturationService
             'vat_rate' => $vatRate,
             'vat_amount' => $vat,
             'gross_amount' => $gross,
+            'capacity' => $capacity,
             'commercial_net_amount' => (float) $commercialNet['converted_amount'],
             'commercial_vat_amount' => $commercialVat,
             'commercial_gross_amount' => $commercialGross,
@@ -393,6 +399,12 @@ class SalesPrefacturationService
             'vat_rate' => $calculation['vat_rate'],
             'vat_amount' => $calculation['vat_amount'],
             'gross_amount' => $calculation['gross_amount'],
+            'billing_strategy' => $calculation['capacity']['strategy'],
+            'capacity_hours' => $calculation['capacity']['capacity_hours'],
+            'consumed_hours' => $calculation['capacity']['consumed_hours'],
+            'remaining_hours' => $calculation['capacity']['remaining_hours'],
+            'capacity_scope' => $calculation['capacity']['capacity_scope'],
+            'capacity_period_date' => $calculation['capacity']['period_date'],
             'commercial_currency' => $calculation['commercial_currency'],
             'commercial_net_amount' => $calculation['commercial_net_amount'],
             'commercial_vat_amount' => $calculation['commercial_vat_amount'],

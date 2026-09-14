@@ -97,4 +97,13 @@ class AssistantKnowledgeServiceTest extends TestCase
 
         $this->assertSame([], array_values(array_filter(array_column($rules, 'module'), fn (string $module): bool => $module === 'assignments')));
     }
+
+    public function test_project_contract_questions_retrieve_consumable_strategy_rules(): void
+    {
+        $service = app(AssistantKnowledgeService::class);
+        $context = ['resource' => 'projects', 'focused_field' => 'contract_type_id', 'route' => 'operational.edit'];
+
+        $this->assertContains('PROJECT-CONTRACT-HOURS-BANK-001', array_column($service->select('¿Qué significa Bolsa de horas y qué pasa si excedo la bolsa?', $context), 'id'));
+        $this->assertContains('PROJECT-CONTRACT-MONTHLY-RECURRING-001', array_column($service->select('¿Qué es Mensual recurrente? ¿Se acumulan las horas no usadas?', $context), 'id'));
+    }
 }

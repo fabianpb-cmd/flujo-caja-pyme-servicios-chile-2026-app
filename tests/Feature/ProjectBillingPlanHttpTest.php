@@ -276,6 +276,22 @@ class ProjectBillingPlanHttpTest extends TestCase
         $response->assertSee('if (rate) rate.readOnly = closed;', false);
     }
 
+    public function test_project_form_recognizes_hours_bank_and_monthly_recurring_plans(): void
+    {
+        [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
+        $bank = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'BOLSA_HORAS', 'name' => 'Bolsa horas', 'active' => true]);
+        $monthly = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'MENSUAL_RECURRENTE', 'name' => 'Mensual recurrente', 'active' => true]);
+        $bankProject = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $bank, $active, $billing, 'PRY-HTTP-BANK') + ['contracted_hourly_rate' => 1]);
+        $monthlyProject = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $monthly, $active, $billing, 'PRY-HTTP-MONTHLY') + ['contracted_hourly_rate' => 1]);
+
+        $this->actingAs($admin)->get(route('operational.edit', ['projects', $bankProject->id]))
+            ->assertOk()
+            ->assertSee('Bolsa total consumible')
+            ->assertSee('data-project-billing-unsupported class="alert alert-warning py-2 d-none"', false);
+        $this->actingAs($admin)->get(route('operational.edit', ['projects', $monthlyProject->id]))
+            ->assertOk()->assertSee('Bolsa mensual consumible')->assertSee('Valor mensual contratado');
+    }
+
     private function issueMilestone(Project $project, ProjectBillingMilestone $milestone, Company $company): void
     {
         DocumentType::query()->firstOrCreate(['company_id' => $company->id, 'domain' => 'sales', 'code' => 'FACTURA'], ['name' => 'Factura', 'active' => true]);

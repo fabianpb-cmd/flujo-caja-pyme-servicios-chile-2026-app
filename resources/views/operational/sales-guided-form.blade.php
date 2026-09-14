@@ -185,7 +185,7 @@
         const selected = activeProject();
         const strategy = selected?.strategy || 'MANUAL';
         const isMilestone = strategy === 'CLOSED_PROJECT';
-        const isHourly = strategy === 'HOURLY';
+        const isHourly = ['HOURLY', 'HOURS_BANK', 'MONTHLY_RECURRING'].includes(strategy);
         milestonePanel.classList.toggle('d-none', !isMilestone);
         hourlyPanel.classList.toggle('d-none', !isHourly);
         manualPanel.classList.toggle('d-none', isMilestone || isHourly);
@@ -210,8 +210,13 @@
             submit.textContent = 'Generar borrador de factura';
         } else if (isHourly) {
             form.action = form.dataset.hourlyAction;
+            const description = strategy === 'HOURS_BANK'
+                ? 'Este proyecto consume una bolsa total de HH aprobadas aún no facturadas.'
+                : strategy === 'MONTHLY_RECURRING'
+                    ? 'Este proyecto consume una bolsa mensual de HH aprobadas aún no facturadas.'
+                    : 'Este proyecto se factura según HH aprobadas aún no facturadas.';
             setText('[data-guided-origin]', 'Horas aprobadas');
-            setText('[data-guided-origin-message]', 'Este proyecto se factura según HH aprobadas aún no facturadas.');
+            setText('[data-guided-origin-message]', description);
             submit.textContent = 'Generar borrador de factura';
         } else {
             form.action = form.dataset.manualAction;
@@ -251,7 +256,7 @@
             if (!milestone.value) { event.preventDefault(); emptyMilestones.classList.remove('d-none'); return; }
             form.action = route(form.dataset.milestoneActionTemplate, project.value, milestone.value);
         }
-        if (selected?.strategy === 'HOURLY') form.action = form.dataset.hourlyAction;
+        if (['HOURLY', 'HOURS_BANK', 'MONTHLY_RECURRING'].includes(selected?.strategy)) form.action = form.dataset.hourlyAction;
     });
     setMode();
 })();

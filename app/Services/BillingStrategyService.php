@@ -10,6 +10,8 @@ class BillingStrategyService
 {
     public const CLOSED_PROJECT = 'CLOSED_PROJECT';
     public const HOURLY = 'HOURLY';
+    public const HOURS_BANK = 'HOURS_BANK';
+    public const MONTHLY_RECURRING = 'MONTHLY_RECURRING';
     public const UNSUPPORTED = 'UNSUPPORTED';
 
     public function __construct(private readonly ProjectBillingMilestoneService $milestones) {}
@@ -28,6 +30,12 @@ class BillingStrategyService
         }
         if (in_array($code, ['POR_HORA', 'POR_HORAS', 'HOURLY'], true) || in_array($name, ['POR HORA', 'POR HORAS'], true)) {
             return self::HOURLY;
+        }
+        if ($code === 'BOLSA_HORAS' || $name === 'BOLSA HORAS') {
+            return self::HOURS_BANK;
+        }
+        if ($code === 'MENSUAL_RECURRENTE' || $name === 'MENSUAL RECURRENTE') {
+            return self::MONTHLY_RECURRING;
         }
 
         return self::UNSUPPORTED;
@@ -52,6 +60,18 @@ class BillingStrategyService
             }
             if ($milestones !== []) {
                 throw new DomainException('Los proyectos Por Hora no utilizan hitos de facturación.');
+            }
+            return $strategy;
+        }
+
+        if (in_array($strategy, [self::HOURS_BANK, self::MONTHLY_RECURRING], true)) {
+            $label = $strategy === self::HOURS_BANK ? 'Bolsa de horas' : 'Mensual recurrente';
+            $valueLabel = $strategy === self::HOURS_BANK ? 'Venta neta' : 'Valor mensual contratado';
+            if (! $project->sales_currency_id || (float) $project->sale_net <= 0 || (float) $project->contracted_hourly_rate <= 0) {
+                throw new DomainException("{$label} requiere {$valueLabel}, moneda comercial y Tarifa comercial HH mayor que cero.");
+            }
+            if ($milestones !== []) {
+                throw new DomainException("Los proyectos {$label} no utilizan hitos de facturación.");
             }
             return $strategy;
         }

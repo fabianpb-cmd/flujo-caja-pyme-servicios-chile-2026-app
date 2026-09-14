@@ -11,6 +11,13 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 | `start_date` / `end_date` | `projects.start_date` / `projects.end_date` | No aplica | Sí | No | `end_date >= start_date` cuando ambas existen | Asignaciones, vistas operativas |
 | `sales_currency_id` | `projects.sales_currency_id` | CLP/base company cuando corresponde al alta | Sí | No | Moneda válida de la empresa | Venta contractual, conversión de `sale_net`, servicios comerciales |
 
+### Estrategias comerciales de Proyecto
+
+- `POR_HORA`: factura HH aprobadas no facturadas por la tarifa comercial HH; no tiene bolsa contractual.
+- `BOLSA_HORAS`: `sale_net` es el valor comercial total de la bolsa y `contracted_hourly_rate` su tarifa comercial HH. La capacidad es `sale_net / contracted_hourly_rate`; todas las HH aprobadas del proyecto la consumen, no se reinicia mensualmente y no se factura exceso automático.
+- `MENSUAL_RECURRENTE`: `sale_net` es el valor mensual contratado y `contracted_hourly_rate` su tarifa comercial HH. La capacidad mensual es `sale_net / contracted_hourly_rate`; las HH aprobadas consumen solo su mes, se reinicia cada mes, no existe carryover ni prorrateo automático y no se factura exceso automático.
+- `PROYECTO_CERRADO`: conserva venta contractual total y se factura por hitos porcentuales.
+
 ## Personal
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |

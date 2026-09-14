@@ -980,3 +980,19 @@ Se amplió `config/assistant_knowledge.php` con reglas auditables para Asignacio
 `AssistantKnowledgeService` ahora pondera `field_keys` del campo enfocado con prioridad fuerte y también recupera reglas por keywords cuando no hay foco explícito. Una pregunta desconocida no obtiene reglas del módulo únicamente por el recurso, preservando el comportamiento `NOT_DEFINED` sin inventar. No se modificó lógica financiera, UI, provider, guardias, rate limits ni persistencia.
 
 Validación focalizada: `AssistantKnowledgeServiceTest` 9 tests / 22 assertions PASS; batería del ayudante y regresiones (`AssistantKnowledgeServiceTest`, `AssistantContextServiceTest`, `AssistantResponseGuardTest`, `AssistantControllerTest`, `AssistantBusinessContextTest`, `OpenAiResponsesProviderTest`, `FinancialNavigationTest`, `ProjectBillingMilestoneServiceTest`) 43 tests / 183 assertions PASS. `view:cache` y `git diff --check` PASS. Sin migraciones, sin SQL, sin deploy.
+
+ESTRATEGIAS COMERCIALES CONSUMIBLES - VALIDADO LOCALMENTE / PUSH Y QA MANUAL PENDIENTES - 2026-09-14
+
+Se habilitaron las estrategias comerciales existentes `BOLSA_HORAS` y `MENSUAL_RECURRENTE`, sin cambiar `POR_HORA` ni `PROYECTO_CERRADO`. `BOLSA_HORAS` usa `sale_net / contracted_hourly_rate` como capacidad total del proyecto: las HH aprobadas consumen una única bolsa sin reinicio ni excedentes automáticos. `MENSUAL_RECURRENTE` usa la misma fórmula por mes: cada mes reinicia su capacidad completa, no hay arrastre ni prorrateo, y los excesos bloquean la prefacturación antes de crear borradores.
+
+`ProjectHoursCapacityService` centraliza estrategia, capacidad, HH aprobadas consumidas, saldo, período y bloqueos. Todas sus consultas se limitan por empresa y proyecto. La prefacturación por HH admite Por Hora, Bolsa total y Mensual recurrente; los borradores consumibles preservan estrategia, capacidad, consumo, saldo, scope `PROJECT`/`MONTH` y período mensual en `billing_snapshot`. HH aprobadas sobre la capacidad no se truncan ni generan overage automático.
+
+Los proyectos consumibles requieren moneda comercial, `sale_net` positivo y Tarifa comercial HH positiva; rechazan hitos. Al editar, no se permite reducir la capacidad total o mensual por debajo de HH aprobadas existentes. El formulario muestra descripción contextual y capacidad/consumo cuando están disponibles. Para Mensual recurrente, `sale_net` se etiqueta Valor mensual contratado y se explica el reinicio mensual.
+
+Impacto de reporting: `sale_net` se mantiene como total contractual fuera de la estrategia mensual. Para Mensual recurrente, compromiso y rentabilidad proyectan total por meses calendario cubiertos por `start_date`/`end_date`, sin prorratear; si faltan fechas, el total queda no determinable con advertencia explícita. Las rutas históricas de rentabilidad para los demás contratos permanecen intactas.
+
+Se actualizaron `docs/domain-contract.md` y el conocimiento del Ayudante TDAT para explicar Por Hora, Bolsa de horas, Proyecto cerrado y Mensual recurrente, incluyendo límite, reset, no carryover y ausencia de excedentes automáticos.
+
+Tests dirigidos PASS: `ConsumableContractBillingTest`, `ProjectBillingPlanHttpTest`, `GuidedSalesBillingTest`, `AssistantKnowledgeServiceTest`, `FinancialNavigationTest`, `SalesPrefacturationTest`, `ProjectBillingMilestoneServiceTest` y `ProfitabilityServiceTest`: 70 tests / 384 assertions. `php artisan view:cache` y `git diff --check`: PASS. `ProjectCommitmentServiceTest::test_commitment_normalizes_uf_sale_net_for_currency_comparison` mantiene un fallo histórico de fixture: busca UF de agosto/septiembre contra la fecha actual; el método base ya elegía esa fecha de referencia, por lo que no es regresión de esta funcionalidad.
+
+Sin migraciones, sin SQL, sin deploy ni acceso a producción. Pendiente: commit, push y QA manual de Bolsa de horas/Mensual recurrente.

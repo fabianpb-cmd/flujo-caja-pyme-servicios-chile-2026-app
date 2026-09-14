@@ -19,14 +19,15 @@ class ProjectCommitmentService
         private readonly HourlyRateService $hourlyRates,
         private readonly LegalParameterService $legalParameters,
         private readonly CurrencyConversionService $conversions,
+        private readonly BillingStrategyService $billingStrategies,
     ) {
     }
 
     public function summarizeProject(Project|int $project, array $options = []): array
     {
         $project = $project instanceof Project
-            ? $project->loadMissing(['salesCurrency', 'client'])
-            : Project::query()->with(['salesCurrency', 'client'])->findOrFail($project);
+            ? $project->loadMissing(['salesCurrency', 'client', 'contractType'])
+            : Project::query()->with(['salesCurrency', 'client', 'contractType'])->findOrFail($project);
 
         $excludeAssignmentId = isset($options['exclude_assignment_id']) ? (int) $options['exclude_assignment_id'] : null;
         $includeAssignment = $options['include_assignment'] ?? null;
@@ -40,10 +41,8 @@ class ProjectCommitmentService
         $warnings = [];
         $projectExchangeInfo = null;
         $commitmentReferenceDate = $this->commitmentReferenceDate($project, $assignments);
-        $saleNetClp = $this->projectSaleNetToClp($project, $warnings, $commitmentReferenceDate, $projectExchangeInfo);
-        $saleNetOriginal = $project->sale_net !== null && $project->sale_net !== ''
-            ? round((float) $project->sale_net, 2)
-            : null;
+        $saleNetOriginal = $this->projectedSaleNet($project, $warnings);
+        $saleNetClp = $this->projectSaleNetToClp($project, $saleNetOriginal, $warnings, $commitmentReferenceDate, $projectExchangeInfo);
         $saleNetCurrency = $project->salesCurrency;
         $assignmentCount = $assignments->count();
         $assignmentBreakdown = [];
@@ -259,15 +258,33 @@ class ProjectCommitmentService
         return $converted;
     }
 
-    private function projectSaleNetToClp(Project $project, array &$warnings, CarbonInterface|string $referenceDate, ?array &$exchangeRateInfo = null): ?float
+    private function projectedSaleNet(Project $project, array &$warnings): ?float
     {
         if ($project->sale_net === null || $project->sale_net === '') {
-            $warnings[] = 'El proyecto no tiene venta neta configurada.';
+            return null;
+        }
+        if ($this->billingStrategies->forProject($project) !== BillingStrategyService::MONTHLY_RECURRING) {
+            return round((float) $project->sale_net, 2);
+        }
+        if (! $project->start_date || ! $project->end_date) {
+            $warnings[] = 'No se puede proyectar la venta total del contrato mensual recurrente sin fechas de inicio y término.';
+            return null;
+        }
+
+        $months = $project->start_date->copy()->startOfMonth()->diffInMonths($project->end_date->copy()->startOfMonth()) + 1;
+        return round((float) $project->sale_net * $months, 2);
+    }
+
+    private function projectSaleNetToClp(Project $project, ?float $saleNet, array &$warnings, CarbonInterface|string $referenceDate, ?array &$exchangeRateInfo = null): ?float
+    {
+        if ($saleNet === null) {
+            if ($project->sale_net === null || $project->sale_net === '') {
+                $warnings[] = 'El proyecto no tiene venta neta configurada.';
+            }
 
             return null;
         }
 
-        $saleNet = (float) $project->sale_net;
         $currencyCode = strtoupper((string) ($project->salesCurrency?->code ?? 'CLP'));
         return $this->convertToClp(
             companyId: $project->company_id,
