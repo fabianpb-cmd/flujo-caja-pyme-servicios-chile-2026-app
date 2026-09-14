@@ -271,6 +271,7 @@
                     @yield('content')
 
                     @auth
+                        <x-assistant-panel />
                         <div class="modal fade" id="sessionExpiryModal" tabindex="-1" aria-labelledby="sessionExpiryModalLabel" aria-hidden="true" data-session-warning-minutes="5">
                             <div class="modal-dialog modal-dialog-centered">
                                 <div class="modal-content">

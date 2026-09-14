@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\AiProvider;
+use App\Services\OpenAiResponsesProvider;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
@@ -13,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(AiProvider::class, OpenAiResponsesProvider::class);
     }
 
     /**

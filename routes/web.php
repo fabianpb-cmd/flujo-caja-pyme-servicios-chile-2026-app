@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountSecurityController;
+use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BankReconciliationController;
 use App\Http\Controllers\BankRegularizationController;
@@ -37,6 +38,10 @@ Route::middleware(['auth', 'absolute.session'])->group(function (): void {
     Route::get('/user/confirm-password', [ConfirmablePasswordController::class, 'show'])->middleware('sensitive.no-store')->name('password.confirm');
     Route::post('/user/confirm-password', [ConfirmablePasswordController::class, 'store'])->middleware('sensitive.no-store')->name('password.confirm.store');
 });
+
+Route::post('/ayudante/preguntar', [AssistantController::class, 'ask'])
+    ->middleware(['auth', 'absolute.session', 'admin.2fa', 'sensitive.no-store'])
+    ->name('assistant.ask');
 
 Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(ManagementController::class)->group(function (): void {
     Route::get('/dashboard', 'dashboard')->name('dashboard');
