@@ -108,16 +108,14 @@ class ProjectBillingMilestoneService
     {
         return DB::transaction(function () use ($milestone, $issueDate, $taxable): SalesDocument {
             $locked = ProjectBillingMilestone::query()->whereKey($milestone->getKey())->where('company_id', $milestone->company_id)->lockForUpdate()->firstOrFail();
-            $locked->load(['project.salesCurrency', 'project.client', 'project.contractType']);
-            $project = $locked->project;
-            $this->assertClosedContract($project);
-            if ($this->isInvoiced($locked)) throw new DomainException('Este hito ya posee una factura activa. Anule esa factura antes de reemitirlo.');
-            $issue = Carbon::parse($issueDate)->startOfDay();
-            if ($issue->gt(Carbon::today())) throw new DomainException('La fecha de emisión no puede ser futura.');
-            $contractual = $this->contractualAmount($project, $locked);
-            $conversion = $this->toClp($project, $contractual, $issue); $amounts = $this->receivables->amountsWithVat($project->company_id, $conversion['converted_amount'], $issue);
-            $coverage = $this->coverage($locked, $issue);
-            $dueDate = $this->dueDate($project, $issue);
+            $preview = $this->preview($locked, $issueDate, $taxable);
+            $project = $preview['project'];
+            $issue = $preview['issue'];
+            $contractual = $preview['contractual_amount'];
+            $conversion = $preview['conversion'];
+            $amounts = $preview['amounts'];
+            $coverage = $preview['coverage'];
+            $dueDate = $preview['due_date'];
             $documentType = DocumentType::query()->where('company_id', $project->company_id)->where('domain', 'sales')->where('code', 'FACTURA')->where('active', true)->first();
             if (! $documentType) throw new DomainException('No existe el tipo de documento de ventas FACTURA activo para la empresa.');
             return MassAssignment::create(SalesDocument::class, [
@@ -130,6 +128,38 @@ class ProjectBillingMilestoneService
                 'calculation_notes' => $coverage['warning'] ?? null,
             ]);
         });
+    }
+
+    public function preview(ProjectBillingMilestone $milestone, string $issueDate, bool $taxable = true): array
+    {
+        $milestone->loadMissing(['project.salesCurrency', 'project.client', 'project.contractType', 'project.paymentTerm', 'project.client.paymentTerm']);
+        $project = $milestone->project;
+        $this->assertClosedContract($project);
+        if ($this->isInvoiced($milestone)) {
+            throw new DomainException('Este hito ya posee una factura activa. Anule esa factura antes de reemitirlo.');
+        }
+
+        $issue = Carbon::parse($issueDate)->startOfDay();
+        if ($issue->gt(Carbon::today())) {
+            throw new DomainException('La fecha de emisión no puede ser futura.');
+        }
+
+        $contractual = $this->contractualAmount($project, $milestone);
+        $conversion = $this->toClp($project, $contractual, $issue);
+        $amounts = $this->receivables->amountsWithVat($project->company_id, $conversion['converted_amount'], $issue);
+        $dueDate = $this->dueDate($project, $issue);
+
+        return [
+            'project' => $project,
+            'milestone' => $milestone,
+            'issue' => $issue,
+            'contractual_amount' => $contractual,
+            'contractual_currency' => UiFormatter::currencyCode($project->salesCurrency ?: 'CLP'),
+            'conversion' => $conversion,
+            'amounts' => $amounts,
+            'coverage' => $this->coverage($milestone, $issue),
+            'due_date' => $dueDate,
+        ];
     }
 
     public function coverage(ProjectBillingMilestone $milestone, Carbon $through): array

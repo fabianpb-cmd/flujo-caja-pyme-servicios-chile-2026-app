@@ -172,6 +172,16 @@ class OperationalCrudController extends Controller
             $item->sales_currency_id = $this->baseCurrencyId($request->user()->company_id);
         }
 
+        if ($resource === 'sales-documents') {
+            return view('operational.sales-guided-form', [
+                'resource' => $resource,
+                'config' => $config,
+                'item' => $item,
+                'options' => $this->options($config, $request, $item),
+                'guidedBillingProjects' => $this->guidedBillingProjects((int) $request->user()->company_id),
+            ]);
+        }
+
         return view('operational.form', [
             'resource' => $resource,
             'config' => $config,
@@ -213,6 +223,11 @@ class OperationalCrudController extends Controller
         }
 
         $validated = $request->validated();
+        try {
+            $this->assertManualSalesDocumentAllowed($request, $resource, $validated);
+        } catch (DomainException $exception) {
+            return back()->withInput()->withErrors(['billing_source' => $exception->getMessage()]);
+        }
         try {
             $this->financialDocuments->assertCreateAllowed($resource, (int) $request->user()->company_id, $validated);
         } catch (DomainException $exception) {
@@ -673,6 +688,66 @@ class OperationalCrudController extends Controller
         abort_unless($config, 404);
 
         return $config;
+    }
+
+    private function assertManualSalesDocumentAllowed(Request $request, string $resource, array $data): void
+    {
+        if ($resource !== 'sales-documents' || ! filled($data['project_id'] ?? null)) {
+            return;
+        }
+
+        $project = Project::query()
+            ->forCompany((int) $request->user()->company_id)
+            ->with('contractType')
+            ->findOrFail((int) $data['project_id']);
+
+        if ($this->billingStrategies->forProject($project) === BillingStrategyService::CLOSED_PROJECT) {
+            throw new DomainException('Este proyecto se factura mediante su plan de hitos. Seleccione un hito pendiente.');
+        }
+
+        if ($this->billingStrategies->forProject($project) === BillingStrategyService::HOURLY) {
+            throw new DomainException('Este proyecto se factura según HH aprobadas aún no facturadas. Use la facturación por horas.');
+        }
+    }
+
+    private function guidedBillingProjects(int $companyId): array
+    {
+        $milestoneService = app(\App\Services\ProjectBillingMilestoneService::class);
+
+        return Project::query()
+            ->forCompany($companyId)
+            ->with(['client', 'contractType', 'salesCurrency', 'billingMilestones.salesDocuments'])
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(function (Project $project) use ($milestoneService): array {
+                $strategy = $this->billingStrategies->forProject($project);
+                $milestones = $strategy === BillingStrategyService::CLOSED_PROJECT
+                    ? collect($milestoneService->plan($project)['milestones'])
+                        ->reject(fn (array $row): bool => $row['invoiced'])
+                        ->map(fn (array $row): array => [
+                            'id' => $row['model']->id,
+                            'sequence' => $row['model']->sequence,
+                            'name' => $row['model']->name,
+                            'percentage' => (float) $row['model']->percentage,
+                            'planned_invoice_date' => optional($row['model']->planned_invoice_date)->toDateString(),
+                            'contractual_amount' => (float) $row['amount'],
+                            'currency_code' => UiFormatter::currencyCode($project->salesCurrency ?: 'CLP'),
+                        ])
+                        ->values()
+                        ->all()
+                    : [];
+
+                return [$project->id => [
+                    'strategy' => $strategy,
+                    'client_id' => $project->client_id,
+                    'client_label' => $project->client?->legal_name,
+                    'name' => $project->name,
+                    'sales_currency' => UiFormatter::currencyCode($project->salesCurrency ?: 'CLP'),
+                    'contracted_hourly_rate' => $project->contracted_hourly_rate,
+                    'milestones' => $milestones,
+                ]];
+            })
+            ->all();
     }
 
     private function prepareData(Request $request, string $resource, array $data): array

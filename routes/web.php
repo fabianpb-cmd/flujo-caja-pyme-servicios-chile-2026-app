@@ -83,6 +83,7 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->group(function ():
     Route::post('/proyectos/{project}/hitos', [ProjectBillingMilestoneController::class, 'store'])->name('projects.milestones.store');
     Route::put('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'update'])->name('projects.milestones.update');
     Route::delete('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'destroy'])->name('projects.milestones.destroy');
+    Route::post('/proyectos/{project}/hitos/{milestone}/vista-previa', [ProjectBillingMilestoneController::class, 'preview'])->name('projects.milestones.preview');
     Route::post('/proyectos/{project}/hitos/{milestone}/facturar', [ProjectBillingMilestoneController::class, 'issue'])->name('projects.milestones.issue');
     Route::get('/geografia/regiones/{region}/comunas', [GeographyController::class, 'communes'])->name('geography.regions.communes');
     Route::post('/operacion/payroll-records/generar-periodo', [PayrollBatchController::class, 'generate'])->name('payroll.generate-period');
