@@ -3,7 +3,7 @@
     $assistantRoute = request()->route()?->getName();
     $assistantTitle = $assistantResource ? data_get(config("operational.$assistantResource"), 'title') : null;
 @endphp
-<button type="button" class="btn btn-primary shadow position-fixed bottom-0 end-0 m-4 d-flex align-items-center gap-2" data-bs-toggle="offcanvas" data-bs-target="#assistantPanel" aria-controls="assistantPanel" style="z-index: 1040">
+<button type="button" class="btn btn-primary shadow position-fixed bottom-0 end-0 m-4 d-flex align-items-center gap-2" data-assistant-launcher data-bs-toggle="offcanvas" data-bs-target="#assistantPanel" aria-controls="assistantPanel" style="z-index: 1040; transition: bottom .15s ease">
     <i class="bi bi-chat-dots"></i><span>Ayudante TDAT</span>
 </button>
 
@@ -42,11 +42,40 @@
         const input = panel.querySelector('[data-assistant-question]');
         const send = panel.querySelector('[data-assistant-send]');
         const conversation = panel.querySelector('[data-assistant-conversation]');
+        const launcher = document.querySelector('[data-assistant-launcher]');
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
         const allowedIds = new Set(['client_id', 'project_id', 'milestone_id', 'cash_account_id', 'contract_type_id']);
         const sensitive = /(password|two_factor|recovery|token|csrf|rut|email|phone|address|bank_account|document_number|notes)/i;
         const history = [];
         let focusedField = '';
+
+        let repositionFrame = 0;
+        const repositionLauncher = () => {
+            if (!launcher) return;
+            const baseBottom = 24;
+            const gap = 12;
+            const viewportHeight = window.innerHeight;
+            const avoidZones = document.querySelectorAll('[data-assistant-avoid-overlap]');
+            let requiredBottom = baseBottom;
+            avoidZones.forEach((zone) => {
+                const rect = zone.getBoundingClientRect();
+                if (rect.top < viewportHeight && rect.bottom > viewportHeight * 0.65) {
+                    requiredBottom = Math.max(requiredBottom, viewportHeight - rect.top + gap);
+                }
+            });
+            launcher.style.bottom = `${requiredBottom}px`;
+        };
+        const scheduleReposition = () => {
+            if (repositionFrame) return;
+            repositionFrame = window.requestAnimationFrame(() => {
+                repositionFrame = 0;
+                repositionLauncher();
+            });
+        };
+        window.addEventListener('scroll', scheduleReposition, { passive: true });
+        window.addEventListener('resize', scheduleReposition);
+        window.addEventListener('load', scheduleReposition, { once: true });
+        scheduleReposition();
 
         document.addEventListener('focusin', (event) => {
             const field = event.target;

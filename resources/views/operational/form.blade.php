@@ -1849,7 +1849,7 @@
         @endif
     @endif
 
-    <div class="d-flex justify-content-end gap-2 mt-4">
+    <div class="d-flex justify-content-end gap-2 mt-4" data-assistant-avoid-overlap>
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', $resource) }}">Cancelar</a>
         <button type="submit" class="btn btn-primary" @if($resource === 'time-entries') data-time-entry-submit-label @endif>{{ $resource === 'time-entries' && (! $editing || $isTimeEntryBatchEdit) ? ($editing ? 'Guardar carga' : 'Registrar horas') : 'Guardar' }}</button>
     </div>

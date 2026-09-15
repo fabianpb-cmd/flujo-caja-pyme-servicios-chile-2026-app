@@ -145,7 +145,7 @@
     @error('milestone')<div class="alert alert-danger mt-3 mb-0">{{ $message }}</div>@enderror
     @error('prefacturacion')<div class="alert alert-danger mt-3 mb-0">{{ $message }}</div>@enderror
 
-    <div class="d-flex justify-content-end gap-2 mt-4">
+    <div class="d-flex justify-content-end gap-2 mt-4" data-assistant-avoid-overlap>
         <a class="btn btn-outline-secondary" href="{{ route('operational.index', 'sales-documents') }}">Cancelar</a>
         <button type="submit" class="btn btn-primary" data-guided-submit>Guardar</button>
     </div>

@@ -1009,6 +1009,12 @@ El orquestador entrega `KNOWLEDGE_RULES`, `FORM_CONTEXT`, `FORM_GUIDE` y `BUSINE
 
 Cobertura: `AssistantScreenGuideServiceTest`, `AssistantControllerTest`, `AssistantContextServiceTest`, `AssistantKnowledgeServiceTest`, `AssistantResponseGuardTest`, `AssistantBusinessContextTest` y `OpenAiResponsesProviderTest`: 33 tests / 1038 assertions PASS. El test de guía enumera automáticamente todos los resources de `config/operational.php`, por lo que un nuevo formulario debe ser compatible con `AssistantScreenGuideService`. `php artisan view:cache` y `git diff --check`: PASS. Sin migraciones, sin SQL, sin deploy ni acceso a producción.
 
+AYUDANTE TDAT - PREVENCIÓN DE SOLAPAMIENTO EN FORMULARIOS - VALIDADO LOCALMENTE - 2026-09-14
+
+El launcher flotante ahora identifica su posición con `data-assistant-launcher` y se reposiciona dinámicamente sobre barras marcadas con `data-assistant-avoid-overlap`, usando sus dimensiones reales y eventos de scroll/resize con `requestAnimationFrame`. Se marcó la barra de acciones de `operational.form` y `sales-guided-form`; el offcanvas, prompts, contexto y conocimiento no cambian. Impacto de Assistant Knowledge: NO CHANGE.
+
+Validación focalizada PASS: `AssistantControllerTest` 5 tests / 25 assertions y `ProjectBillingPlanHttpTest` 14 tests / 83 assertions. `php artisan view:cache` y `git diff --check`: PASS. Sin migraciones, sin SQL ni deploy.
+
 DETECCIÓN UI DE ESTRATEGIAS CONSUMIBLES EN PROYECTOS - VALIDADA LOCALMENTE - 2026-09-14
 
 Se corrigió el formulario Nuevo/Editar Proyecto para que las opciones relation de Tipo de contrato expongan únicamente su `data-code` seguro cuando el catálogo lo provee. El script del plan ahora reconoce `BOLSA_HORAS` por código y también los nombres históricos `Bolsa de horas` y `Bolsa horas`; el servidor reconoce ambos nombres normalizados como Bolsa de horas. No cambia ninguna regla financiera ni la semántica de estrategias ya documentada, por lo que `assistant_knowledge.php` no requiere ajuste.

@@ -31,6 +31,9 @@ class AssistantControllerTest extends TestCase
         $this->actingAs($this->user)->postJson(route('assistant.ask'), ['question' => 'Hola', 'resource' => 'projects'])->assertOk()->assertJsonPath('answer', 'El Ayudante TDAT todavía no está habilitado.');
         $panel = file_get_contents(resource_path('views/components/assistant-panel.blade.php'));
         $this->assertStringContainsString('nonce="{{ $cspNonce ?? \'\' }}"', $panel);
+        $this->assertStringContainsString('data-assistant-launcher', $panel);
+        $this->assertStringContainsString('requestAnimationFrame', $panel);
+        $this->assertStringContainsString('data-assistant-avoid-overlap', file_get_contents(resource_path('views/operational/form.blade.php')));
         $this->assertStringNotContainsString('onclick=', $panel);
     }
 
