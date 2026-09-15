@@ -58,6 +58,29 @@ class ConsumableContractBillingTest extends TestCase
         $strategies->validateProject($invalid);
     }
 
+    public function test_hours_bank_is_recognized_by_its_catalog_name_with_legacy_code(): void
+    {
+        $contract = ContractType::query()->create([
+            'company_id' => $this->company->id,
+            'domain' => 'commercial',
+            'code' => 'LEGACY_BAG',
+            'name' => 'Bolsa de horas',
+            'active' => true,
+        ]);
+        $project = Project::query()->create([
+            'company_id' => $this->company->id,
+            'client_id' => $this->client->id,
+            'sales_currency_id' => $this->uf->id,
+            'contract_type_id' => $contract->id,
+            'code' => 'PRY-BAG-NAME',
+            'name' => 'Bolsa por nombre',
+            'sale_net' => 100,
+            'contracted_hourly_rate' => 1,
+        ]);
+
+        $this->assertSame(BillingStrategyService::HOURS_BANK, app(BillingStrategyService::class)->forProject($project));
+    }
+
     public function test_hours_bank_capacity_consumes_all_approved_hours_and_blocks_overage(): void
     {
         $project = $this->project('BOLSA_HORAS', 100, 1);

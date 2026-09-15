@@ -279,17 +279,32 @@ class ProjectBillingPlanHttpTest extends TestCase
     public function test_project_form_recognizes_hours_bank_and_monthly_recurring_plans(): void
     {
         [$company, $admin, $client, $currency, $closed, $active, $billing] = $this->fixtures();
-        $bank = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'BOLSA_HORAS', 'name' => 'Bolsa horas', 'active' => true]);
+        $hourly = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'POR_HORA', 'name' => 'Por Hora', 'active' => true]);
+        $bank = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'BOLSA_HORAS', 'name' => 'Bolsa de horas', 'active' => true]);
         $monthly = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'MENSUAL_RECURRENTE', 'name' => 'Mensual recurrente', 'active' => true]);
+        $hourlyProject = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $hourly, $active, $billing, 'PRY-HTTP-HOURLY') + ['contracted_hourly_rate' => 1]);
         $bankProject = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $bank, $active, $billing, 'PRY-HTTP-BANK') + ['contracted_hourly_rate' => 1]);
         $monthlyProject = Project::query()->create(['company_id' => $company->id] + $this->projectPayload($client, $currency, $monthly, $active, $billing, 'PRY-HTTP-MONTHLY') + ['contracted_hourly_rate' => 1]);
 
+        $this->actingAs($admin)->get(route('operational.edit', ['projects', $hourlyProject->id]))
+            ->assertOk()
+            ->assertSee('data-code="BOLSA_HORAS"', false)
+            ->assertSee('data-code="MENSUAL_RECURRENTE"', false)
+            ->assertSee('data-code="PROYECTO_CERRADO"', false)
+            ->assertSee("'bolsa de horas'", false)
+            ->assertSee('Facturación por HH aprobadas')
+            ->assertSee('Sin bolsa contractual');
         $this->actingAs($admin)->get(route('operational.edit', ['projects', $bankProject->id]))
             ->assertOk()
             ->assertSee('Bolsa total consumible')
+            ->assertSee('data-project-billing-hourly class="small text-muted d-none"', false)
             ->assertSee('data-project-billing-unsupported class="alert alert-warning py-2 d-none"', false);
         $this->actingAs($admin)->get(route('operational.edit', ['projects', $monthlyProject->id]))
-            ->assertOk()->assertSee('Bolsa mensual consumible')->assertSee('Valor mensual contratado');
+            ->assertOk()
+            ->assertSee('Bolsa mensual consumible')
+            ->assertSee('Valor mensual contratado')
+            ->assertSee('data-project-billing-hourly class="small text-muted d-none"', false)
+            ->assertSee('data-project-billing-unsupported class="alert alert-warning py-2 d-none"', false);
     }
 
     private function issueMilestone(Project $project, ProjectBillingMilestone $milestone, Company $company): void

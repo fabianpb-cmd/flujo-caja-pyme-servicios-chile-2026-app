@@ -112,6 +112,9 @@
             $label = is_array($option) ? $option['label'] : $option;
             $parentId = is_array($option) ? ($option['parent_id'] ?? null) : null;
             $optionAttributes = ((string) $value === (string) $key ? ' selected' : '') . ($parentId ? ' data-parent-id="'.e($parentId).'"' : '');
+            if (is_array($option) && (string) ($option['code'] ?? '') !== '') {
+                $optionAttributes .= ' data-code="'.e($option['code']).'"';
+            }
             if ($field === 'sales_currency_id' && is_array($option)) {
                 $optionAttributes .= ' data-currency-code="'.e($option['currency_code'] ?? '').'" data-currency-symbol="'.e($option['currency_symbol'] ?? '').'" data-currency-minor-units="'.e($option['currency_minor_units'] ?? 2).'"';
             }

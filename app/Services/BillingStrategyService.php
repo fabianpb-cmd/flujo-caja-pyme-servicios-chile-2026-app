@@ -31,7 +31,7 @@ class BillingStrategyService
         if (in_array($code, ['POR_HORA', 'POR_HORAS', 'HOURLY'], true) || in_array($name, ['POR HORA', 'POR HORAS'], true)) {
             return self::HOURLY;
         }
-        if ($code === 'BOLSA_HORAS' || $name === 'BOLSA HORAS') {
+        if ($code === 'BOLSA_HORAS' || in_array($name, ['BOLSA DE HORAS', 'BOLSA HORAS'], true)) {
             return self::HOURS_BANK;
         }
         if ($code === 'MENSUAL_RECURRENTE' || $name === 'MENSUAL RECURRENTE') {
