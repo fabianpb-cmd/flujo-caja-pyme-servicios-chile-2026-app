@@ -3,7 +3,7 @@
     $assistantRoute = request()->route()?->getName();
     $assistantTitle = $assistantResource ? data_get(config("operational.$assistantResource"), 'title') : null;
 @endphp
-<button type="button" class="btn btn-primary shadow position-fixed bottom-0 end-0 m-4 d-flex align-items-center gap-2" data-assistant-launcher data-bs-toggle="offcanvas" data-bs-target="#assistantPanel" aria-controls="assistantPanel" style="z-index: 1040; transition: bottom .15s ease">
+<button type="button" class="btn btn-primary shadow position-fixed d-flex align-items-center gap-2" data-assistant-launcher data-bs-toggle="offcanvas" data-bs-target="#assistantPanel" aria-controls="assistantPanel" style="right: 24px; bottom: 24px; z-index: 1040; transition: bottom .15s ease">
     <i class="bi bi-chat-dots"></i><span>Ayudante TDAT</span>
 </button>
 

@@ -32,8 +32,13 @@ class AssistantControllerTest extends TestCase
         $panel = file_get_contents(resource_path('views/components/assistant-panel.blade.php'));
         $this->assertStringContainsString('nonce="{{ $cspNonce ?? \'\' }}"', $panel);
         $this->assertStringContainsString('data-assistant-launcher', $panel);
+        $this->assertStringNotContainsString('bottom-0', $panel);
+        $this->assertStringNotContainsString('end-0', $panel);
+        $this->assertStringNotContainsString('m-4', $panel);
+        $this->assertStringContainsString('right: 24px; bottom: 24px;', $panel);
         $this->assertStringContainsString('requestAnimationFrame', $panel);
         $this->assertStringContainsString('data-assistant-avoid-overlap', file_get_contents(resource_path('views/operational/form.blade.php')));
+        $this->assertStringContainsString('data-assistant-avoid-overlap', file_get_contents(resource_path('views/operational/sales-guided-form.blade.php')));
         $this->assertStringNotContainsString('onclick=', $panel);
     }
 
