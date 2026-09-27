@@ -1,0 +1,126 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Client;
+use App\Models\Company;
+use App\Models\ContractType;
+use App\Models\Currency;
+use App\Models\PaymentTerm;
+use App\Models\Project;
+use App\Models\ProjectSourceDocument;
+use App\Models\LegalParameter;
+use App\Models\RecordStatus;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
+
+class ProjectPurchaseOrderImportTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_purchase_order_is_staged_privately_and_only_attached_after_normal_project_creation(): void
+    {
+        [$company, $admin, $client, $currency, $term, $hourly, $status, $billing] = $this->fixtures();
+        Storage::fake('local');
+        config()->set('assistant.api_key', 'test-key');
+        Http::fake(['https://api.openai.com/v1/responses' => Http::response($this->responsePayload(), 200)]);
+        $file = UploadedFile::fake()->createWithContent('oc-100.pdf', "%PDF-1.4\nOC QA");
+
+        $analyze = $this->actingAs($admin)->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file]);
+
+        $analyze->assertRedirect();
+        $this->assertDatabaseCount('projects', 0);
+        $imports = (array) session('project_oc_imports', []);
+        $token = (string) (array_key_first($imports) ?? '');
+        $this->assertNotSame('', $token);
+        $review = $this->actingAs($admin)->get(route('projects.from-purchase-order', ['token' => $token]));
+        $review->assertOk()->assertSee('Cliente OC')->assertSee('OC-100')->assertSee('Crear proyecto y adjuntar OC');
+
+        $this->assertDatabaseCount('projects', 0);
+        $create = $this->actingAs($admin)->post(route('operational.store', 'projects'), [
+            'oc_import_token' => $token,
+            'client_id' => $client->id,
+            'sales_currency_id' => $currency->id,
+            'name' => 'Servicio OC QA',
+            'contract_type_id' => $hourly->id,
+            'contracted_hourly_rate' => 1.5,
+            'payment_term_id' => $term->id,
+            'sale_net' => 125000,
+            'project_status_id' => $status->id,
+            'billing_status_id' => $billing->id,
+        ]);
+
+        if ($create->exception) {
+            throw new \RuntimeException(get_class($create->exception).' '.$create->exception->getMessage().'\n'.$create->exception->getTraceAsString());
+        }
+        try {
+            $create->assertRedirect(route('operational.index', 'projects'));
+        } catch (\Throwable $exception) {
+            throw new \RuntimeException($exception->getMessage()."\n".$exception->getTraceAsString(), 0, $exception);
+        }
+        $project = Project::query()->where('company_id', $company->id)->sole();
+        $document = ProjectSourceDocument::query()->where('project_id', $project->id)->sole();
+        $this->assertSame('PURCHASE_ORDER', $document->document_type);
+        $this->assertSame('OC-100', $document->document_number);
+        $this->assertSame($company->id, $document->company_id);
+    }
+
+    public function test_duplicate_oc_and_cross_tenant_preview_are_rejected_without_creating_a_project(): void
+    {
+        [$company, $admin] = $this->fixtures();
+        $otherCompany = Company::query()->create(['code' => 'CMP-OC-OTHER', 'name' => 'Otra empresa', 'status' => 'active']);
+        $otherUser = User::query()->create(['company_id' => $otherCompany->id, 'name' => 'Otro', 'email' => 'other@oc.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
+        Storage::fake('local');
+        config()->set('assistant.api_key', 'test-key');
+        Http::fake(['https://api.openai.com/v1/responses' => Http::response($this->responsePayload(), 200)]);
+        $content = "%PDF-1.4\nOC DUP";
+        $first = UploadedFile::fake()->createWithContent('duplicate.pdf', $content);
+        $this->actingAs($admin)->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $first])->assertRedirect();
+        $token = array_key_first(session('project_oc_imports'));
+
+        $this->actingAs($otherUser)->get(route('projects.from-purchase-order', ['token' => $token]))->assertOk()->assertSee('no está disponible para esta sesión');
+        ProjectSourceDocument::query()->forceCreate([
+            'company_id' => $company->id,
+            'project_id' => Project::query()->create(['company_id' => $company->id, 'code' => 'PRY-OC-DUP', 'client_id' => Client::query()->where('company_id', $company->id)->value('id'), 'name' => 'Previo'])->id,
+            'document_type' => 'PURCHASE_ORDER', 'original_filename' => 'old.pdf', 'storage_path' => 'project-source-documents/old.pdf', 'mime_type' => 'application/pdf', 'file_size' => strlen($content), 'sha256' => hash('sha256', $content), 'created_by' => $admin->id,
+        ]);
+        $duplicate = UploadedFile::fake()->createWithContent('duplicate.pdf', $content);
+        $this->actingAs($admin)->from(route('projects.from-purchase-order'))->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $duplicate])->assertSessionHasErrors('purchase_order');
+        $this->assertSame(1, Project::query()->where('company_id', $company->id)->count());
+    }
+
+    public function test_invalid_pdf_is_rejected_before_openai_is_called(): void
+    {
+        [, $admin] = $this->fixtures();
+        Http::fake();
+        $file = UploadedFile::fake()->createWithContent('not-a-pdf.pdf', 'not a PDF');
+
+        $this->actingAs($admin)->from(route('projects.from-purchase-order'))->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file])->assertSessionHasErrors('purchase_order');
+        Http::assertNothingSent();
+    }
+
+    private function fixtures(): array
+    {
+        $company = Company::query()->create(['code' => 'CMP-OC', 'name' => 'Empresa OC', 'status' => 'active']);
+        $admin = User::query()->create(['company_id' => $company->id, 'name' => 'Admin OC', 'email' => 'admin@oc.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
+        $client = Client::query()->create(['company_id' => $company->id, 'code' => 'CLI-OC', 'legal_name' => 'Cliente OC', 'tax_id' => '76.123.456-7']);
+        $currency = Currency::query()->create(['company_id' => $company->id, 'code' => 'CLP', 'name' => 'Peso chileno', 'symbol' => '$', 'minor_units' => 0, 'active' => true]);
+        $term = PaymentTerm::query()->create(['company_id' => $company->id, 'code' => '30D', 'name' => '30 días', 'days' => 30, 'active' => true]);
+        $hourly = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'POR_HORA', 'name' => 'Por Hora', 'active' => true]);
+        $status = RecordStatus::query()->create(['company_id' => $company->id, 'domain' => 'project', 'code' => 'draft', 'name' => 'Borrador', 'active' => true]);
+        $billing = RecordStatus::query()->create(['company_id' => $company->id, 'domain' => 'billing', 'code' => 'pending', 'name' => 'Pendiente', 'active' => true]);
+        LegalParameter::query()->create(['company_id' => $company->id, 'parameter_code' => 'IVA', 'parameter_name' => 'IVA', 'valid_from' => '2026-01-01', 'value' => 0.19, 'unit' => '%', 'active' => true]);
+
+        return [$company, $admin, $client, $currency, $term, $hourly, $status, $billing];
+    }
+
+    private function responsePayload(): array
+    {
+        $fields = ['document_type' => 'PURCHASE_ORDER', 'purchase_order_number' => 'OC-100', 'buyer_name' => 'Cliente OC', 'buyer_tax_id' => '76.123.456-7', 'issue_date' => '2026-09-27', 'service_description' => 'Servicio OC QA', 'currency_code' => 'CLP', 'net_amount' => 125000, 'vat_amount' => 23750, 'total_amount' => 148750, 'payment_terms_days' => 30, 'payment_terms_text' => '30 días', 'service_start_date' => null, 'service_end_date' => null];
+        return ['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => json_encode($fields + ['warnings' => [], 'confidence' => array_fill_keys(array_keys($fields), 1), 'evidence' => array_fill_keys(array_keys($fields), null)], JSON_THROW_ON_ERROR)]]]]];
+    }
+}

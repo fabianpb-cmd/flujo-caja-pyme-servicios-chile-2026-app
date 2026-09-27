@@ -13,6 +13,7 @@ use App\Models\Person;
 use App\Models\PayrollRecord;
 use App\Models\Project;
 use App\Models\ProjectAssignment;
+use App\Models\ProjectSourceDocument;
 use App\Models\SalesDocument;
 use App\Models\TimeEntry;
 use App\Policies\CompanyOwnedPolicy;
@@ -30,6 +31,7 @@ use App\Services\PayrollService;
 use App\Services\ProjectCommitmentService;
 use App\Services\ProjectFinancialCockpitService;
 use App\Services\ProjectHoursCapacityService;
+use App\Services\PurchaseOrderProjectImportService;
 use App\Services\SalesPrefacturationService;
 use App\Services\SalesDocumentService;
 use App\Services\ReceivablesService;
@@ -73,6 +75,7 @@ class OperationalCrudController extends Controller
         private readonly BillingStrategyService $billingStrategies,
         private readonly SalesDocumentService $salesDocuments,
         private readonly UfCsvImportService $ufImports,
+        private readonly PurchaseOrderProjectImportService $purchaseOrderImports,
     ) {
     }
 
@@ -226,6 +229,20 @@ class OperationalCrudController extends Controller
         }
 
         $validated = $request->validated();
+        $ocImport = null;
+        if ($resource === 'projects' && filled($validated['oc_import_token'] ?? null)) {
+            try {
+                $ocImport = $this->purchaseOrderImports->sessionState(
+                    (array) $request->session()->get('project_oc_imports', []),
+                    (string) $validated['oc_import_token'],
+                    (int) $request->user()->company_id,
+                    $request->user(),
+                );
+            } catch (DomainException $exception) {
+                return back()->withInput()->withErrors(['oc_import' => $exception->getMessage()]);
+            }
+        }
+        unset($validated['oc_import_token']);
         try {
             $this->assertManualSalesDocumentAllowed($request, $resource, $validated);
         } catch (DomainException $exception) {
@@ -251,7 +268,7 @@ class OperationalCrudController extends Controller
         } else {
             try {
                 $billingRows = $resource === 'projects' ? $request->input('billing_milestones', []) : [];
-                $model = DB::transaction(function () use ($config, $data, $billingRows) {
+                $model = DB::transaction(function () use ($config, $data, $billingRows, $ocImport, $request) {
                     $model = MassAssignment::create($config['model'], $data);
 
                     if ($model instanceof Project) {
@@ -259,6 +276,9 @@ class OperationalCrudController extends Controller
                         $this->projectHoursCapacity->assertExistingConsumptionWithinCapacity($model);
                         if ($this->billingStrategies->forProject($model) === BillingStrategyService::CLOSED_PROJECT) {
                             $this->billingStrategies->syncMilestones($model, $billingRows);
+                        }
+                        if ($ocImport !== null) {
+                            $this->purchaseOrderImports->attach($ocImport, $model, $request->user());
                         }
                     }
 
@@ -269,14 +289,84 @@ class OperationalCrudController extends Controller
                     return $model;
                 });
             } catch (DomainException $exception) {
-                return back()->withInput()->withErrors(['payroll' => $exception->getMessage()]);
+                return back()->withInput()->withErrors([$resource === 'projects' ? 'oc_import' : 'payroll' => $exception->getMessage()]);
             }
 
             $this->refreshDerivedState($model);
             $this->audit->record('operational.created', $model->refresh(), $request->user());
+            if ($ocImport !== null) {
+                $imports = (array) $request->session()->get('project_oc_imports', []);
+                unset($imports[$ocImport['token']]);
+                $request->session()->put('project_oc_imports', $imports);
+            }
         }
 
         return redirect()->route('operational.index', $resource)->with('status', 'Registro creado.');
+    }
+
+    public function createProjectFromPurchaseOrder(Request $request): View
+    {
+        $config = $this->config('projects');
+        $this->authorizeResource($request, $config, 'create');
+        $token = (string) $request->input('token');
+        $state = null;
+        $matches = null;
+        $item = new Project();
+        $item->sales_currency_id = $this->baseCurrencyId($request->user()->company_id);
+        if ($token !== '') {
+            try {
+                $state = $this->purchaseOrderImports->sessionState((array) $request->session()->get('project_oc_imports', []), $token, (int) $request->user()->company_id, $request->user());
+                $matches = $this->purchaseOrderImports->matches((int) $request->user()->company_id, $state['extracted']);
+                $item->forceFill($this->purchaseOrderImports->defaults($state, $matches));
+            } catch (DomainException $exception) {
+                return view('operational.project-purchase-order', [
+                    'config' => $config,
+                    'item' => $item,
+                    'options' => $this->options($config, $request, $item),
+                    'codeMeta' => $this->codeMeta($config['model']),
+                    'token' => $token,
+                    'state' => null,
+                    'matches' => null,
+                ])->withErrors(['oc_import' => $exception->getMessage()]);
+            }
+        }
+
+        return view('operational.project-purchase-order', [
+            'config' => $config,
+            'item' => $item,
+            'options' => $this->options($config, $request, $item),
+            'codeMeta' => $this->codeMeta($config['model']),
+            'token' => $token,
+            'state' => $state,
+            'matches' => $matches,
+        ]);
+    }
+
+    public function analyzeProjectPurchaseOrder(Request $request): RedirectResponse
+    {
+        $config = $this->config('projects');
+        $this->authorizeResource($request, $config, 'create');
+        $request->validate(['purchase_order' => ['required', 'file', 'max:10240']]);
+        try {
+            $state = $this->purchaseOrderImports->analyze((int) $request->user()->company_id, $request->user(), $request->file('purchase_order'));
+        } catch (DomainException $exception) {
+            return back()->withErrors(['purchase_order' => $exception->getMessage()]);
+        }
+        $imports = (array) $request->session()->get('project_oc_imports', []);
+        $imports[$state['token']] = $state;
+        $request->session()->put('project_oc_imports', $imports);
+
+        return redirect()->route('projects.from-purchase-order', ['token' => $state['token']]);
+    }
+
+    public function downloadProjectSourceDocument(Request $request, Project $project, ProjectSourceDocument $sourceDocument)
+    {
+        $config = $this->config('projects');
+        $this->authorizeResource($request, $config, 'view', $project);
+        abort_unless((int) $project->company_id === (int) $request->user()->company_id && (int) $sourceDocument->company_id === (int) $project->company_id && (int) $sourceDocument->project_id === (int) $project->id, 404);
+        abort_unless(\Illuminate\Support\Facades\Storage::disk('local')->exists($sourceDocument->storage_path), 404);
+
+        return \Illuminate\Support\Facades\Storage::disk('local')->download($sourceDocument->storage_path, $sourceDocument->original_filename, ['Content-Type' => $sourceDocument->mime_type]);
     }
 
     public function show(Request $request, string $resource, int $record): View

@@ -25,6 +25,9 @@
             <input class="form-control" type="search" name="q" value="{{ $search ?? '' }}" placeholder="Buscar">
             <button class="btn btn-outline-secondary" type="submit">Filtrar</button>
         </form>
+        @if ($resource === 'projects')
+            <a class="btn btn-outline-primary" href="{{ route('projects.from-purchase-order') }}">Crear desde OC</a>
+        @endif
         <a class="btn btn-primary" href="{{ route('operational.create', $resource) }}">Nuevo</a>
     </div>
 </div>

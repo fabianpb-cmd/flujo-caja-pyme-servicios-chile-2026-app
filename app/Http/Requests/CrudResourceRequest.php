@@ -72,6 +72,10 @@ class CrudResourceRequest extends FormRequest
             $rules['sale_net'][] = 'decimal:0,'.$this->moneyMinorUnits($currency);
         }
 
+        if ($resource === 'projects') {
+            $rules['oc_import_token'] = ['nullable', 'string', 'max:128'];
+        }
+
         if ($resource === 'time-entries') {
             $rules['entry_date'] = ['nullable', 'date'];
             $rules['hours_worked'] = ['nullable', 'numeric', 'gt:0', 'max:24'];

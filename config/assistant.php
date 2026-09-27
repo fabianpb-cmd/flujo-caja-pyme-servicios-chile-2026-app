@@ -11,4 +11,6 @@ return [
     'max_output_tokens' => (int) env('AI_ASSISTANT_MAX_OUTPUT_TOKENS', 600),
     'per_minute' => (int) env('AI_ASSISTANT_PER_MINUTE', 10),
     'per_day' => (int) env('AI_ASSISTANT_PER_DAY', 200),
+    'purchase_order_per_minute' => (int) env('AI_PURCHASE_ORDER_PER_MINUTE', 3),
+    'purchase_order_per_day' => (int) env('AI_PURCHASE_ORDER_PER_DAY', 50),
 ];

@@ -85,6 +85,9 @@ Route::middleware(['auth', 'absolute.session', 'two.factor.required', 'admin'])-
 });
 
 Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->group(function (): void {
+    Route::get('/operacion/projects/crear-desde-oc', [OperationalCrudController::class, 'createProjectFromPurchaseOrder'])->name('projects.from-purchase-order');
+    Route::post('/operacion/projects/crear-desde-oc/analizar', [OperationalCrudController::class, 'analyzeProjectPurchaseOrder'])->name('projects.from-purchase-order.analyze');
+    Route::get('/operacion/projects/{project}/documentos-origen/{sourceDocument}/descargar', [OperationalCrudController::class, 'downloadProjectSourceDocument'])->name('projects.source-documents.download');
     Route::post('/proyectos/{project}/hitos', [ProjectBillingMilestoneController::class, 'store'])->name('projects.milestones.store');
     Route::put('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'update'])->name('projects.milestones.update');
     Route::delete('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'destroy'])->name('projects.milestones.destroy');

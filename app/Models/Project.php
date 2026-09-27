@@ -94,6 +94,11 @@ class Project extends Model
         return $this->hasMany(ProjectBillingMilestone::class)->orderBy('sequence');
     }
 
+    public function sourceDocuments(): HasMany
+    {
+        return $this->hasMany(ProjectSourceDocument::class);
+    }
+
     public function getSalesCurrencyDisplayCurrencyAttribute(): mixed
     {
         return $this->salesCurrency ?: 'CLP';
