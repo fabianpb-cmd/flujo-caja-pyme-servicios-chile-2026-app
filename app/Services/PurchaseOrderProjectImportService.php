@@ -29,11 +29,17 @@ class PurchaseOrderProjectImportService
 
     public function analyze(int $companyId, User $user, UploadedFile $file): array
     {
+        $this->cleanupExpiredTemporaryFiles();
         $this->validatePdf($file);
         $this->rateLimit($user);
         $content = file_get_contents($file->getRealPath());
         if ($content === false) {
             throw new DomainException('No se pudo leer el PDF de la OC.');
+        }
+
+        $sha256 = hash('sha256', $content);
+        if (ProjectSourceDocument::query()->forCompany($companyId)->where('sha256', $sha256)->exists()) {
+            throw new DomainException('Esta OC ya está asociada a un proyecto.');
         }
 
         $token = Str::random(64);
@@ -47,12 +53,6 @@ class PurchaseOrderProjectImportService
         } catch (\Throwable $exception) {
             Storage::disk('local')->delete($path);
             throw $exception;
-        }
-
-        $sha256 = hash('sha256', $content);
-        if (ProjectSourceDocument::query()->forCompany($companyId)->where('sha256', $sha256)->exists()) {
-            Storage::disk('local')->delete($path);
-            throw new DomainException('Esta OC ya está asociada a un proyecto.');
         }
 
         return [
@@ -191,6 +191,18 @@ class PurchaseOrderProjectImportService
         }
         RateLimiter::hit($minute, 60);
         RateLimiter::hit($day, 86400);
+    }
+
+    private function cleanupExpiredTemporaryFiles(): void
+    {
+        $disk = Storage::disk('local');
+        $cutoff = now()->subHours(2)->timestamp;
+
+        foreach ($disk->allFiles('project-oc/tmp') as $path) {
+            if ($disk->lastModified($path) < $cutoff) {
+                $disk->delete($path);
+            }
+        }
     }
 
     private function normalizeName(string $value): string

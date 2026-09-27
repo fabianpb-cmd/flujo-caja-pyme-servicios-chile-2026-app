@@ -67,6 +67,21 @@ class ProjectPurchaseOrderImportTest extends TestCase
         $this->assertSame('PURCHASE_ORDER', $document->document_type);
         $this->assertSame('OC-100', $document->document_number);
         $this->assertSame($company->id, $document->company_id);
+
+        $show = $this->actingAs($admin)->get(route('operational.show', ['projects', $project->id]));
+        $show->assertOk()->assertSee('Documento origen')->assertSee('oc-100.pdf')->assertSee('Descargar OC');
+        $this->actingAs($admin)->get(route('projects.source-documents.download', [$project, $document]))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+
+        $otherCompany = Company::query()->create(['code' => 'CMP-OC-X', 'name' => 'Otra empresa', 'status' => 'active']);
+        $otherUser = User::query()->create(['company_id' => $otherCompany->id, 'name' => 'Otro', 'email' => 'other-'.$otherCompany->id.'@oc.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
+        $this->actingAs($otherUser)->get(route('projects.source-documents.download', [$project, $document]))->assertForbidden();
+
+        $this->actingAs($admin)->delete(route('operational.destroy', ['projects', $project->id]))
+            ->assertRedirect(route('operational.show', ['projects', $project->id]))
+            ->assertSessionHasErrors('dependencies');
+        $this->assertDatabaseHas('projects', ['id' => $project->id]);
     }
 
     public function test_duplicate_oc_and_cross_tenant_preview_are_rejected_without_creating_a_project(): void
@@ -89,7 +104,9 @@ class ProjectPurchaseOrderImportTest extends TestCase
             'document_type' => 'PURCHASE_ORDER', 'original_filename' => 'old.pdf', 'storage_path' => 'project-source-documents/old.pdf', 'mime_type' => 'application/pdf', 'file_size' => strlen($content), 'sha256' => hash('sha256', $content), 'created_by' => $admin->id,
         ]);
         $duplicate = UploadedFile::fake()->createWithContent('duplicate.pdf', $content);
+        Http::fake();
         $this->actingAs($admin)->from(route('projects.from-purchase-order'))->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $duplicate])->assertSessionHasErrors('purchase_order');
+        Http::assertNothingSent();
         $this->assertSame(1, Project::query()->where('company_id', $company->id)->count());
     }
 
@@ -101,6 +118,15 @@ class ProjectPurchaseOrderImportTest extends TestCase
 
         $this->actingAs($admin)->from(route('projects.from-purchase-order'))->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file])->assertSessionHasErrors('purchase_order');
         Http::assertNothingSent();
+    }
+
+    public function test_source_document_migration_uses_mysql_safe_index_name(): void
+    {
+        $migration = file_get_contents(database_path('migrations/2026_09_27_000100_create_project_source_documents_table.php'));
+
+        $this->assertNotFalse($migration);
+        $this->assertStringContainsString("'psd_company_project_type_idx'", $migration);
+        $this->assertLessThanOrEqual(64, strlen('psd_company_project_type_idx'));
     }
 
     private function fixtures(): array

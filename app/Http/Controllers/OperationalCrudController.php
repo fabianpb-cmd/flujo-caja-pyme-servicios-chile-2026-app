@@ -374,6 +374,9 @@ class OperationalCrudController extends Controller
         $config = $this->config($resource);
         $item = $config['model']::query()->with($this->relationNames($config))->findOrFail($record);
         $this->authorizeResource($request, $config, 'view', $item);
+        if ($resource === 'projects' && $item instanceof Project) {
+            $item->loadMissing('sourceDocuments');
+        }
 
         $payrollHourlyCost = $resource === 'payroll-records' ? $this->hourlyCosts->forPayroll($item) : null;
         $payrollCalculationBreakdown = $resource === 'payroll-records' ? $this->payroll->explain($item) : null;

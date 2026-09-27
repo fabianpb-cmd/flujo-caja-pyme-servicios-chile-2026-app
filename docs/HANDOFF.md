@@ -2,6 +2,19 @@
 
 Última actualización: 2026-09-07.
 
+## Importación de proyectos desde OC PDF — hardening pre-deploy
+
+- Base funcional: `1dba03be013f442edf1870433bb81972bad1cb97`.
+- Commit de hardening: pendiente de crear tras QA; no desplegar todavía.
+- Arquitectura: `PurchaseOrderProjectImportService` analiza y mantiene un estado temporal de sesión; `OpenAiPurchaseOrderExtractor` solo extrae datos explícitos; `OperationalCrudController` crea el Proyecto por el pipeline normal y adjunta después el documento.
+- Rutas: `projects.from-purchase-order`, `projects.from-purchase-order.analyze` y `projects.source-documents.download`.
+- Tabla: `project_source_documents`, con pertenencia a empresa/proyecto, SHA-256 único por empresa y payload extraído privado.
+- Storage: PDFs temporales en `project-oc/tmp/`; documentos finales en `project-source-documents/`, ambos en el disco privado local.
+- OpenAI: la extracción usa `input_file` con el contenido PDF; no se envían catálogos ni credenciales.
+- Knowledge: `PROJECT-OC-IMPORT-001` está vigente en `config/assistant_knowledge.php`.
+- Tests: `ProjectPurchaseOrderImportTest` y regresiones dirigidas deben pasar antes de publicar.
+- Deploy: pendiente. Migración pendiente de ejecutar en el entorno objetivo; no se ejecutó SQL en producción.
+
 ## ESTADO ACTUAL AUTORITATIVO — 2026-09-13
 
 Esta sección representa el estado vigente de producción y supera cualquier bloque histórico anterior que indique trabajo pendiente, pausado o no desplegado. La historia posterior se conserva como registro histórico.

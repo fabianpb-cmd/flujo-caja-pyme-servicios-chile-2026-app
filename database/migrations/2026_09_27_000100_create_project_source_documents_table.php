@@ -24,7 +24,7 @@ return new class extends Migration
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->index(['company_id', 'project_id', 'document_type']);
+            $table->index(['company_id', 'project_id', 'document_type'], 'psd_company_project_type_idx');
             $table->unique(['company_id', 'sha256']);
         });
     }

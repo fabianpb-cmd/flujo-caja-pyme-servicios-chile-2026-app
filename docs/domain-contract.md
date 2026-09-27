@@ -131,3 +131,13 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 - No se documenta límite de horas a nivel Proyecto porque no existe campo confirmado para ello.
 - No se documenta una equivalencia entre valor HH de costeo, tarifa de remuneración y costo HH real.
 - No se documenta ninguna limpieza retroactiva global de datos históricos; solo reclasificación segura cuando un valor coincide inequívocamente con una fuente automática conocida.
+
+## Creación de Proyecto desde OC
+
+- La orden de compra PDF se conserva inicialmente en almacenamiento privado temporal.
+- La IA solo extrae información explícita del documento; no elige catálogos ni inventa datos.
+- La revisión humana es obligatoria antes de crear el Proyecto.
+- La creación usa el pipeline normal de Proyectos y sus validaciones vigentes.
+- Una vez creado correctamente, el documento origen queda asociado al Proyecto.
+- La descarga del documento requiere autenticación y control de pertenencia corporativa.
+- Una OC ya asociada se bloquea por su hash SHA-256 antes de volver a consultar la IA.
