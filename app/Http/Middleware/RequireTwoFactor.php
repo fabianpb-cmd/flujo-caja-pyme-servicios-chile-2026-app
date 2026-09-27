@@ -7,7 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class RequireAdminTwoFactor
+class RequireTwoFactor
 {
     private const ALLOWED_ROUTE_NAMES = [
         'account.security',
@@ -24,13 +24,13 @@ class RequireAdminTwoFactor
 
     public function handle(Request $request, Closure $next): Response|RedirectResponse
     {
-        if (app()->runningUnitTests() && ! config('fortify.enforce_admin_two_factor_in_tests', false)) {
+        if (app()->runningUnitTests() && ! config('fortify.enforce_two_factor_in_tests', false)) {
             return $next($request);
         }
 
         $user = $request->user();
 
-        if (! $user || $user->role !== 'admin' || $user->hasEnabledTwoFactorAuthentication()) {
+        if (! $user || $user->hasEnabledTwoFactorAuthentication()) {
             return $next($request);
         }
 

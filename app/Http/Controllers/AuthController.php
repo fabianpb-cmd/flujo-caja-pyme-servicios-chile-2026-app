@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Services\SecurityEventLogger;
 use App\Support\Security\AuthenticationRateLimiter;
-use Illuminate\Support\Str;
+use App\Support\Security\CorporateEmailDomain;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -42,6 +42,8 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
         ]);
+        $credentials['email'] = CorporateEmailDomain::normalize($credentials['email']);
+        $request->merge(['email' => $credentials['email']]);
 
         if ($this->rateLimiter->loginIsLimited($request)) {
             $seconds = $this->rateLimiter->loginAvailableIn($request);
@@ -55,8 +57,17 @@ class AuthController extends Controller
                 ], 429);
         }
 
+        if (! CorporateEmailDomain::isAllowed($credentials['email'])) {
+            $this->rateLimiter->hitLogin($request);
+            $this->securityEvents->record('SECURITY_LOGIN_DOMAIN_REJECTED', $request, email: $credentials['email']);
+
+            throw ValidationException::withMessages([
+                'email' => __('Las credenciales no coinciden con nuestros registros.'),
+            ]);
+        }
+
         $user = User::query()
-            ->whereRaw('LOWER(email) = ?', [Str::lower(trim((string) $credentials['email']))])
+            ->whereRaw('LOWER(email) = ?', [$credentials['email']])
             ->where('active', true)
             ->first();
 
@@ -86,7 +97,7 @@ class AuthController extends Controller
         $request->session()->put('auth_session_started_at', now()->timestamp);
         $this->securityEvents->record('SECURITY_LOGIN_SUCCESS', $request, $user);
 
-        if ($user->role === 'admin' && ! $user->hasEnabledTwoFactorAuthentication()) {
+        if (! $user->hasEnabledTwoFactorAuthentication()) {
             return redirect()->route('account.security');
         }
 

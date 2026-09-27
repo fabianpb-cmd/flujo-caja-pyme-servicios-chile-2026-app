@@ -17,6 +17,7 @@ use App\Models\ProjectAssignment;
 use App\Models\RecordStatus;
 use App\Models\User;
 use App\Services\CatalogService;
+use App\Http\Middleware\RequireTwoFactor;
 use Illuminate\Database\Eloquent\MassAssignmentException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route;
@@ -361,14 +362,14 @@ class SecurityGateTest extends TestCase
         User::query()->create([
             'company_id' => $company->id,
             'name' => 'Inactivo',
-            'email' => 'inactive@test.local',
+            'email' => 'inactive@tdatconsulting.cl',
             'password' => 'password',
             'role' => 'user',
             'active' => false,
         ]);
 
         $inactive = $this->post(route('login.attempt'), [
-            'email' => 'inactive@test.local',
+            'email' => 'inactive@tdatconsulting.cl',
             'password' => 'password',
         ]);
         $inactive->assertSessionHasErrors('email');
@@ -376,13 +377,13 @@ class SecurityGateTest extends TestCase
 
         foreach (range(1, 5) as $attempt) {
             $this->post(route('login.attempt'), [
-                'email' => 'admin-auth@test.local',
+                'email' => 'admin-auth@tdatconsulting.cl',
                 'password' => 'incorrecta',
             ])->assertSessionHasErrors('email');
         }
 
         $locked = $this->post(route('login.attempt'), [
-            'email' => 'admin-auth@test.local',
+            'email' => 'admin-auth@tdatconsulting.cl',
             'password' => 'incorrecta',
         ]);
 
@@ -390,7 +391,35 @@ class SecurityGateTest extends TestCase
         $locked->assertSee('Demasiados intentos de acceso', false);
     }
 
-    public function test_login_initializes_absolute_session_timestamp_and_ignores_remember_me(): void
+    public function test_login_normalizes_corporate_email_and_rejects_other_domains_generically(): void
+    {
+        [$company, $user] = $this->companyWithUser('AUTH-DOMAIN', 'user');
+        $invalid = User::query()->create([
+            'company_id' => $company->id,
+            'name' => 'Usuario No Corporativo',
+            'email' => 'usuario@gmail.com',
+            'password' => 'password',
+            'role' => 'user',
+            'active' => true,
+        ]);
+
+        $this->post(route('login.attempt'), [
+            'email' => mb_strtoupper($user->email),
+            'password' => 'password',
+        ])->assertRedirect(route('account.security'));
+        $this->assertAuthenticatedAs($user);
+        $this->post(route('logout'));
+
+        $response = $this->post(route('login.attempt'), [
+            'email' => $invalid->email,
+            'password' => 'password',
+        ]);
+
+        $response->assertSessionHasErrors('email');
+        $this->assertGuest();
+    }
+
+    public function test_login_without_two_factor_initializes_absolute_session_timestamp_and_redirects_to_security(): void
     {
         Carbon::setTestNow('2026-08-13 10:00:00');
         config()->set('session.absolute_lifetime', 480);
@@ -403,7 +432,7 @@ class SecurityGateTest extends TestCase
             'remember' => '1',
         ]);
 
-        $response->assertRedirect(route('dashboard'));
+        $response->assertRedirect(route('account.security'));
         $response->assertSessionHas('auth_session_started_at');
         $this->assertAuthenticatedAs($user);
 
@@ -609,7 +638,7 @@ class SecurityGateTest extends TestCase
 
     public function test_admin_without_two_factor_is_redirected_to_security_after_login_and_cannot_open_dashboard(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $admin] = $this->companyWithUser('2FA-ADMIN', 'admin');
 
@@ -624,19 +653,19 @@ class SecurityGateTest extends TestCase
         $this->actingAs($admin)->get(route('dashboard'))->assertRedirect(route('account.security'));
     }
 
-    public function test_admin_without_two_factor_can_access_enrollment_routes_without_redirect_loop(): void
+    public function test_users_without_two_factor_can_access_enrollment_routes_without_redirect_loop(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
-        [$company, $admin] = $this->companyWithUser('2FA-ENROLL', 'admin');
+        [$company, $user] = $this->companyWithUser('2FA-ENROLL', 'user');
 
-        $this->actingAs($admin)->get(route('account.security'))->assertOk();
-        $this->actingAs($admin)->get(route('password.confirm'))->assertOk();
+        $this->actingAs($user)->get(route('account.security'))->assertOk();
+        $this->actingAs($user)->get(route('password.confirm'))->assertOk();
     }
 
     public function test_admin_with_confirmed_two_factor_is_redirected_to_challenge_after_password_login(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $admin] = $this->companyWithUser('2FA-CHAL', 'admin');
         $this->enableConfirmedTwoFactor($admin);
@@ -652,7 +681,7 @@ class SecurityGateTest extends TestCase
 
     public function test_admin_can_complete_two_factor_challenge_with_valid_totp_code(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $admin] = $this->companyWithUser('2FA-TOTP', 'admin');
         $this->enableConfirmedTwoFactor($admin);
@@ -672,7 +701,7 @@ class SecurityGateTest extends TestCase
 
     public function test_invalid_two_factor_code_does_not_authenticate_admin(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $admin] = $this->companyWithUser('2FA-BAD', 'admin');
         $this->enableConfirmedTwoFactor($admin);
@@ -693,7 +722,7 @@ class SecurityGateTest extends TestCase
 
     public function test_recovery_code_allows_access_once_and_cannot_be_reused(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $admin] = $this->companyWithUser('2FA-REC', 'admin');
         $this->enableConfirmedTwoFactor($admin);
@@ -725,9 +754,9 @@ class SecurityGateTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_non_admin_user_login_flow_remains_unchanged_without_two_factor(): void
+    public function test_user_without_two_factor_is_redirected_to_security_and_cannot_open_dashboard(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $user] = $this->companyWithUser('2FA-USER', 'user');
 
@@ -736,13 +765,44 @@ class SecurityGateTest extends TestCase
             'password' => 'password',
         ]);
 
-        $response->assertRedirect(route('dashboard'));
+        $response->assertRedirect(route('account.security'));
         $this->assertAuthenticatedAs($user);
+        $this->actingAs($user)->get(route('dashboard'))->assertRedirect(route('account.security'));
+    }
+
+    public function test_user_with_confirmed_two_factor_is_redirected_to_challenge_after_password_login(): void
+    {
+        $this->enableTwoFactorEnforcement();
+        [$company, $user] = $this->companyWithUser('2FA-USER-CHAL', 'user');
+        $this->enableConfirmedTwoFactor($user);
+
+        $this->post(route('login.attempt'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(route('two-factor.login'));
+
+        $this->assertGuest();
+    }
+
+    public function test_user_with_confirmed_two_factor_is_allowed_through_dashboard_gate(): void
+    {
+        $this->enableTwoFactorEnforcement();
+        [$company, $user] = $this->companyWithUser('2FA-USER-DASH', 'user');
+        $this->enableConfirmedTwoFactor($user);
+
+        $request = \Illuminate\Http\Request::create('/dashboard');
+        $request->setUserResolver(fn () => $user->fresh());
+        $route = new Route(['GET'], '/dashboard', fn () => response('dashboard'));
+        $route->name('dashboard');
+        $request->setRouteResolver(fn () => $route);
+
+        $response = app(RequireTwoFactor::class)->handle($request, fn () => response('dashboard'));
+        $this->assertSame('dashboard', $response->getContent());
     }
 
     public function test_admin_disabling_two_factor_is_blocked_again_from_operational_routes(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $admin] = $this->companyWithUser('2FA-DIS', 'admin');
         $this->enableConfirmedTwoFactor($admin);
@@ -757,7 +817,7 @@ class SecurityGateTest extends TestCase
 
     public function test_two_factor_secret_fields_remain_hidden_from_user_payloads(): void
     {
-        $this->enableAdminTwoFactorEnforcement();
+        $this->enableTwoFactorEnforcement();
 
         [$company, $admin] = $this->companyWithUser('2FA-HIDE', 'admin');
         $this->enableConfirmedTwoFactor($admin);
@@ -781,9 +841,9 @@ class SecurityGateTest extends TestCase
         app()->instance('mass_assignment.untrusted_request', true);
     }
 
-    private function enableAdminTwoFactorEnforcement(): void
+    private function enableTwoFactorEnforcement(): void
     {
-        config()->set('fortify.enforce_admin_two_factor_in_tests', true);
+        config()->set('fortify.enforce_two_factor_in_tests', true);
     }
 
     private function enableConfirmedTwoFactor(User $user): void
@@ -821,7 +881,7 @@ class SecurityGateTest extends TestCase
         $user = User::query()->create([
             'company_id' => $company->id,
             'name' => 'Usuario '.$suffix,
-            'email' => 'admin-'.strtolower($suffix).'@test.local',
+            'email' => 'admin-'.strtolower($suffix).'@tdatconsulting.cl',
             'password' => 'password',
             'role' => $role,
             'active' => true,

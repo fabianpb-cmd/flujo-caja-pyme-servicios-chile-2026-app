@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\EnforceAbsoluteSessionLifetime;
-use App\Http\Middleware\RequireAdminTwoFactor;
+use App\Http\Middleware\RequireTwoFactor;
 use App\Http\Middleware\SensitiveNoStoreHeaders;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -48,7 +48,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'absolute.session' => EnforceAbsoluteSessionLifetime::class,
             'admin' => EnsureAdmin::class,
-            'admin.2fa' => RequireAdminTwoFactor::class,
+            'two.factor.required' => RequireTwoFactor::class,
             'sensitive.no-store' => SensitiveNoStoreHeaders::class,
         ]);
     })

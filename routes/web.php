@@ -40,10 +40,10 @@ Route::middleware(['auth', 'absolute.session'])->group(function (): void {
 });
 
 Route::post('/ayudante/preguntar', [AssistantController::class, 'ask'])
-    ->middleware(['auth', 'absolute.session', 'admin.2fa', 'sensitive.no-store'])
+    ->middleware(['auth', 'absolute.session', 'two.factor.required', 'sensitive.no-store'])
     ->name('assistant.ask');
 
-Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(ManagementController::class)->group(function (): void {
+Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->controller(ManagementController::class)->group(function (): void {
     Route::get('/dashboard', 'dashboard')->name('dashboard');
     Route::get('/gestion/obligaciones', 'obligations')->name('management.obligations');
     Route::get('/gestion/agenda-financiera', 'financialAgenda')->name('management.financial-agenda');
@@ -52,19 +52,19 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(Managem
     Route::get('/gestion/rentabilidad', 'profitability')->name('management.profitability');
 });
 
-Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(BankReconciliationController::class)->group(function (): void {
+Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->controller(BankReconciliationController::class)->group(function (): void {
     Route::get('/tesoreria/conciliacion-bancaria', 'index')->name('bank-reconciliation.index');
     Route::post('/tesoreria/conciliacion-bancaria', 'store')->name('bank-reconciliation.store');
     Route::post('/tesoreria/conciliacion-bancaria/{reconciliation}/conciliar', 'reconcile')->name('bank-reconciliation.reconcile');
 });
 
-Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(BankRegularizationController::class)->group(function (): void {
+Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->controller(BankRegularizationController::class)->group(function (): void {
     Route::get('/tesoreria/regularizacion-bancaria', 'index')->name('bank-regularization.index');
     Route::post('/tesoreria/regularizacion-bancaria/asignar', 'assign')->name('bank-regularization.assign');
     Route::post('/tesoreria/regularizacion-bancaria/{assignment}/revertir', 'reverse')->name('bank-regularization.reverse');
 });
 
-Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(BankStatementController::class)->group(function (): void {
+Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->controller(BankStatementController::class)->group(function (): void {
     Route::get('/tesoreria/cartolas-bancarias', 'index')->name('bank-statements.index');
     Route::post('/tesoreria/cartolas-bancarias/importar', 'import')->name('bank-statements.import');
     Route::post('/tesoreria/cartolas-bancarias/matching', 'match')->name('bank-statements.match');
@@ -72,7 +72,7 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->controller(BankSta
     Route::post('/tesoreria/cartolas-bancarias/lineas/{line}/ignorar', 'ignore')->name('bank-statements.ignore');
 });
 
-Route::middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])->prefix('administracion/usuarios')->name('admin.users.')->controller(UserManagementController::class)->group(function (): void {
+Route::middleware(['auth', 'absolute.session', 'two.factor.required', 'admin'])->prefix('administracion/usuarios')->name('admin.users.')->controller(UserManagementController::class)->group(function (): void {
     Route::get('/', 'index')->name('index');
     Route::get('/crear', 'create')->name('create');
     Route::post('/', 'store')->name('store');
@@ -84,7 +84,7 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])->prefix('a
     Route::delete('/{user}/two-factor', 'resetTwoFactor')->middleware('sensitive.no-store')->name('two-factor.reset');
 });
 
-Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->group(function (): void {
+Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->group(function (): void {
     Route::post('/proyectos/{project}/hitos', [ProjectBillingMilestoneController::class, 'store'])->name('projects.milestones.store');
     Route::put('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'update'])->name('projects.milestones.update');
     Route::delete('/proyectos/{project}/hitos/{milestone}', [ProjectBillingMilestoneController::class, 'destroy'])->name('projects.milestones.destroy');
@@ -114,7 +114,7 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->group(function ():
     })->name('payables.index');
 });
 
-Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->prefix('operacion/{resource}')->name('operational.')->controller(OperationalCrudController::class)->group(function (): void {
+Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->prefix('operacion/{resource}')->name('operational.')->controller(OperationalCrudController::class)->group(function (): void {
     Route::get('/', 'index')->name('index');
     Route::get('/crear', 'create')->name('create');
     Route::post('/commitment-preview', 'assignmentCommitmentPreview')->name('assignment-commitment-preview');
@@ -130,5 +130,5 @@ Route::middleware(['auth', 'absolute.session', 'admin.2fa'])->prefix('operacion/
 });
 
 Route::post('/operacion/uf-values/import', [OperationalCrudController::class, 'importUf'])
-    ->middleware(['auth', 'absolute.session', 'admin.2fa', 'admin'])
+    ->middleware(['auth', 'absolute.session', 'two.factor.required', 'admin'])
     ->name('operational.uf-values.import');

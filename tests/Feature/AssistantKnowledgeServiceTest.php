@@ -18,7 +18,7 @@ class AssistantKnowledgeServiceTest extends TestCase
     public function test_unknown_question_only_has_global_rules(): void
     {
         $rules = app(AssistantKnowledgeService::class)->select('¿Cuál es la temperatura de Marte?', ['resource' => null, 'focused_field' => null, 'route' => 'dashboard']);
-        $this->assertSame(['GLOBAL-READONLY-001', 'GLOBAL-CATALOG-001', 'GLOBAL-READONLY-002', 'GLOBAL-FLOW-001'], array_column($rules, 'id'));
+        $this->assertSame(['GLOBAL-READONLY-001', 'GLOBAL-CATALOG-001', 'GLOBAL-READONLY-002', 'GLOBAL-FLOW-001', 'GLOBAL-ACCESS-001'], array_column($rules, 'id'));
     }
 
     public function test_screen_keys_retrieve_contextual_rules_without_a_resource(): void

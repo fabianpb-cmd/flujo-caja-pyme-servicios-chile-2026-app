@@ -24,7 +24,7 @@ class SecurityHardeningTest extends TestCase
 
         $this->actingAs($admin)->post(route('admin.users.store'), [
             'name' => 'Passphrase User',
-            'email' => 'passphrase@test.local',
+            'email' => 'passphrase@tdatconsulting.cl',
             'role' => 'user',
             'active' => '1',
             'password' => 'correct horse battery staple',
@@ -34,7 +34,7 @@ class SecurityHardeningTest extends TestCase
         foreach (['corta', str_repeat('a', 129), 'passwordpassword'] as $password) {
             $this->actingAs($admin)->from(route('admin.users.create'))->post(route('admin.users.store'), [
                 'name' => 'Invalid User',
-                'email' => 'invalid-'.md5($password).'@test.local',
+                'email' => 'invalid-'.md5($password).'@tdatconsulting.cl',
                 'role' => 'user',
                 'active' => '1',
                 'password' => $password,
@@ -46,7 +46,7 @@ class SecurityHardeningTest extends TestCase
     public function test_login_rate_limits_email_ip_account_and_ip_without_revealing_account_existence(): void
     {
         $limiter = app(AuthenticationRateLimiter::class);
-        $request = Request::create('/login', 'POST', ['email' => 'unknown@test.local']);
+        $request = Request::create('/login', 'POST', ['email' => 'unknown@tdatconsulting.cl']);
         $request->server->set('REMOTE_ADDR', '203.0.113.10');
 
         foreach (range(1, 5) as $_) {
@@ -54,28 +54,28 @@ class SecurityHardeningTest extends TestCase
         }
 
         $response = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.10'])->post(route('login.attempt'), [
-            'email' => 'unknown@test.local',
+            'email' => 'unknown@tdatconsulting.cl',
             'password' => 'wrong password',
         ]);
 
         $response->assertStatus(429);
         $response->assertSee('Demasiados intentos de acceso.');
 
-        $accountRequest = Request::create('/login', 'POST', ['email' => 'account-limit@test.local']);
+        $accountRequest = Request::create('/login', 'POST', ['email' => 'account-limit@tdatconsulting.cl']);
         $accountRequest->server->set('REMOTE_ADDR', '203.0.113.11');
         foreach (range(1, 20) as $_) {
             $limiter->hitLogin($accountRequest);
         }
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.200'])->post(route('login.attempt'), [
-            'email' => 'account-limit@test.local',
+            'email' => 'account-limit@tdatconsulting.cl',
             'password' => 'wrong password',
         ])->assertStatus(429);
 
         foreach (range(1, 60) as $_) {
-            $limiter->hitLogin(Request::create('/login', 'POST', ['email' => 'different-'.$_.'@test.local'], server: ['REMOTE_ADDR' => '203.0.113.12']));
+            $limiter->hitLogin(Request::create('/login', 'POST', ['email' => 'different-'.$_.'@tdatconsulting.cl'], server: ['REMOTE_ADDR' => '203.0.113.12']));
         }
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.12'])->post(route('login.attempt'), [
-            'email' => 'another@test.local',
+            'email' => 'another@tdatconsulting.cl',
             'password' => 'wrong password',
         ])->assertStatus(429);
     }
@@ -95,7 +95,7 @@ class SecurityHardeningTest extends TestCase
             'password' => 'password',
         ]);
 
-        $response->assertRedirect(route('dashboard'));
+        $response->assertRedirect(route('account.security'));
         $this->assertAuthenticatedAs($user);
         $this->assertNotNull(session('auth_session_started_at'));
     }
@@ -205,7 +205,7 @@ class SecurityHardeningTest extends TestCase
         $user = User::query()->create([
             'company_id' => $company->id,
             'name' => 'Security '.$suffix,
-            'email' => strtolower($suffix).'@security.test',
+            'email' => strtolower($suffix).'@tdatconsulting.cl',
             'password' => 'password',
             'role' => $role,
             'active' => true,

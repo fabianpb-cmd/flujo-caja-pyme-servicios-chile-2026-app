@@ -68,7 +68,7 @@ class UserAdministrationTest extends TestCase
 
         $response = $this->actingAs($admin)->post(route('admin.users.store'), [
             'name' => 'Nuevo Usuario',
-            'email' => 'nuevo-usuario@test.local',
+            'email' => 'nuevo-usuario@tdatconsulting.cl',
             'role' => 'user',
             'active' => '1',
             'company_id' => $otherCompany->id,
@@ -78,10 +78,50 @@ class UserAdministrationTest extends TestCase
 
         $response->assertRedirect(route('admin.users.index'));
 
-        $user = User::query()->where('email', 'nuevo-usuario@test.local')->firstOrFail();
+        $user = User::query()->where('email', 'nuevo-usuario@tdatconsulting.cl')->firstOrFail();
         $this->assertSame($company->id, $user->company_id);
         $this->assertTrue(Hash::check('frase segura para usuarios', $user->password));
         $this->assertNotSame('frase segura para usuarios', $user->password);
+    }
+
+    public function test_user_requests_require_and_normalize_the_corporate_email_domain(): void
+    {
+        [$company, $admin] = $this->companyWithUser('USR-DOMAIN', 'admin');
+        $payload = [
+            'name' => 'Usuario Corporativo',
+            'role' => 'user',
+            'active' => '1',
+            'password' => 'frase segura para usuarios',
+            'password_confirmation' => 'frase segura para usuarios',
+        ];
+
+        $this->actingAs($admin)->post(route('admin.users.store'), $payload + [
+            'email' => 'USUARIO@TDATCONSULTING.CL',
+        ])->assertRedirect(route('admin.users.index'));
+        $this->assertDatabaseHas('users', ['company_id' => $company->id, 'email' => 'usuario@tdatconsulting.cl']);
+
+        foreach (['usuario@gmail.com', 'usuario@tdatconsulting.cl.fake'] as $email) {
+            $this->actingAs($admin)->post(route('admin.users.store'), $payload + ['email' => $email])
+                ->assertSessionHasErrors('email');
+        }
+
+        $user = User::query()->where('email', 'usuario@tdatconsulting.cl')->firstOrFail();
+        $this->actingAs($admin)->put(route('admin.users.update', $user), [
+            'name' => 'Usuario Actualizado',
+            'email' => 'ACTUALIZADO@TDATCONSULTING.CL',
+            'role' => 'user',
+            'active' => '1',
+        ])->assertRedirect(route('admin.users.index'));
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'email' => 'actualizado@tdatconsulting.cl']);
+
+        foreach (['actualizado@gmail.com', 'actualizado@tdatconsulting.cl.fake'] as $email) {
+            $this->actingAs($admin)->put(route('admin.users.update', $user), [
+                'name' => 'Usuario Actualizado',
+                'email' => $email,
+                'role' => 'user',
+                'active' => '1',
+            ])->assertSessionHasErrors('email');
+        }
     }
 
     public function test_admin_can_update_user_but_not_other_company_user(): void
@@ -92,7 +132,7 @@ class UserAdministrationTest extends TestCase
         $user = User::query()->create([
             'company_id' => $company->id,
             'name' => 'Usuario Editable',
-            'email' => 'editable@test.local',
+            'email' => 'editable@tdatconsulting.cl',
             'password' => 'password',
             'role' => 'user',
             'active' => true,
@@ -109,7 +149,7 @@ class UserAdministrationTest extends TestCase
 
         $this->actingAs($admin)->put(route('admin.users.update', $user), [
             'name' => 'Usuario Editado',
-            'email' => 'editable@test.local',
+            'email' => 'editable@tdatconsulting.cl',
             'role' => 'admin',
             'active' => '1',
         ])->assertRedirect(route('admin.users.index'));
@@ -123,7 +163,7 @@ class UserAdministrationTest extends TestCase
         $this->actingAs($admin)->get(route('admin.users.edit', $foreignUser))->assertForbidden();
         $this->actingAs($otherAdmin)->put(route('admin.users.update', $user), [
             'name' => 'Hack',
-            'email' => 'editable@test.local',
+            'email' => 'editable@tdatconsulting.cl',
             'role' => 'user',
             'active' => '1',
         ])->assertForbidden();
@@ -204,7 +244,7 @@ class UserAdministrationTest extends TestCase
         $this->actingAs($admin)->withSession(['_token' => 'token-users'])->post(route('admin.users.store'), [
             '_token' => 'token-users',
             'name' => 'Con Token',
-            'email' => 'con-token@test.local',
+            'email' => 'con-token@tdatconsulting.cl',
             'role' => 'user',
             'active' => '1',
             'password' => 'frase segura para usuarios',
@@ -248,7 +288,7 @@ class UserAdministrationTest extends TestCase
         $user = User::query()->create([
             'company_id' => $company->id,
             'name' => 'Usuario '.$suffix,
-            'email' => 'admin-'.strtolower($suffix).'@test.local',
+            'email' => 'admin-'.strtolower($suffix).'@tdatconsulting.cl',
             'password' => 'password',
             'role' => $role,
             'active' => true,
