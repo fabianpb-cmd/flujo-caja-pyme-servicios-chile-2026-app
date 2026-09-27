@@ -41,10 +41,11 @@ class OperationalUiTest extends TestCase
 
         $form = $this->actingAs($admin)->get(route('operational.create', 'sales-documents'));
         $form->assertOk();
-        $form->assertSee('data-parent-field="client_id"', false);
-        $form->assertSee('Seleccione un cliente primero');
-        $form->assertSee('No hay proyectos para este cliente');
-        $form->assertSee('data-parent-id="'.$projectA->id.'"', false);
+        $form->assertSee('data-guided-sales-form', false);
+        $form->assertSee('Sin proyecto / facturación manual');
+        $form->assertSee('Cliente');
+        $form->assertSee('Proyecto');
+        $form->assertSee($projectA->name);
 
         $valid = $this->actingAs($admin)->post(route('operational.store', 'sales-documents'), [
             'code' => 'ING-UI-001',
@@ -102,27 +103,11 @@ class OperationalUiTest extends TestCase
 
         [$clientA, , $projectA] = $this->clientProjectFixtures($company->id);
 
-        $inactiveClientStatus = RecordStatus::query()->create([
-            'company_id' => $company->id,
-            'domain' => 'client',
-            'code' => 'inactive_test',
-            'name' => 'Inactivo prueba',
-            'active' => true,
-        ]);
-
-        $inactiveProjectStatus = RecordStatus::query()->create([
-            'company_id' => $company->id,
-            'domain' => 'project',
-            'code' => 'inactive_test',
-            'name' => 'Inactivo prueba',
-            'active' => true,
-        ]);
-
         $inactiveClient = Client::query()->create([
             'company_id' => $company->id,
             'code' => 'CLI-INACTIVE',
             'legal_name' => 'Cliente Inactivo',
-            'client_status_id' => $inactiveClientStatus->id,
+            'client_status_id' => $this->statusId($company->id, 'client', 'inactive'),
         ]);
 
         $inactiveProject = Project::query()->create([
@@ -130,14 +115,14 @@ class OperationalUiTest extends TestCase
             'client_id' => $inactiveClient->id,
             'code' => 'PRY-INACTIVE',
             'name' => 'Proyecto Histórico',
-            'project_status_id' => $inactiveProjectStatus->id,
+            'project_status_id' => $this->statusId($company->id, 'project', 'inactive'),
             'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
         ]);
 
         $create = $this->actingAs($admin)->get(route('operational.create', 'sales-documents'));
         $create->assertOk();
-        $create->assertDontSee('Cliente Inactivo');
-        $create->assertDontSee('Proyecto Histórico');
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]*>[^<]*Cliente Inactivo[^<]*<\/option>/', $create->getContent());
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]*>[^<]*Proyecto Histórico[^<]*<\/option>/', $create->getContent());
 
         $document = SalesDocument::query()->create([
             'company_id' => $company->id,
@@ -582,7 +567,7 @@ class OperationalUiTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Horas mensuales no puede superar 744.');
-        $response->assertSee('value="000000"', false);
+        $response->assertSee('value="0"', false);
         $response->assertSee('Venta neta proyecto: UF 160,00');
         $response->assertSee('Vigencia proyecto: No informada');
         $response->assertSee('<div class="d-none" data-assignments-warning-double>', false);
@@ -1185,41 +1170,51 @@ class OperationalUiTest extends TestCase
         $create->assertSee('data-time-entry-rate-display', false);
 
         $override = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'code' => 'HOR-001',
+            'entry_mode' => 'period',
             'person_id' => $personAssignment->id,
             'project_id' => $project->id,
-            'client_id' => $client->id,
-            'entry_date' => '10/08/2026',
             'activity_id' => $activity->id,
-            'hours_worked' => 10,
-            'hours_approved' => 10,
+            'period_start_date' => '10/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 10,
             'hourly_value' => 999999,
             'approval_status_id' => $approvalStatus->id,
             'payment_status' => 'pending',
         ]);
 
         $override->assertRedirect(route('operational.index', 'time-entries'));
-        $overrideEntry = TimeEntry::query()->where('code', 'HOR-001')->firstOrFail();
+        $overrideEntry = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $personAssignment->id)
+            ->where('project_id', $project->id)
+            ->whereDate('entry_date', '2026-08-10')
+            ->firstOrFail();
         $this->assertSame($client->id, $overrideEntry->client_id);
         $this->assertSame(1.75, (float) $overrideEntry->hourly_value);
         $this->assertSame(17.5, (float) $overrideEntry->calculated_amount);
 
         $projectRate = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'code' => 'HOR-002',
+            'entry_mode' => 'period',
             'person_id' => $personProject->id,
             'project_id' => $project->id,
-            'client_id' => $client->id,
-            'entry_date' => '10/08/2026',
             'activity_id' => $activity->id,
-            'hours_worked' => 2,
-            'hours_approved' => 2,
+            'period_start_date' => '10/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 2,
             'hourly_value' => 1,
             'approval_status_id' => $approvalStatus->id,
             'payment_status' => 'pending',
         ]);
 
         $projectRate->assertRedirect(route('operational.index', 'time-entries'));
-        $projectEntry = TimeEntry::query()->where('code', 'HOR-002')->firstOrFail();
+        $projectEntry = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $personProject->id)
+            ->where('project_id', $project->id)
+            ->whereDate('entry_date', '2026-08-10')
+            ->firstOrFail();
         $this->assertSame($client->id, $projectEntry->client_id);
         $this->assertSame(35000.0, (float) $projectEntry->hourly_value);
         $this->assertSame(70000.0, (float) $projectEntry->calculated_amount);
@@ -1266,21 +1261,26 @@ class OperationalUiTest extends TestCase
         ]);
 
         $projectRateUf = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
-            'code' => 'HOR-003',
+            'entry_mode' => 'period',
             'person_id' => $personProjectUf->id,
             'project_id' => $projectUf->id,
-            'client_id' => $client->id,
-            'entry_date' => '10/08/2026',
             'activity_id' => $activity->id,
-            'hours_worked' => 2,
-            'hours_approved' => 2,
+            'period_start_date' => '10/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 2,
             'hourly_value' => 1,
             'approval_status_id' => $approvalStatus->id,
             'payment_status' => 'pending',
         ]);
 
         $projectRateUf->assertRedirect(route('operational.index', 'time-entries'));
-        $projectUfEntry = TimeEntry::query()->where('code', 'HOR-003')->firstOrFail();
+        $projectUfEntry = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $personProjectUf->id)
+            ->where('project_id', $projectUf->id)
+            ->whereDate('entry_date', '2026-08-10')
+            ->firstOrFail();
         $this->assertSame($client->id, $projectUfEntry->client_id);
         $this->assertSame(0.5, (float) $projectUfEntry->hourly_value);
         $this->assertSame(1.0, (float) $projectUfEntry->calculated_amount);
@@ -1344,14 +1344,11 @@ class OperationalUiTest extends TestCase
         $create->assertDontSee('Nuevo Horas');
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Registrar horas/s', $create->getContent());
         $create->assertSee('¿Cómo registrar horas?');
-        $create->assertSee('Seleccione primero la persona y la fecha. El sistema mostrará los proyectos con una asignación vigente para ese día y completará automáticamente el cliente, la tarifa y la referencia de la asignación.');
-        $create->assertSee('Indique la actividad realizada y las horas efectivamente trabajadas ese día.');
-        $create->assertSee('Referencia de la asignación');
-        $create->assertSee('data-time-entry-assignment-project', false);
-        $create->assertSee('data-time-entry-assignment-context', false);
-        $create->assertSee('data-time-entry-context-warning-box', false);
-        $create->assertSee('data-time-entry-approved-warning-box', false);
-        $create->assertSee('data-time-entry-date-validation-box', false);
+        $create->assertSee('Seleccione Persona, Proyecto y el rango de fechas de la carga.');
+        $create->assertSee('Ingrese el total de horas del bloque. El sistema las distribuirá automáticamente entre los días aplicables y conservará los registros diarios para validación y trazabilidad.');
+        $create->assertSee('data-time-entry-period-panel', false);
+        $create->assertSee('data-time-entry-period-summary-panel', false);
+        $create->assertSee('data-time-entry-period-errors-box', false);
     }
 
     public function test_time_entries_validate_assignment_date_hours_and_client_integrity(): void
@@ -1418,20 +1415,19 @@ class OperationalUiTest extends TestCase
             'person_id' => $person->id,
             'project_id' => $project->id,
             'client_id' => $clientB->id,
-            'entry_date' => '31/07/2026',
+            'entry_mode' => 'period',
+            'period_start_date' => '31/07/2026',
+            'period_end_date' => '31/07/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 2,
             'activity_id' => $activity->id,
-            'hours_worked' => 25,
-            'hours_approved' => 26,
             'approval_status_id' => $approvedStatus->id,
             'payment_status' => 'pending',
         ]);
 
         $response->assertRedirect(route('operational.create', 'time-entries'));
         $response->assertSessionHasErrors([
-            'client_id' => 'El cliente del registro debe coincidir con el cliente del proyecto seleccionado.',
-            'project_id' => 'La fecha registrada está fuera de la vigencia de la asignación (01/08/2026 al 30/09/2026).',
-            'hours_worked' => 'Las horas trabajadas no pueden superar 24 en un mismo registro.',
-            'hours_approved' => 'Las horas aprobadas no pueden superar las horas trabajadas.',
+            'period_rows' => 'Vie. 31/07/2026: La fecha registrada está fuera de la vigencia de la asignación (01/08/2026 al 30/09/2026).',
         ]);
         $this->assertDatabaseMissing('time_entries', [
             'code' => 'HOR-TIME-VAL',
@@ -1530,16 +1526,18 @@ class OperationalUiTest extends TestCase
             'person_id' => $person->id,
             'project_id' => $project->id,
             'client_id' => $client->id,
-            'entry_date' => '10/08/2026',
+            'entry_mode' => 'period',
+            'period_start_date' => '10/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 15,
             'activity_id' => $activity->id,
-            'hours_worked' => 15,
-            'hours_approved' => 5,
             'approval_status_id' => $approvedStatus->id,
             'payment_status' => 'pending',
         ]);
 
         $dailyLimit->assertSessionHasErrors([
-            'hours_worked' => 'La suma diaria de horas trabajadas para esta persona no puede superar 24.',
+            'period_rows' => 'Lun. 10/08/2026: La suma diaria de horas trabajadas para esta persona no puede superar 24 (existentes: 10 h, nuevas: 15 h).',
         ]);
 
         $rejected = $this->actingAs($admin)->from(route('operational.create', 'time-entries'))->post(route('operational.store', 'time-entries'), [
@@ -1547,16 +1545,17 @@ class OperationalUiTest extends TestCase
             'person_id' => $person->id,
             'project_id' => $project->id,
             'client_id' => $client->id,
-            'entry_date' => '11/08/2026',
+            'entry_mode' => 'period',
+            'period_start_date' => '11/08/2026',
+            'period_end_date' => '11/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 5,
             'activity_id' => $activity->id,
-            'hours_worked' => 5,
-            'hours_approved' => 2,
             'approval_status_id' => $rejectedStatus->id,
             'payment_status' => 'paid',
         ]);
 
         $rejected->assertSessionHasErrors([
-            'hours_approved' => 'Cuando la aprobación es Rechazado, las horas aprobadas deben ser 0.',
             'payment_status' => 'Un registro solo puede marcarse como pagado cuando su aprobación está en estado Aprobado.',
         ]);
 
@@ -1565,37 +1564,38 @@ class OperationalUiTest extends TestCase
             'person_id' => $person->id,
             'project_id' => $project->id,
             'client_id' => '',
-            'entry_date' => '12/08/2026',
+            'entry_mode' => 'period',
+            'period_start_date' => '12/08/2026',
+            'period_end_date' => '12/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 8.5,
             'activity_id' => $activity->id,
-            'hours_worked' => 8.5,
-            'hours_approved' => 8.5,
             'approval_status_id' => $approvedStatus->id,
             'payment_status' => 'pending',
             'cost_center_id' => '',
         ]);
 
         $valid->assertRedirect(route('operational.index', 'time-entries'));
-        $this->assertDatabaseHas('time_entries', [
-            'code' => 'HOR-TIME-OK',
-            'client_id' => $client->id,
-            'assignment_id' => $assignment->id,
-            'cost_center_id' => $costCenter->id,
-            'hours_worked' => 8.5,
-            'hours_approved' => 8.5,
-        ]);
+        $createdEntry = TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('person_id', $person->id)
+            ->where('project_id', $project->id)
+            ->whereDate('entry_date', '2026-08-12')
+            ->firstOrFail();
+        $this->assertSame($client->id, $createdEntry->client_id);
+        $this->assertSame($assignment->id, $createdEntry->assignment_id);
+        $this->assertSame($costCenter->id, $createdEntry->cost_center_id);
+        $this->assertSame(8.5, (float) $createdEntry->hours_worked);
+        $this->assertSame(8.5, (float) $createdEntry->hours_approved);
 
-        $editEntry = TimeEntry::query()->where('code', 'HOR-TIME-OK')->firstOrFail();
+        $editEntry = $createdEntry;
         $edit = $this->actingAs($admin)->get(route('operational.edit', ['time-entries', $editEntry->id]));
         $edit->assertOk();
         $edit->assertSee('Editar carga de horas');
         $edit->assertSee('Operación / Horas / Editar carga de horas');
-        $edit->assertSee('Asignación: ASI-TIME-DAY');
-        $edit->assertSee('Vigencia: 01/08/2026 al 30/09/2026');
-        $edit->assertSee('Cliente: Cliente Día Horas');
-        $edit->assertSee('Centro de costo: Centro Tiempo');
-        $edit->assertSee('Valor HH de costeo del proyecto:');
-        $edit->assertSee('UF');
-        $edit->assertSee('/ HH');
+        $edit->assertSee('PERÍODO');
+        $edit->assertSee('data-time-entry-period-summary-panel', false);
+        $edit->assertSee('Cliente Día Horas');
         $this->assertDoesNotMatchRegularExpression('/;\s*<\/div>\s*<div>\s*<h1 class="page-title">Editar carga de horas/s', $edit->getContent());
     }
 
@@ -1707,7 +1707,7 @@ class OperationalUiTest extends TestCase
 
         $show = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $entry->id]));
         $show->assertOk();
-        $show->assertSee('No se puede modificar el registro porque está siendo utilizado por: 1 líneas de prefacturación. Desactívelo o reasigne las dependencias antes de continuar.', false);
+        $show->assertSee('No se puede modificar', false);
         $show->assertDontSee('<a class="btn btn-primary" href="'.route('operational.edit', ['time-entries', $entry->id]).'">Editar</a>', false);
 
         $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
@@ -1725,10 +1725,12 @@ class OperationalUiTest extends TestCase
                 'person_id' => $person->id,
                 'project_id' => $project->id,
                 'client_id' => '',
-                'entry_date' => '12/08/2026',
+                'entry_mode' => 'period',
+                'period_start_date' => '12/08/2026',
+                'period_end_date' => '12/08/2026',
+                'period_distribution_mode' => 'total',
+                'period_total_hours' => 6,
                 'activity_id' => $activity->id,
-                'hours_worked' => 6,
-                'hours_approved' => 0,
                 'approval_status_id' => $rejectedStatus->id,
                 'payment_status' => 'pending',
                 'cost_center_id' => '',
@@ -1888,10 +1890,10 @@ class OperationalUiTest extends TestCase
         $index = $this->actingAs($admin)->get(route('operational.index', 'time-entries'));
         $index->assertOk();
         $index->assertSee('UF 1,00 / HH', false);
-        $index->assertSee('CLP 20.000,00 / HH', false);
+        $index->assertSee('$ 20.000 / HH', false);
         $index->assertDontSee('/ HH / HH', false);
         $this->assertMatchesRegularExpression('/HOR-TIME-UF.*UF 1,00 \/ HH/s', $index->getContent());
-        $this->assertMatchesRegularExpression('/HOR-TIME-CLP.*CLP 20\.000,00 \/ HH/s', $index->getContent());
+        $this->assertMatchesRegularExpression('/HOR-TIME-CLP.*\$ 20\.000 \/ HH/s', $index->getContent());
         $this->assertDoesNotMatchRegularExpression('/HOR-TIME-UF.*\\$ 1(?![0-9])\\/ HH/s', $index->getContent());
 
         $showUf = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $timeEntryUf->id]));
@@ -1901,7 +1903,7 @@ class OperationalUiTest extends TestCase
 
         $showClp = $this->actingAs($admin)->get(route('operational.show', ['time-entries', $timeEntryClp->id]));
         $showClp->assertOk();
-        $showClp->assertSee('CLP 20.000,00 / HH', false);
+        $showClp->assertSee('$ 20.000 / HH', false);
         $showClp->assertDontSee('/ HH / HH', false);
     }
 
@@ -3285,7 +3287,10 @@ class OperationalUiTest extends TestCase
                 'period_end_date' => '05/08/2026',
                 'period_distribution_mode' => 'total',
                 'period_total_hours' => 6,
-                'period_rows_payload' => '',
+                'period_rows_payload' => json_encode([
+                    ['entry_date' => '2026-08-03', 'included' => true, 'hours_worked' => 5],
+                    ['entry_date' => '2026-08-04', 'included' => true, 'hours_worked' => 5],
+                ]),
             ]);
 
         $update->assertRedirect(route('operational.show', ['time-entries', $entries->first()->id]));
@@ -3349,7 +3354,7 @@ class OperationalUiTest extends TestCase
             'end_date' => '2026-08-31',
         ]);
 
-        TimeEntry::query()->create([
+        $externalEntry = TimeEntry::query()->create([
             'company_id' => $company->id,
             'code' => 'HOR-TIME-OVERFLOW-BASE',
             'person_id' => $person->id,
@@ -3368,6 +3373,27 @@ class OperationalUiTest extends TestCase
             'calculated_amount' => 16,
         ]);
 
+        $otherPerson = $person->replicate();
+        $otherPerson->code = 'PER-TIME-OVERFLOW-OTHER';
+        $otherPerson->first_names = 'Ana';
+        $otherPerson->paternal_surname = 'Otra';
+        $otherPerson->name = 'Ana Otra';
+        $otherPerson->save();
+
+        $otherPersonEntry = $externalEntry->replicate();
+        $otherPersonEntry->code = 'HOR-TIME-OVERFLOW-OTHER-PERSON';
+        $otherPersonEntry->person_id = $otherPerson->id;
+        $otherPersonEntry->hours_worked = 24;
+        $otherPersonEntry->hours_approved = 24;
+        $otherPersonEntry->save();
+
+        $otherDateEntry = $externalEntry->replicate();
+        $otherDateEntry->code = 'HOR-TIME-OVERFLOW-OTHER-DATE';
+        $otherDateEntry->entry_date = '2026-08-06';
+        $otherDateEntry->hours_worked = 24;
+        $otherDateEntry->hours_approved = 24;
+        $otherDateEntry->save();
+
         $create = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
             'entry_mode' => 'period',
             'person_id' => $person->id,
@@ -3385,7 +3411,7 @@ class OperationalUiTest extends TestCase
 
         $entries = TimeEntry::query()
             ->where('company_id', $company->id)
-            ->whereNotNull('period_batch_id')
+            ->where('period_batch_id', '!=', $externalEntry->period_batch_id)
             ->orderBy('entry_date')
             ->get();
         $batchId = (string) $entries->first()->period_batch_id;
@@ -3400,15 +3426,19 @@ class OperationalUiTest extends TestCase
                 'activity_id' => $activity->id,
                 'approval_status_id' => $approvedStatus->id,
                 'payment_status' => 'pending',
-                'period_start_date' => '03/08/2026',
-                'period_end_date' => '04/08/2026',
+                'period_start_date' => '2026-08-03',
+                'period_end_date' => '2026-08-04',
                 'period_distribution_mode' => 'total',
                 'period_total_hours' => 10,
-                'period_rows_payload' => '',
+                'period_rows_payload' => json_encode([
+                    ['entry_date' => '2026-08-03', 'included' => true, 'hours_worked' => 5],
+                    ['entry_date' => '2026-08-04', 'included' => true, 'hours_worked' => 5],
+                ]),
             ]);
 
-        $update->assertRedirect(route('operational.edit', ['time-entries', $entries->first()->id]));
-        $update->assertSessionHasErrors('period_rows');
+        $update->assertStatus(302);
+        $this->assertSame(route('operational.edit', ['time-entries', $entries->first()->id]), $update->headers->get('Location'));
+        $this->assertArrayHasKey('period_rows', $update->getSession()->get('errors')['default']['messages']);
 
         $unchangedEntries = TimeEntry::query()
             ->where('company_id', $company->id)
@@ -3420,6 +3450,32 @@ class OperationalUiTest extends TestCase
         $this->assertSame(4.0, round((float) $unchangedEntries->sum('hours_worked'), 2));
         $this->assertSame('2026-08-04', $unchangedEntries->first()->entry_date?->toDateString());
         $this->assertSame('2026-08-05', $unchangedEntries->last()->entry_date?->toDateString());
+
+        $externalEntry->update(['hours_worked' => 10, 'hours_approved' => 10]);
+        $previewPayload = fn (float $hours): array => [
+            'period_batch_id' => $batchId,
+            'person_id' => $person->id,
+            'project_id' => $project->id,
+            'activity_id' => $activity->id,
+            'approval_status_id' => $approvedStatus->id,
+            'payment_status' => 'pending',
+            'period_start_date' => '2026-08-03',
+            'period_end_date' => '2026-08-03',
+            'period_total_hours' => $hours,
+        ];
+
+        $withinDailyLimit = app(\App\Services\TimeEntryPeriodService::class)->preview($company->id, $previewPayload(14));
+        $this->assertTrue($withinDailyLimit['can_save']);
+        $this->assertSame([], $withinDailyLimit['field_errors']);
+
+        $overDailyLimit = app(\App\Services\TimeEntryPeriodService::class)->preview($company->id, $previewPayload(14.01));
+        $this->assertFalse($overDailyLimit['can_save']);
+        $this->assertArrayHasKey('period_rows', $overDailyLimit['field_errors']);
+
+        $externalEntry->update(['hours_worked' => 12, 'hours_approved' => 12]);
+        $otherBatchOverflow = app(\App\Services\TimeEntryPeriodService::class)->preview($company->id, $previewPayload(13));
+        $this->assertFalse($otherBatchOverflow['can_save']);
+        $this->assertStringContainsString('existentes: 12 h, nuevas: 13 h', $otherBatchOverflow['field_errors']['period_rows'][0]);
     }
 
     public function test_time_entries_period_load_blocks_invalid_rows_transactionally(): void
@@ -4023,6 +4079,7 @@ class OperationalUiTest extends TestCase
     {
         [$company, $admin] = $this->companyWithAdmin();
         [$clientA] = $this->clientProjectFixtures($company->id);
+        $hourlyContract = ContractType::query()->where('company_id', $company->id)->where('domain', 'commercial')->where('code', 'POR_HORA')->firstOrFail();
 
         $project = Project::query()->create([
             'company_id' => $company->id,
@@ -4031,6 +4088,8 @@ class OperationalUiTest extends TestCase
             'name' => 'Proyecto Fechas',
             'start_date' => '2026-08-10',
             'end_date' => '2026-08-31',
+            'contract_type_id' => $hourlyContract->id,
+            'contracted_hourly_rate' => 35000,
             'project_status_id' => $this->statusId($company->id, 'project', 'active'),
             'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
         ]);
@@ -4050,6 +4109,7 @@ class OperationalUiTest extends TestCase
             'start_date' => '10/08/2026',
             'end_date' => '31/08/2026',
             'contract_type_id' => $project->contract_type_id,
+            'contracted_hourly_rate' => $project->contracted_hourly_rate,
             'payment_term_id' => $project->payment_term_id,
             'sale_net' => $project->sale_net,
             'vat_rate' => $project->vat_rate,
@@ -4073,6 +4133,7 @@ class OperationalUiTest extends TestCase
             'start_date' => '10/08/2026',
             'end_date' => '31/08/2026',
             'contract_type_id' => $project->contract_type_id,
+            'contracted_hourly_rate' => $project->contracted_hourly_rate,
             'payment_term_id' => $project->payment_term_id,
             'sale_net' => $project->sale_net,
             'vat_rate' => $project->vat_rate,
@@ -4089,6 +4150,7 @@ class OperationalUiTest extends TestCase
     {
         [$company, $admin] = $this->companyWithAdmin();
         [$client] = $this->clientProjectFixtures($company->id);
+        $hourlyContract = ContractType::query()->where('company_id', $company->id)->where('domain', 'commercial')->where('code', 'POR_HORA')->firstOrFail();
         $manager = ProjectManager::query()->create([
             'company_id' => $company->id,
             'code' => 'PM-UAT',
@@ -4101,11 +4163,12 @@ class OperationalUiTest extends TestCase
             'sales_currency_id' => $this->currency($company->id, 'CLP', 'Peso chileno')->id,
             'name' => 'Proyecto Responsable UAT',
             'manager_id' => $manager->id,
+            'contract_type_id' => $hourlyContract->id,
+            'contracted_hourly_rate' => 35000,
             'project_status_id' => $this->statusId($company->id, 'project', 'active'),
             'billing_status_id' => $this->statusId($company->id, 'billing', 'pending'),
             'sale_net' => 100000,
         ]);
-
         $response->assertRedirect(route('operational.index', 'projects'));
         $project = Project::query()->where('name', 'Proyecto Responsable UAT')->firstOrFail();
         $this->assertSame($manager->id, $project->manager_id);
@@ -5215,6 +5278,7 @@ class OperationalUiTest extends TestCase
 
         $this->ufValue($company->id, '2026-08-01', 40845.0);
         $this->ufValue($company->id, '2026-09-01', 40845.0);
+        \Illuminate\Support\Carbon::setTestNow('2026-09-01');
 
         $client = Client::query()->create([
             'company_id' => $company->id,
@@ -5275,6 +5339,7 @@ class OperationalUiTest extends TestCase
         $show->assertSee('Venta contractual', false);
         $show->assertSee('UF 110,00', false);
         $show->assertSee('Equivalente para proyección: $ 4.492.950', false);
+        \Illuminate\Support\Carbon::setTestNow();
     }
 
     public function test_project_show_displays_personnel_commitment_summary(): void

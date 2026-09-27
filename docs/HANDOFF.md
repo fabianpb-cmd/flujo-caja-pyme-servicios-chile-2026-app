@@ -1030,3 +1030,29 @@ La verificación en dos pasos es obligatoria para toda persona usuaria activa. E
 El Ayudante TDAT incorpora una regla global compacta sobre correo corporativo y 2FA obligatorio. Cobertura focalizada: `UserAdministrationTest` 9 tests / 50 assertions PASS, `SecurityHardeningTest` 6 tests / 85 assertions PASS y `AssistantKnowledgeServiceTest` 11 tests / 26 assertions PASS. `SecurityGateTest`: 37 PASS / 172 assertions, más un único error histórico conocido en `test_calculated_time_entry_amounts_ignore_manipulated_request_values` por `all()` sobre un arreglo, ajeno a este cambio. Sin migraciones, sin SQL ejecutado ni deploy.
 
 Consulta SQL diagnóstica manual posterior, no ejecutada: `SELECT id, email, active FROM users WHERE LOWER(TRIM(SUBSTRING_INDEX(email, '@', -1))) <> 'tdatconsulting.cl' OR (LENGTH(email) - LENGTH(REPLACE(email, '@', ''))) <> 1;`.
+
+SECURITYGATETEST - FIXTURE ALINEADO AL FLUJO POR PERÍODO - 2026-09-27
+
+Se corrigió exclusivamente `test_calculated_time_entry_amounts_ignore_manipulated_request_values` para usar el contrato HTTP vigente de carga de horas por período. El test conserva la manipulación de `hourly_value=1` y `calculated_amount=1`, y ahora verifica todos los registros del `period_batch_id`: 2 HH trabajadas/aprobadas, tarifa autorizada de 40.000 por HH y monto calculado total de 80.000. No hubo cambios funcionales ni impacto en `assistant_knowledge.php`.
+
+Resultado focalizado: 1 test / 8 assertions PASS. `SecurityGateTest`: 38 tests / 178 assertions PASS.
+
+CIERRE DEL GATE DE REGRESIÓN - 2026-09-27
+
+Se actualizaron únicamente fixtures y pruebas históricas, sin cambios de código funcional ni impacto en `assistant_knowledge.php`. `OperationalUiTest` usa el contrato vigente de carga de horas por período y declara la estrategia Por Hora con tarifa comercial en sus proyectos activos. El error `all()` era un efecto secundario del helper de aserciones de Laravel al intentar describir un redirect fallido: los fixtures omitían la estrategia contractual hoy exigida por el servidor.
+
+`FinancialAgendaTest` y `ProjectCommitmentServiceTest` fijan explícitamente su reloj de prueba para evitar depender de la fecha real al validar prioridades y conversión UF. Se habilitó la extensión `zip` exclusivamente en el PHP CLI local de Laragon, usando el DLL compatible ya instalado; no es un cambio versionado ni de producción. `FinanceExcelImporterTimeEntryBatchTest` vuelve a ejecutarse normalmente.
+
+Validación focalizada PASS: los tres casos corregidos de `OperationalUiTest`, `FinanceExcelImporterTimeEntryBatchTest` (1/9), `ProjectCommitmentServiceTest` (15/56) y `SecurityGateTest` (38/178). `php artisan view:clear`, `php artisan view:cache` y `git diff --check`: PASS.
+
+La alineación posterior de fixtures dejó `OperationalUiTest` completamente verde: 65 tests / 804 assertions PASS. No quedan fallos históricos de esa clase que bloqueen la certificación de la suite. Sin migraciones, sin SQL, sin deploy ni acceso a producción.
+
+LÍMITE DIARIO DE HORAS EN EDICIÓN DE LOTES - VALIDADO LOCALMENTE - 2026-09-27
+
+La revisión del P1 de edición de cargas por período confirmó que `TimeEntryPeriodService` ya calcula la suma diaria global por empresa, persona y fecha, excluyendo únicamente el lote que se reemplaza durante la edición y conservando todas las demás cargas. El defecto estaba en el fixture de regresión: seleccionaba como lote editado la carga externa creada para provocar el exceso, por lo que no ejercía el escenario real. También asumía una forma plana para el `ViewErrorBag` serializado por la respuesta HTTP.
+
+El test corregido valida que la edición se rechaza y revierte íntegramente cuando una carga externa del mismo día hace superar 24 horas. Además verifica el límite exacto de 24 horas, el rechazo de 24,01, la inclusión de otro lote de la misma persona y fecha, y la exclusión de cargas de otra persona o fecha. La regla contractual ahora aclara explícitamente que el límite diario abarca todas las cargas y lotes de la misma persona y fecha.
+
+El Ayudante TDAT incorpora `TIME-DAILY-LIMIT-001`: explica el máximo global de 24 horas, la sustitución del lote propio durante la validación de edición, la conservación de cargas externas y el rechazo total de la operación cuando hay exceso. Cobertura: `AssistantKnowledgeServiceTest` 12/28 PASS.
+
+Validación dirigida: reproducer de edición transaccional 1/15 PASS; `OperationalUiTest` 65/804 PASS; `SecurityGateTest` 38/178 PASS; `ProjectCommitmentServiceTest` 15/56 PASS; `FinancialAgendaTest` 2/15 PASS; `FinanceExcelImporterTimeEntryBatchTest` 1/9 PASS. Suite completa: 483 tests / 3991 assertions, 0 failures, 0 errors, 7 skipped. `php artisan view:cache` y `git diff --check`: PASS. Sin migraciones, sin SQL, sin deploy ni acceso a producción.

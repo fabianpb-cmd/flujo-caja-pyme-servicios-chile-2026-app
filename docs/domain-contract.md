@@ -41,7 +41,7 @@ Referencia funcional persistente basada únicamente en reglas confirmadas por c�
 
 | Campo | Fuente de verdad | Fallback | Editable | Override | Límite | Consumidores |
 |---|---|---|---|---|---|---|
-| `hours_worked` | `time_entries.hours_worked` | No aplica | Sí | No | `> 0` y suma diaria `<= 24` | Ejecución real, productividad, controles operativos |
+| `hours_worked` | `time_entries.hours_worked` | No aplica | Sí | No | `> 0` y suma diaria global `<= 24` para la misma persona y fecha, incluyendo otras cargas o lotes | Ejecución real, productividad, controles operativos |
 | `hours_approved` | `time_entries.hours_approved` | No aplica | Sí | No | `0 <= hours_approved <= hours_worked` | Remuneraciones, costo real, productividad |
 | `hourly_value` | Valor HH de costeo resuelto para la entrada | `assignment.hourly_value`, luego `person.hourly_value` | Derivado en el flujo actual | No | Depende de la fuente resuelta | Cálculo del monto de la hora registrada, UI de Horas |
 | `period_batch_id` | `time_entries.period_batch_id` | No aplica | Derivado por la operación de carga de horas | No | Identifica un lote lógico sin alterar la granularidad diaria | Agrupación funcional en UI operativa, trazabilidad de la carga |

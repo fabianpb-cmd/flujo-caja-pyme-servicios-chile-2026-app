@@ -249,23 +249,34 @@ class SecurityGateTest extends TestCase
         );
 
         $response = $this->actingAs($admin)->post(route('operational.store', 'time-entries'), [
+            'entry_mode' => 'period',
             'person_id' => $person->id,
             'project_id' => $project->id,
-            'client_id' => $client->id,
-            'entry_date' => '10/08/2026',
             'activity_id' => $activity->id,
-            'hours_worked' => 2,
-            'hours_approved' => 2,
+            'period_start_date' => '10/08/2026',
+            'period_end_date' => '10/08/2026',
+            'period_distribution_mode' => 'total',
+            'period_total_hours' => 2,
             'hourly_value' => 1,
-            'assignment_id' => $assignment->id,
+            'calculated_amount' => 1,
             'approval_status_id' => $approvalStatus->id,
             'payment_status' => 'pending',
         ]);
 
         $response->assertRedirect(route('operational.index', 'time-entries'));
-        $entry = \App\Models\TimeEntry::query()->latest('id')->firstOrFail();
-        $this->assertSame(40000.0, (float) $entry->hourly_value);
-        $this->assertSame(80000.0, (float) $entry->calculated_amount);
+        $entries = \App\Models\TimeEntry::query()
+            ->where('company_id', $company->id)
+            ->where('project_id', $project->id)
+            ->where('person_id', $person->id)
+            ->latest('id')
+            ->get();
+
+        $this->assertCount(1, $entries);
+        $this->assertSame(2.0, (float) $entries->sum('hours_worked'));
+        $this->assertSame(2.0, (float) $entries->sum('hours_approved'));
+        $this->assertSame([40000.0], $entries->pluck('hourly_value')->map(fn ($value): float => (float) $value)->all());
+        $this->assertSame(80000.0, (float) $entries->sum('calculated_amount'));
+        $this->assertNotNull($entries->first()->period_batch_id);
     }
 
     public function test_sales_document_calculated_fields_are_not_mass_assignable_during_http_requests(): void

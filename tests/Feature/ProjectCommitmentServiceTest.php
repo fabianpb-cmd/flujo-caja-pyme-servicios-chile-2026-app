@@ -282,14 +282,19 @@ class ProjectCommitmentServiceTest extends TestCase
             'end_date' => '2026-09-01',
         ]);
 
-        $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
+        \Illuminate\Support\Carbon::setTestNow('2026-09-01');
+        try {
+            $summary = app(ProjectCommitmentService::class)->summarizeProject($project);
 
-        $this->assertSame(110.0, $summary['sale_net_contractual']);
-        $this->assertSame('UF', $summary['sale_net_currency_code']);
-        $this->assertSame(4492950.0, $summary['sale_net_clp']);
-        $this->assertSame(408450.0, $summary['personnel_committed_cost']);
-        $this->assertSame(4084500.0, $summary['projected_personnel_margin']);
-        $this->assertSame(9.1, $summary['committed_percentage']);
+            $this->assertSame(110.0, $summary['sale_net_contractual']);
+            $this->assertSame('UF', $summary['sale_net_currency_code']);
+            $this->assertSame(4492950.0, $summary['sale_net_clp']);
+            $this->assertSame(408450.0, $summary['personnel_committed_cost']);
+            $this->assertSame(4084500.0, $summary['projected_personnel_margin']);
+            $this->assertSame(9.1, $summary['committed_percentage']);
+        } finally {
+            \Illuminate\Support\Carbon::setTestNow();
+        }
     }
 
     public function test_commitment_counts_an_exact_month_anniversary_as_one_full_month(): void

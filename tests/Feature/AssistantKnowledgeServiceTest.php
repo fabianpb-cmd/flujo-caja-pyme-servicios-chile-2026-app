@@ -88,6 +88,15 @@ class AssistantKnowledgeServiceTest extends TestCase
         $this->assertContains('ASSIGNMENT-MONTHLY-HOURS-001', array_column($rules, 'id'));
     }
 
+    public function test_time_entry_daily_limit_questions_retrieve_the_verified_rule(): void
+    {
+        $service = app(AssistantKnowledgeService::class);
+        $context = ['resource' => 'time-entries', 'focused_field' => null, 'route' => 'operational.edit'];
+
+        $this->assertContains('TIME-DAILY-LIMIT-001', array_column($service->select('¿puedo registrar más de 24 horas en un día?', $context), 'id'));
+        $this->assertContains('TIME-DAILY-LIMIT-001', array_column($service->select('¿por qué no puedo editar este lote de horas?', $context), 'id'));
+    }
+
     public function test_unknown_assignment_question_does_not_retrieve_unrelated_rules(): void
     {
         $rules = app(AssistantKnowledgeService::class)->select(

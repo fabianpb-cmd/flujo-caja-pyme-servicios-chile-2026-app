@@ -70,6 +70,8 @@ class FinancialAgendaTest extends TestCase
 
     public function test_agenda_route_renders_clp_amounts_and_actionable_rows(): void
     {
+        Carbon::setTestNow('2026-09-12');
+        try {
         [$company, $client] = $this->companyAndClient('AGENDA-HTTP');
         $user = User::query()->create([
             'company_id' => $company->id,
@@ -88,6 +90,9 @@ class FinancialAgendaTest extends TestCase
             ->assertSee('ING-HTTP')
             ->assertSee('1.234.567')
             ->assertSee('Hoy');
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     private function companyAndClient(string $code): array
