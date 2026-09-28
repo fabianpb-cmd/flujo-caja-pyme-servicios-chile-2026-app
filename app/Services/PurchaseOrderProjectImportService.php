@@ -64,7 +64,7 @@ class PurchaseOrderProjectImportService
             'original_filename' => $file->getClientOriginalName(),
             'mime_type' => 'application/pdf',
             'file_size' => strlen($content),
-            'extracted' => $extracted,
+            'extracted' => $this->normalizeMilestones($extracted),
             'timestamp' => now()->toIso8601String(),
         ];
     }
@@ -167,6 +167,31 @@ class PurchaseOrderProjectImportService
             'end_date' => $data['service_end_date'] ?? null,
             'sale_net' => $data['net_amount'] ?? null,
         ], fn ($value) => $value !== null && $value !== '');
+    }
+
+    private function normalizeMilestones(array $extracted): array
+    {
+        $netAmount = is_numeric($extracted['net_amount'] ?? null) ? (float) $extracted['net_amount'] : null;
+        $extracted['billing_milestones'] = collect($extracted['billing_milestones'] ?? [])
+            ->values()
+            ->map(function (array $milestone, int $index) use ($netAmount): array {
+                $amount = is_numeric($milestone['amount'] ?? null) ? (float) $milestone['amount'] : null;
+                $percentage = is_numeric($milestone['percentage'] ?? null) ? (float) $milestone['percentage'] : null;
+                if ($percentage === null && $amount !== null && $netAmount !== null && $netAmount > 0) {
+                    $percentage = round(($amount / $netAmount) * 100, 4);
+                }
+                return [
+                    'sequence' => (int) ($milestone['sequence'] ?? ($index + 1)),
+                    'name' => (string) ($milestone['name'] ?? ''),
+                    'source' => ($milestone['source'] ?? 'SUGGESTED') === 'EXPLICIT' ? 'EXPLICIT' : 'SUGGESTED',
+                    'percentage' => $percentage,
+                    'amount' => $amount,
+                    'planned_invoice_date' => $milestone['planned_invoice_date'] ?? null,
+                    'evidence' => $milestone['evidence'] ?? null,
+                    'confidence' => (float) ($milestone['confidence'] ?? 0),
+                ];
+            })->all();
+        return $extracted;
     }
 
     private function validatePdf(UploadedFile $file): void

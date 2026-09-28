@@ -33,12 +33,13 @@ class ProjectPurchaseOrderImportTest extends TestCase
         $analyze = $this->actingAs($admin)->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file]);
 
         $analyze->assertRedirect();
+        Http::assertSentCount(1);
         $this->assertDatabaseCount('projects', 0);
         $imports = (array) session('project_oc_imports', []);
         $token = (string) (array_key_first($imports) ?? '');
         $this->assertNotSame('', $token);
         $review = $this->actingAs($admin)->get(route('projects.from-purchase-order', ['token' => $token]));
-        $review->assertOk()->assertSee('Cliente OC')->assertSee('OC-100')->assertSee('Crear proyecto y adjuntar OC');
+        $review->assertOk()->assertSee('Cliente OC')->assertSee('OC-100')->assertSee('Crear proyecto y adjuntar OC')->assertSee('En OC')->assertSee('Propuesto por IA');
 
         $this->assertDatabaseCount('projects', 0);
         $create = $this->actingAs($admin)->post(route('operational.store', 'projects'), [
@@ -67,6 +68,7 @@ class ProjectPurchaseOrderImportTest extends TestCase
         $this->assertSame('PURCHASE_ORDER', $document->document_type);
         $this->assertSame('OC-100', $document->document_number);
         $this->assertSame($company->id, $document->company_id);
+        $this->assertSame('EXPLICIT', $document->extracted_payload['billing_milestones'][0]['source']);
 
         $show = $this->actingAs($admin)->get(route('operational.show', ['projects', $project->id]));
         $show->assertOk()->assertSee('Documento origen')->assertSee('oc-100.pdf')->assertSee('Descargar OC');
@@ -208,6 +210,7 @@ class ProjectPurchaseOrderImportTest extends TestCase
     private function responsePayload(): array
     {
         $fields = ['document_type' => 'PURCHASE_ORDER', 'purchase_order_number' => 'OC-100', 'buyer_name' => 'Cliente OC', 'buyer_tax_id' => '76.123.456-7', 'issue_date' => '2026-09-27', 'service_description' => 'Servicio OC QA', 'currency_code' => 'CLP', 'net_amount' => 125000, 'vat_amount' => 23750, 'total_amount' => 148750, 'payment_terms_days' => 30, 'payment_terms_text' => '30 días', 'service_start_date' => null, 'service_end_date' => null];
-        return ['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => json_encode($fields + ['warnings' => [], 'confidence' => array_fill_keys(array_keys($fields), 1), 'evidence' => array_fill_keys(array_keys($fields), null)], JSON_THROW_ON_ERROR)]]]]];
+        $milestones = [['sequence' => 1, 'name' => 'Inicio', 'source' => 'EXPLICIT', 'percentage' => 20, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Inicio indicado', 'confidence' => 0.9], ['sequence' => 2, 'name' => 'Entrega', 'source' => 'EXPLICIT', 'percentage' => 60, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Entrega indicada', 'confidence' => 0.9], ['sequence' => 3, 'name' => 'Cierre', 'source' => 'SUGGESTED', 'percentage' => null, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Etapa de cierre', 'confidence' => 0.7]];
+        return ['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => json_encode($fields + ['billing_milestones' => $milestones, 'warnings' => [], 'confidence' => array_fill_keys(array_keys($fields), 1), 'evidence' => array_fill_keys(array_keys($fields), null)], JSON_THROW_ON_ERROR)]]]]];
     }
 }

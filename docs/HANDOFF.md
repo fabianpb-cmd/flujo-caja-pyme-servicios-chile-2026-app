@@ -18,6 +18,7 @@
 - Causa: el formulario OC no reutilizaba el editor de `billing_milestones` del formulario normal.
 - Fix: se agregó el partial reutilizable `operational/partials/project-billing-plan` al flujo OC; se preservan validación, old input, token y PDF temporal ante errores.
 - QA del fix: suite completa verde; deploy sigue pendiente.
+- El extractor Structured Output incluye `billing_milestones` en una sola llamada OpenAI. Cada hito conserva `EXPLICIT` o `SUGGESTED`, evidencia y confianza; el formulario los muestra editables y la confirmación humana sigue siendo obligatoria.
 
 ## ESTADO ACTUAL AUTORITATIVO — 2026-09-13
 

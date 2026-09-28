@@ -84,7 +84,7 @@ class OpenAiPurchaseOrderExtractor
 
     private function prompt(): string
     {
-        return 'Eres un extractor de órdenes de compra. Extrae únicamente información explícitamente presente en el documento. No calcules ni infieras datos contractuales que no aparecen. No elijas catálogos internos. No inventes fechas, RUT, montos, monedas, condiciones de pago, tipo de proyecto, tipo de contrato, responsable, tarifa HH ni estados. Si un dato no está presente usa null. Los montos deben devolverse como números sin separadores. Las fechas deben devolverse YYYY-MM-DD únicamente cuando sean inequívocas.';
+        return 'Eres un extractor de órdenes de compra. Extrae únicamente información explícitamente presente en el documento. Identifica hitos de facturación o pago expresamente indicados y también hitos técnicos, entregables o etapas explícitos que puedan servir de base para un plan. Si no hay un plan financiero completo pero hay suficientes etapas, puedes proponer entre 2 y 5 hitos que sumen 100%, priorizando entregables verificables; usa source=SUGGESTED y nunca presentes una propuesta como escrita en la OC. Todo hito realmente indicado por el documento usa source=EXPLICIT. No inventes montos o porcentajes como hechos contractuales. No elijas catálogos internos ni inventes fechas, RUT, monedas, condiciones de pago, tipo de proyecto, tipo de contrato, responsable, tarifa HH ni estados. Si un dato no está presente usa null. Las fechas deben devolverse YYYY-MM-DD únicamente cuando sean inequívocas y las propuestas deben respetar el rango del proyecto cuando exista. Los montos deben devolverse como números sin separadores.';
     }
 
     private function schema(): array
@@ -96,17 +96,28 @@ class OpenAiPurchaseOrderExtractor
         foreach (['net_amount', 'vat_amount', 'total_amount', 'payment_terms_days'] as $field) {
             $properties[$field] = ['type' => ['number', 'null']];
         }
+        $milestoneProperties = [
+            'sequence' => ['type' => 'integer'],
+            'name' => ['type' => 'string'],
+            'source' => ['type' => 'string', 'enum' => ['EXPLICIT', 'SUGGESTED']],
+            'percentage' => ['type' => ['number', 'null']],
+            'amount' => ['type' => ['number', 'null']],
+            'planned_invoice_date' => $nullableString,
+            'evidence' => $nullableString,
+            'confidence' => ['type' => 'number'],
+        ];
 
         return [
             'type' => 'object',
             'additionalProperties' => false,
             'properties' => [
                 ...$properties,
+                'billing_milestones' => ['type' => 'array', 'items' => ['type' => 'object', 'additionalProperties' => false, 'properties' => $milestoneProperties, 'required' => array_keys($milestoneProperties)]],
                 'warnings' => ['type' => 'array', 'items' => ['type' => 'string']],
                 'confidence' => ['type' => 'object', 'additionalProperties' => false, 'properties' => array_fill_keys($fields, ['type' => 'number']), 'required' => $fields],
                 'evidence' => ['type' => 'object', 'additionalProperties' => false, 'properties' => array_fill_keys($fields, $nullableString), 'required' => $fields],
             ],
-            'required' => [...$fields, 'warnings', 'confidence', 'evidence'],
+            'required' => [...$fields, 'billing_milestones', 'warnings', 'confidence', 'evidence'],
         ];
     }
 

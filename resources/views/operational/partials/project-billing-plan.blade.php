@@ -7,7 +7,8 @@
     $projectIsHoursBank = $projectContractCode === 'BOLSA_HORAS';
     $projectIsMonthlyRecurring = $projectContractCode === 'MENSUAL_RECURRENTE';
     $projectBillingPlanReadOnly = $projectBillingPlanReadOnly ?? false;
-    $projectMilestoneRows = old('billing_milestones', $item->exists ? $item->billingMilestones->map(fn ($m) => ['id' => $m->id, 'sequence' => $m->sequence, 'name' => $m->name, 'planned_invoice_date' => optional($m->planned_invoice_date)->toDateString(), 'percentage' => $m->percentage, 'notes' => $m->notes, 'is_billed' => $m->salesDocuments->contains(fn ($document) => ! $document->is_voided && $document->status !== 'Anulado')])->all() : [['sequence' => 1, 'name' => '', 'planned_invoice_date' => '', 'percentage' => '', 'notes' => '', 'is_billed' => false]]);
+    $projectOcMilestones = collect(data_get($state ?? [], 'extracted.billing_milestones', []))->map(fn ($m) => ['sequence' => $m['sequence'] ?? null, 'name' => $m['name'] ?? '', 'planned_invoice_date' => $m['planned_invoice_date'] ?? '', 'percentage' => $m['percentage'] ?? '', 'notes' => ($m['source'] ?? 'SUGGESTED') === 'EXPLICIT' ? 'Extraído de OC' : 'Propuesto durante análisis de OC', 'source' => $m['source'] ?? 'SUGGESTED', 'is_billed' => false])->all();
+    $projectMilestoneRows = old('billing_milestones', $item->exists ? $item->billingMilestones->map(fn ($m) => ['id' => $m->id, 'sequence' => $m->sequence, 'name' => $m->name, 'planned_invoice_date' => optional($m->planned_invoice_date)->toDateString(), 'percentage' => $m->percentage, 'notes' => $m->notes, 'source' => null, 'is_billed' => $m->salesDocuments->contains(fn ($document) => ! $document->is_voided && $document->status !== 'Anulado')])->all() : ($projectOcMilestones !== [] ? $projectOcMilestones : [['sequence' => 1, 'name' => '', 'planned_invoice_date' => '', 'percentage' => '', 'notes' => '', 'source' => null, 'is_billed' => false]]));
     $projectMilestoneTotal = $projectBillingPlanReadOnly ? (float) $item->billingMilestones->sum('percentage') : collect($projectMilestoneRows)->sum(fn ($row) => is_numeric($row['percentage'] ?? null) ? (float) $row['percentage'] : 0);
 @endphp
 <div class="app-panel p-3 mb-4" data-project-billing-plan data-closed="{{ $projectIsClosed ? '1' : '0' }}">
@@ -27,7 +28,7 @@
                 <div class="row g-2 mb-2" data-project-milestone-row>
                     @if (!empty($row['id']))<input type="hidden" name="billing_milestones[{{ $index }}][id]" value="{{ $row['id'] }}">@endif
                     <div class="col-1"><input required class="form-control" name="billing_milestones[{{ $index }}][sequence]" type="number" min="1" value="{{ $row['sequence'] ?? '' }}" placeholder="#"></div>
-                    <div class="col-3"><input required class="form-control" name="billing_milestones[{{ $index }}][name]" value="{{ $row['name'] ?? '' }}" placeholder="Nombre del hito"></div>
+                    <div class="col-3"><input required class="form-control" name="billing_milestones[{{ $index }}][name]" value="{{ $row['name'] ?? '' }}" placeholder="Nombre del hito">@if (($row['source'] ?? null) === 'EXPLICIT')<span class="badge text-bg-secondary">En OC</span>@elseif (($row['source'] ?? null) === 'SUGGESTED')<span class="badge text-bg-info">Propuesto por IA</span>@endif</div>
                     <div class="col-3"><input class="form-control" name="billing_milestones[{{ $index }}][planned_invoice_date]" type="date" value="{{ $row['planned_invoice_date'] ?? '' }}"></div>
                     <div class="col-2"><input required class="form-control" name="billing_milestones[{{ $index }}][percentage]" type="number" min="0.01" max="100" step="0.01" value="{{ $row['percentage'] ?? '' }}" placeholder="%"></div>
                     <div class="col-3 d-flex gap-2"><input class="form-control" name="billing_milestones[{{ $index }}][notes]" value="{{ $row['notes'] ?? '' }}" placeholder="Notas"><button type="button" class="btn btn-outline-danger" data-project-billing-remove>Eliminar</button></div>
@@ -37,6 +38,7 @@
             <button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-project-billing-add>Agregar hito</button>
         @endif
         <div class="small text-muted">Total programado: <span data-project-billing-total>{{ rtrim(rtrim(number_format($projectMilestoneTotal, 2, '.', ''), '0'), '.') }}</span>% · Pendiente por programar: <span data-project-billing-remaining>{{ rtrim(rtrim(number_format(max(0, 100 - $projectMilestoneTotal), 2, '.', ''), '0'), '.') }}</span>%</div>
+        @if ($projectOcMilestones !== [])<div class="small text-muted mt-1">Los hitos propuestos son una sugerencia y deben ser revisados antes de crear el proyecto.</div>@endif
         <div class="alert alert-warning py-2 mt-2 d-none" data-project-billing-warning role="alert"></div>
         @error('project_billing_plan')<div class="alert alert-danger py-2 mt-2 mb-0">{{ $message }}</div>@enderror
     </div>
