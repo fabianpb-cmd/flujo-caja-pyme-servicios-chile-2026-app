@@ -16,6 +16,7 @@ use App\Models\ProjectAssignment;
 use App\Models\ProjectSourceDocument;
 use App\Models\SalesDocument;
 use App\Models\TimeEntry;
+use App\Models\User;
 use App\Policies\CompanyOwnedPolicy;
 use App\Services\AuditService;
 use App\Services\BillingStrategyService;
@@ -43,6 +44,8 @@ use DomainException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -760,11 +763,42 @@ class OperationalCrudController extends Controller
             return redirect()->route('operational.show', [$resource, $item->id])->withErrors(['dependencies' => $message]);
         }
 
+        if ($item instanceof Project) {
+            return $this->deleteProjectWithOwnedArtifacts($item, $request->user());
+        }
+
         $before = $item->toArray();
         $item->delete();
         $this->audit->record('operational.deleted', $item, $request->user(), $before, null);
 
         return redirect()->route('operational.index', $resource)->with('status', 'Registro eliminado.');
+    }
+
+    private function deleteProjectWithOwnedArtifacts(Project $project, User $user): RedirectResponse
+    {
+        $documents = $project->sourceDocuments()->get(['id', 'storage_path', 'company_id', 'project_id']);
+        $paths = $documents->pluck('storage_path')->filter(fn ($path): bool => is_string($path) && str_starts_with($path, 'project-source-documents/'))->values()->all();
+        $before = $project->toArray();
+
+        DB::transaction(function () use ($project, $documents, $user, $before): void {
+            foreach ($documents as $document) {
+                $documentBefore = $document->toArray();
+                $document->delete();
+                $this->audit->record('project.source_document.deleted', $document, $user, $documentBefore, null);
+            }
+            $project->delete();
+            $this->audit->record('operational.deleted', $project, $user, $before, null);
+        });
+
+        foreach ($paths as $path) {
+            try {
+                Storage::disk('local')->delete($path);
+            } catch (\Throwable $exception) {
+                Log::warning('Project source document cleanup failed after project deletion', ['project_id' => $project->id, 'path_prefix' => 'project-source-documents/']);
+            }
+        }
+
+        return redirect()->route('operational.index', 'projects')->with('status', 'Registro eliminado.');
     }
 
     public function toggleActive(Request $request, string $resource, int $record): RedirectResponse

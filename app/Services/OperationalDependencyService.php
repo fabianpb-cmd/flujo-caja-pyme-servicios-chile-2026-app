@@ -17,7 +17,6 @@ use App\Models\PayrollRecord;
 use App\Models\PayrollRecordTimeEntry;
 use App\Models\Person;
 use App\Models\Project;
-use App\Models\ProjectSourceDocument;
 use App\Models\ProjectAssignment;
 use App\Models\SalesDocument;
 use App\Models\SalesDocumentTimeEntry;
@@ -94,7 +93,6 @@ class OperationalDependencyService
                 $this->dependency(ExpenseDocument::class, 'project_id', 'egresos asociados'),
                 $this->dependency(Budget::class, 'project_id', 'presupuestos'),
                 $this->dependency(CashMovement::class, 'project_id', 'movimientos de caja'),
-                $this->dependency(ProjectSourceDocument::class, 'project_id', 'documentos origen'),
             ],
             Person::class => [
                 $this->dependency(ProjectAssignment::class, 'person_id', 'asignaciones'),

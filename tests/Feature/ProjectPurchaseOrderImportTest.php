@@ -7,7 +7,9 @@ use App\Models\Company;
 use App\Models\ContractType;
 use App\Models\Currency;
 use App\Models\PaymentTerm;
+use App\Models\Person;
 use App\Models\Project;
+use App\Models\ProjectAssignment;
 use App\Models\ProjectSourceDocument;
 use App\Models\LegalParameter;
 use App\Models\RecordStatus;
@@ -80,10 +82,13 @@ class ProjectPurchaseOrderImportTest extends TestCase
         $otherUser = User::query()->create(['company_id' => $otherCompany->id, 'name' => 'Otro', 'email' => 'other-'.$otherCompany->id.'@oc.test', 'password' => 'password', 'role' => 'admin', 'active' => true]);
         $this->actingAs($otherUser)->get(route('projects.source-documents.download', [$project, $document]))->assertForbidden();
 
+        $sourcePath = $document->storage_path;
         $this->actingAs($admin)->delete(route('operational.destroy', ['projects', $project->id]))
-            ->assertRedirect(route('operational.show', ['projects', $project->id]))
-            ->assertSessionHasErrors('dependencies');
-        $this->assertDatabaseHas('projects', ['id' => $project->id]);
+            ->assertRedirect(route('operational.index', 'projects'))
+            ->assertSessionHas('status', 'Registro eliminado.');
+        $this->assertDatabaseMissing('projects', ['id' => $project->id]);
+        $this->assertDatabaseMissing('project_source_documents', ['id' => $document->id]);
+        Storage::disk('local')->assertMissing($sourcePath);
     }
 
     public function test_duplicate_oc_and_cross_tenant_preview_are_rejected_without_creating_a_project(): void
@@ -180,6 +185,28 @@ class ProjectPurchaseOrderImportTest extends TestCase
         $this->assertDatabaseMissing('project_source_documents', ['sha256' => $imports[$token]['sha256']]);
         $this->assertArrayHasKey($token, (array) session('project_oc_imports', []));
         Storage::disk('local')->assertExists($temporaryPath);
+    }
+
+    public function test_operational_assignment_still_blocks_project_delete_without_listing_source_document(): void
+    {
+        [$company, $admin, $client] = $this->fixtures();
+        Storage::fake('local');
+        $project = Project::query()->create(['company_id' => $company->id, 'client_id' => $client->id, 'code' => 'PRJ-BLOCK', 'name' => 'Proyecto bloqueado']);
+        Storage::disk('local')->put('project-source-documents/1/1/block.pdf', '%PDF-1.4');
+        $document = ProjectSourceDocument::query()->forceCreate(['company_id' => $company->id, 'project_id' => $project->id, 'document_type' => 'PURCHASE_ORDER', 'document_number' => 'OC-BLOCK', 'original_filename' => 'block.pdf', 'storage_path' => 'project-source-documents/1/1/block.pdf', 'mime_type' => 'application/pdf', 'file_size' => 8, 'sha256' => hash('sha256', 'block'), 'created_by' => $admin->id]);
+        $person = Person::query()->create(['company_id' => $company->id, 'code' => 'PER-BLOCK', 'name' => 'Persona bloqueada', 'modality' => 'HONORARIOS']);
+        $assignment = ProjectAssignment::query()->create(['company_id' => $company->id, 'person_id' => $person->id, 'client_id' => $client->id, 'project_id' => $project->id, 'code' => 'ASI-BLOCK']);
+
+        $response = $this->actingAs($admin)->delete(route('operational.destroy', ['projects', $project->id]));
+
+        $response->assertRedirect(route('operational.show', ['projects', $project->id]))->assertSessionHasErrors('dependencies');
+        $dependencyError = (string) $response->getSession()->get('errors')->first('dependencies');
+        $this->assertStringContainsString('asignaciones', $dependencyError);
+        $this->assertStringNotContainsString('documentos origen', $dependencyError);
+        $this->assertDatabaseHas('projects', ['id' => $project->id]);
+        $this->assertDatabaseHas('project_source_documents', ['id' => $document->id]);
+        $this->assertDatabaseHas('project_assignments', ['id' => $assignment->id]);
+        Storage::disk('local')->assertExists('project-source-documents/1/1/block.pdf');
     }
 
     private function statusId(Company $company): int
