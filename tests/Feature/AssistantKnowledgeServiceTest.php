@@ -143,4 +143,10 @@ class AssistantKnowledgeServiceTest extends TestCase
         $rules = app(AssistantKnowledgeService::class)->select('¿Cómo creo un gasto desde un PDF y qué pasa con el IVA recuperable?', ['resource' => 'expense-documents', 'focused_field' => null, 'route' => 'expense-documents.from-pdf']);
         $this->assertContains('EXPENSE-PDF-IMPORT-001', array_column($rules, 'id'));
     }
+
+    public function test_sales_pdf_questions_retrieve_contractual_validation_rule(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select('¿Puedo adjuntar el PDF de una factura emitida sin registrar el cobro?', ['resource' => 'sales-documents', 'focused_field' => null, 'route' => 'sales-documents.from-pdf']);
+        $this->assertContains('SALES-PDF-IMPORT-001', array_column($rules, 'id'));
+    }
 }

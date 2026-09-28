@@ -34,6 +34,7 @@ use App\Services\ProjectFinancialCockpitService;
 use App\Services\ProjectHoursCapacityService;
 use App\Services\PurchaseOrderProjectImportService;
 use App\Services\ExpenseDocumentPdfImportService;
+use App\Services\SalesDocumentPdfImportService;
 use App\Services\SalesPrefacturationService;
 use App\Services\SalesDocumentService;
 use App\Services\ReceivablesService;
@@ -81,6 +82,7 @@ class OperationalCrudController extends Controller
         private readonly UfCsvImportService $ufImports,
         private readonly PurchaseOrderProjectImportService $purchaseOrderImports,
         private readonly ExpenseDocumentPdfImportService $expensePdfImports,
+        private readonly SalesDocumentPdfImportService $salesPdfImports,
     ) {
     }
 
@@ -236,6 +238,7 @@ class OperationalCrudController extends Controller
         $validated = $request->validated();
         $ocImport = null;
         $expensePdfImport = null;
+        $salesPdfImport = null;
         if ($resource === 'projects' && filled($validated['oc_import_token'] ?? null)) {
             try {
                 $ocImport = $this->purchaseOrderImports->sessionState(
@@ -258,8 +261,15 @@ class OperationalCrudController extends Controller
                 return back()->withInput()->withErrors(['expense_pdf_import' => 'La V1 solo permite crear gastos en CLP. Resuelva la moneda manualmente antes de continuar.']);
             }
         }
+        if ($resource === 'sales-documents' && filled($validated['sales_pdf_import_token'] ?? null)) {
+            try { $salesPdfImport = $this->salesPdfImports->sessionState((array)$request->session()->get('sales_pdf_imports', []), (string)$validated['sales_pdf_import_token'], (int)$request->user()->company_id, $request->user()); } catch (DomainException $exception) { return back()->withInput()->withErrors(['sales_pdf_import' => $exception->getMessage()]); }
+            if (($salesPdfImport['extracted']['currency_code'] ?? null) && strtoupper((string)$salesPdfImport['extracted']['currency_code']) !== 'CLP') return back()->withInput()->withErrors(['sales_pdf_import' => 'La V1 solo permite persistir facturas en CLP.']);
+            $matched = $this->salesPdfImports->matchClient((int)$request->user()->company_id, $salesPdfImport['extracted']['customer_tax_id'] ?? null, $salesPdfImport['extracted']['customer_name'] ?? null);
+            if ($matched) $validated['client_id'] = $matched->id;
+        }
         unset($validated['oc_import_token']);
         unset($validated['expense_pdf_import_token']);
+        unset($validated['sales_pdf_import_token']);
         try {
             $this->assertManualSalesDocumentAllowed($request, $resource, $validated);
         } catch (DomainException $exception) {
@@ -285,7 +295,7 @@ class OperationalCrudController extends Controller
         } else {
             try {
                 $billingRows = $resource === 'projects' ? $request->input('billing_milestones', []) : [];
-                $model = DB::transaction(function () use ($config, $data, $billingRows, $ocImport, $expensePdfImport, $request) {
+                $model = DB::transaction(function () use ($config, $data, $billingRows, $ocImport, $expensePdfImport, $salesPdfImport, $request) {
                     $model = MassAssignment::create($config['model'], $data);
 
                     if ($model instanceof Project) {
@@ -312,6 +322,7 @@ class OperationalCrudController extends Controller
                         }
                         $this->expensePdfImports->attach($expensePdfImport, $model, $request->user());
                     }
+                    if ($model instanceof SalesDocument && $salesPdfImport !== null) $this->salesPdfImports->attach($salesPdfImport, $model, $request->user());
 
                     return $model;
                 });
@@ -334,6 +345,7 @@ class OperationalCrudController extends Controller
                 unset($imports[$expensePdfImport['token']]);
                 $request->session()->put('expense_pdf_imports', $imports);
             }
+            if ($salesPdfImport !== null) { $imports=(array)$request->session()->get('sales_pdf_imports',[]); unset($imports[$salesPdfImport['token']]); $request->session()->put('sales_pdf_imports',$imports); }
         }
 
         return redirect()->route('operational.index', $resource)->with('status', 'Registro creado.');
@@ -443,6 +455,9 @@ class OperationalCrudController extends Controller
             $item->loadMissing('sourceDocuments');
         }
         if ($resource === 'expense-documents' && $item instanceof ExpenseDocument) {
+            $item->loadMissing('sourceDocuments');
+        }
+        if ($resource === 'sales-documents' && $item instanceof SalesDocument) {
             $item->loadMissing('sourceDocuments');
         }
 
@@ -634,12 +649,45 @@ class OperationalCrudController extends Controller
         $config = $this->config($resource);
         $item = SalesDocument::query()->where('company_id', $request->user()->company_id)->findOrFail($record);
         $this->authorizeResource($request, $config, 'update', $item);
+        $salesPdfImport = null;
+        if (filled($request->input('sales_pdf_import_token'))) {
+            try { $salesPdfImport = $this->salesPdfImports->sessionState((array)$request->session()->get('sales_pdf_imports', []), (string)$request->input('sales_pdf_import_token'), (int)$request->user()->company_id, $request->user()); } catch (DomainException $exception) { return back()->withErrors(['sales_pdf_import' => $exception->getMessage()]); }
+            $comparison = $this->salesPdfImports->compare($salesPdfImport, $item);
+            $pdfClient = $this->salesPdfImports->matchClient((int)$request->user()->company_id, $salesPdfImport['extracted']['customer_tax_id'] ?? null, $salesPdfImport['extracted']['customer_name'] ?? null);
+            $comparison['client'] = $pdfClient !== null && (int)$pdfClient->id === (int)$item->client_id;
+            $comparison['ok'] = $comparison['ok'] && $comparison['client'];
+            if (! $comparison['ok']) return back()->withErrors(['sales_pdf_import' => 'Los datos de la factura emitida no coinciden con el documento de TDAT. Revise la factura antes de confirmar.']);
+            if (($salesPdfImport['extracted']['currency_code'] ?? null) && strtoupper((string)$salesPdfImport['extracted']['currency_code']) !== 'CLP') return back()->withErrors(['sales_pdf_import' => 'La moneda de la factura emitida no coincide con la persistencia CLP de TDAT.']);
+        }
         try {
-            $this->salesDocuments->confirm($item, $request->user(), $request->has('document_number') ? $request->input('document_number') : null);
+            DB::transaction(function () use ($item, $request, $salesPdfImport): void {
+                $confirmed = $this->salesDocuments->confirm($item, $request->user(), $salesPdfImport['extracted']['document_number'] ?? ($request->has('document_number') ? $request->input('document_number') : null));
+                if ($salesPdfImport !== null) $this->salesPdfImports->attach($salesPdfImport, $confirmed, $request->user());
+            });
         } catch (DomainException $exception) {
             return back()->withErrors(['sales_document_confirmation' => $exception->getMessage()]);
         }
         return redirect()->route('operational.show', [$resource, $item->id])->with('status', 'Factura emitida.');
+    }
+
+    public function createSalesFromPdf(Request $request): View
+    {
+        $config = $this->config('sales-documents'); $this->authorizeResource($request, $config, 'create'); $token=(string)$request->input('token'); $state=null; $item=null;
+        if (filled($request->input('document_id'))) { $item=SalesDocument::query()->where('company_id',$request->user()->company_id)->where('status','Borrador')->findOrFail((int)$request->input('document_id')); $this->authorizeResource($request,$config,'update',$item); }
+        if ($token !== '') try { $state=$this->salesPdfImports->sessionState((array)$request->session()->get('sales_pdf_imports', []),$token,(int)$request->user()->company_id,$request->user()); } catch(DomainException $e) { return view('operational.sales-pdf', compact('config','token','state','item'))->withErrors(['sales_pdf_import'=>$e->getMessage()]); }
+        return view('operational.sales-pdf', compact('config','token','state','item'));
+    }
+
+    public function analyzeSalesPdf(Request $request): RedirectResponse
+    {
+        $config=$this->config('sales-documents'); $this->authorizeResource($request,$config,'create'); $request->validate(['sales_pdf'=>['required','file','max:10240']]);
+        try { $state=$this->salesPdfImports->analyze((int)$request->user()->company_id,$request->user(),$request->file('sales_pdf')); } catch(DomainException $e) { return back()->withErrors(['sales_pdf'=>$e->getMessage()]); }
+        $imports=(array)$request->session()->get('sales_pdf_imports',[]); $imports[$state['token']]=$state; $request->session()->put('sales_pdf_imports',$imports); return redirect()->route('sales-documents.from-pdf',['token'=>$state['token']]);
+    }
+
+    public function downloadSalesSourceDocument(Request $request, SalesDocument $salesDocument, \App\Models\SalesSourceDocument $sourceDocument)
+    {
+        $config=$this->config('sales-documents'); $this->authorizeResource($request,$config,'view',$salesDocument); abort_unless((int)$salesDocument->company_id===(int)$request->user()->company_id && (int)$sourceDocument->company_id===(int)$salesDocument->company_id && (int)$sourceDocument->sales_document_id===(int)$salesDocument->id,404); abort_unless(Storage::disk('local')->exists($sourceDocument->storage_path),404); return Storage::disk('local')->download($sourceDocument->storage_path,$sourceDocument->original_filename,['Content-Type'=>$sourceDocument->mime_type]);
     }
 
     public function update(CrudResourceRequest $request, string $resource, int $record): RedirectResponse
@@ -844,6 +892,12 @@ class OperationalCrudController extends Controller
             });
             $this->expensePdfImports->deleteOwnedSourceFiles($paths, (int) $item->id);
             return redirect()->route('operational.index', $resource)->with('status', 'Registro eliminado.');
+        }
+
+        if ($item instanceof SalesDocument) {
+            $sourceDocuments=$item->sourceDocuments()->get(['id','storage_path','company_id','sales_document_id']); $paths=$sourceDocuments->pluck('storage_path')->filter(fn($p):bool=>is_string($p)&&str_starts_with($p,'sales-source-documents/'))->values()->all(); $before=$item->toArray();
+            DB::transaction(function() use($item,$sourceDocuments,$request,$before):void { foreach($sourceDocuments as $source){$sourceBefore=$source->toArray();$source->delete();$this->audit->record('sales.source_document.deleted',$source,$request->user(),$sourceBefore,null);} $item->delete(); $this->audit->record('operational.deleted',$item,$request->user(),$before,null); });
+            $this->salesPdfImports->deleteOwnedSourceFiles($paths,(int)$item->id); return redirect()->route('operational.index',$resource)->with('status','Registro eliminado.');
         }
 
         $before = $item->toArray();

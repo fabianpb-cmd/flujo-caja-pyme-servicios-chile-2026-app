@@ -78,6 +78,9 @@ class CrudResourceRequest extends FormRequest
         if ($resource === 'expense-documents') {
             $rules['expense_pdf_import_token'] = ['nullable', 'string', 'max:128'];
         }
+        if ($resource === 'sales-documents') {
+            $rules['sales_pdf_import_token'] = ['nullable', 'string', 'max:128'];
+        }
 
         if ($resource === 'time-entries') {
             $rules['entry_date'] = ['nullable', 'date'];

@@ -53,6 +53,7 @@
                 <input id="sales-document-number" class="form-control form-control-sm d-inline-block" style="width: 10rem" type="text" name="document_number" value="{{ $item->document_number ?? '' }}" placeholder="N° documento">
                 <button type="submit" class="btn btn-success">Emitir factura</button>
             </form>
+            <a class="btn btn-outline-primary" href="{{ route('sales-documents.from-pdf', ['document_id' => $item->id]) }}">Adjuntar factura emitida PDF</a>
         @endif
         @if (blank($timeEntryUpdateBlockedMessage))
             <a class="btn btn-primary" href="{{ route('operational.edit', [$resource, $item->id]) }}">Editar</a>
@@ -244,6 +245,10 @@
                 <div class="small text-muted">No hay documentos origen asociados.</div>
             @endforelse
         </div>
+    @endif
+
+    @if ($resource === 'sales-documents' && $item instanceof \App\Models\SalesDocument)
+        <div class="app-panel p-3 mb-4" id="source-documents"><div class="section-title mb-2">Documento origen</div>@forelse($item->sourceDocuments as $sourceDocument)<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom py-2"><div><div class="fw-semibold">{{ $sourceDocument->document_type ?: 'Factura' }}</div><div class="small text-muted">Número: {{ $sourceDocument->document_number ?: 'No informado' }} · Archivo: {{ $sourceDocument->original_filename }} · Fecha: {{ $sourceDocument->created_at?->format('d-m-Y H:i') }}</div></div><a class="btn btn-sm btn-outline-primary" href="{{ route('sales-documents.source-documents.download', [$item, $sourceDocument]) }}">Descargar PDF</a></div>@empty<div class="small text-muted">No hay documentos origen asociados.</div>@endforelse</div>
     @endif
 
     @if ($resource === 'projects' && ($billingStrategy ?? null) === \App\Services\BillingStrategyService::CLOSED_PROJECT && ! empty($billingPlan))

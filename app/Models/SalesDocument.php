@@ -72,4 +72,9 @@ class SalesDocument extends Model
             ->withPivot(['hours_approved', 'hourly_rate_amount', 'rate_unit_type', 'subtotal_clp'])
             ->withTimestamps();
     }
+
+    public function sourceDocuments(): HasMany
+    {
+        return $this->hasMany(SalesSourceDocument::class);
+    }
 }
