@@ -77,7 +77,8 @@
                     </div>
                 @endforeach
             </div>
-            <div class="alert alert-light border mt-4 mb-0">La creación usa las mismas validaciones y reglas de negocio que el formulario normal de Proyectos. No se crean hitos, catálogos ni contratos desde la OC.</div>
+            @include('operational.partials.project-billing-plan')
+            <div class="alert alert-light border mt-4 mb-0">La creación usa las mismas validaciones y reglas de negocio que el formulario normal de Proyectos.</div>
         </div>
         <div class="card-footer d-flex gap-2 justify-content-end" data-assistant-avoid-overlap>
             <a class="btn btn-outline-secondary" href="{{ route('projects.from-purchase-order') }}">Cancelar</a>

@@ -129,6 +129,67 @@ class ProjectPurchaseOrderImportTest extends TestCase
         $this->assertLessThanOrEqual(64, strlen('psd_company_project_type_idx'));
     }
 
+    public function test_closed_project_from_purchase_order_creates_milestone_and_consumes_token(): void
+    {
+        [$company, $admin, $client, $currency, $term, $hourly, $status, $billing] = $this->fixtures();
+        $closed = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'PROYECTO_CERRADO', 'name' => 'Proyecto cerrado', 'active' => true]);
+        Storage::fake('local');
+        config()->set('assistant.api_key', 'test-key');
+        Http::fake(['https://api.openai.com/v1/responses' => Http::response($this->responsePayload(), 200)]);
+        $file = UploadedFile::fake()->createWithContent('closed.pdf', "%PDF-1.4\nOC CLOSED");
+        $this->actingAs($admin)->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file])->assertRedirect();
+        $token = array_key_first(session('project_oc_imports'));
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'projects'), [
+            'oc_import_token' => $token, 'client_id' => $client->id, 'sales_currency_id' => $currency->id,
+            'name' => 'Proyecto cerrado OC', 'contract_type_id' => $closed->id, 'payment_term_id' => $term->id,
+            'sale_net' => 125000, 'project_status_id' => $status->id, 'billing_status_id' => $billing->id,
+            'billing_milestones' => [['sequence' => 1, 'name' => 'Entrega final', 'planned_invoice_date' => '2026-10-01', 'percentage' => 100, 'notes' => '']],
+        ]);
+
+        $response->assertRedirect(route('operational.index', 'projects'));
+        $project = Project::query()->where('name', 'Proyecto cerrado OC')->sole();
+        $this->assertDatabaseHas('project_billing_milestones', ['project_id' => $project->id, 'percentage' => 100]);
+        $this->assertDatabaseHas('project_source_documents', ['project_id' => $project->id]);
+        $this->assertArrayNotHasKey($token, (array) session('project_oc_imports', []));
+    }
+
+    public function test_closed_project_without_milestones_keeps_token_and_temporary_pdf(): void
+    {
+        [$company, $admin, $client, $currency, $term] = $this->fixtures();
+        $closed = ContractType::query()->create(['company_id' => $company->id, 'domain' => 'commercial', 'code' => 'PROYECTO_CERRADO', 'name' => 'Proyecto cerrado', 'active' => true]);
+        Storage::fake('local');
+        config()->set('assistant.api_key', 'test-key');
+        Http::fake(['https://api.openai.com/v1/responses' => Http::response($this->responsePayload(), 200)]);
+        $file = UploadedFile::fake()->createWithContent('closed-invalid.pdf', "%PDF-1.4\nOC CLOSED INVALID");
+        $this->actingAs($admin)->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file])->assertRedirect();
+        $imports = (array) session('project_oc_imports');
+        $token = array_key_first($imports);
+        $temporaryPath = $imports[$token]['temporary_path'];
+
+        $response = $this->actingAs($admin)->post(route('operational.store', 'projects'), [
+            'oc_import_token' => $token, 'client_id' => $client->id, 'sales_currency_id' => $currency->id,
+            'name' => 'Proyecto cerrado inválido', 'contract_type_id' => $closed->id, 'payment_term_id' => $term->id,
+            'sale_net' => 125000, 'project_status_id' => $this->statusId($company), 'billing_status_id' => $this->billingStatusId($company),
+        ]);
+
+        $response->assertRedirect()->assertSessionHasErrors('project_billing_plan');
+        $this->assertDatabaseMissing('projects', ['name' => 'Proyecto cerrado inválido']);
+        $this->assertDatabaseMissing('project_source_documents', ['sha256' => $imports[$token]['sha256']]);
+        $this->assertArrayHasKey($token, (array) session('project_oc_imports', []));
+        Storage::disk('local')->assertExists($temporaryPath);
+    }
+
+    private function statusId(Company $company): int
+    {
+        return (int) RecordStatus::query()->where('company_id', $company->id)->where('domain', 'project')->value('id');
+    }
+
+    private function billingStatusId(Company $company): int
+    {
+        return (int) RecordStatus::query()->where('company_id', $company->id)->where('domain', 'billing')->value('id');
+    }
+
     private function fixtures(): array
     {
         $company = Company::query()->create(['code' => 'CMP-OC', 'name' => 'Empresa OC', 'status' => 'active']);

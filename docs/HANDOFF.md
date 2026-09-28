@@ -14,6 +14,10 @@
 - Knowledge: `PROJECT-OC-IMPORT-001` está vigente en `config/assistant_knowledge.php`.
 - Tests: `ProjectPurchaseOrderImportTest` y regresiones dirigidas deben pasar antes de publicar.
 - Deploy: pendiente. Migración pendiente de ejecutar en el entorno objetivo; no se ejecutó SQL en producción.
+- Smoke productivo detectó un gap de UI: Crear Proyecto desde OC no mostraba el plan de hitos para `PROYECTO_CERRADO`.
+- Causa: el formulario OC no reutilizaba el editor de `billing_milestones` del formulario normal.
+- Fix: se agregó el partial reutilizable `operational/partials/project-billing-plan` al flujo OC; se preservan validación, old input, token y PDF temporal ante errores.
+- QA del fix: suite completa verde; deploy sigue pendiente.
 
 ## ESTADO ACTUAL AUTORITATIVO — 2026-09-13
 

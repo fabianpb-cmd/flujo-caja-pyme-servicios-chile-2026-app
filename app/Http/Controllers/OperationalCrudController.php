@@ -289,7 +289,10 @@ class OperationalCrudController extends Controller
                     return $model;
                 });
             } catch (DomainException $exception) {
-                return back()->withInput()->withErrors([$resource === 'projects' ? 'oc_import' : 'payroll' => $exception->getMessage()]);
+                $errorKey = $resource === 'projects'
+                    ? (str_contains($exception->getMessage(), 'OC') || str_contains($exception->getMessage(), 'documento fuente') ? 'oc_import' : 'project_billing_plan')
+                    : 'payroll';
+                return back()->withInput()->withErrors([$errorKey => $exception->getMessage()]);
             }
 
             $this->refreshDerivedState($model);
