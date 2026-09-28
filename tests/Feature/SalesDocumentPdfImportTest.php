@@ -56,6 +56,20 @@ class SalesDocumentPdfImportTest extends TestCase
         $this->assertSame($cashBefore, \App\Models\CashMovement::query()->count());
         $this->assertDatabaseHas('sales_source_documents', ['sales_document_id' => $document->id, 'document_number' => 'F-100']);
     }
+
+    public function test_pdf_client_match_cannot_be_replaced_by_another_client_project(): void
+    {
+        [$company, $admin] = $this->fixtures(); Storage::fake('local'); config()->set('assistant.api_key', 'test-key'); Http::fake(['https://api.openai.com/v1/responses' => Http::response($this->payload(), 200)]);
+        $other = Client::query()->create(['company_id' => $company->id, 'code' => 'CLI-OTHER', 'legal_name' => 'Otro cliente']);
+        $status = RecordStatus::query()->create(['company_id' => $company->id, 'domain' => 'project', 'code' => 'active', 'name' => 'Activo', 'active' => true]);
+        $project = Project::query()->create(['company_id' => $company->id, 'client_id' => $other->id, 'name' => 'Proyecto ajeno', 'project_status_id' => $status->id]);
+        $this->actingAs($admin)->post(route('sales-documents.from-pdf.analyze'), ['sales_pdf' => UploadedFile::fake()->createWithContent('factura.pdf', "%PDF-1.4\nFACTURA")])->assertRedirect();
+        $token = array_key_first((array) session('sales_pdf_imports'));
+        $response = $this->actingAs($admin)->post(route('operational.store', 'sales-documents'), ['sales_pdf_import_token' => $token, 'client_id' => $other->id, 'project_id' => $project->id, 'document_type_id' => DocumentType::query()->where('company_id', $company->id)->value('id'), 'document_number' => 'F-101', 'issue_date' => '2026-09-28', 'net_amount' => 1000]);
+        $response->assertSessionHasErrors('client_id');
+        $this->assertSame(0, SalesDocument::query()->count());
+        $this->assertSame(0, SalesSourceDocument::query()->count());
+    }
     private function fixtures(): array { $company=Company::query()->create(['code'=>'CMP-SALES-PDF','name'=>'Ventas PDF','status'=>'active']); $admin=User::query()->create(['company_id'=>$company->id,'name'=>'Admin','email'=>'sales-pdf-'.$company->id.'@test.local','password'=>'password','role'=>'admin','active'=>true]); Client::query()->create(['company_id'=>$company->id,'code'=>'CLI-PDF','legal_name'=>'Cliente Venta','tax_id'=>'76.123.456-7']); DocumentType::query()->create(['company_id'=>$company->id,'domain'=>'sales','code'=>'FACTURA','name'=>'Factura','active'=>true]); LegalParameter::query()->create(['company_id'=>$company->id,'parameter_code'=>'IVA','parameter_name'=>'IVA','valid_from'=>'2026-01-01','value'=>0.19,'unit'=>'%','active'=>true]); return [$company,$admin]; }
     private function payload(): array { $fields=['document_type'=>'Factura','document_number'=>'F-100','issuer_name'=>'Mi Empresa','issuer_tax_id'=>null,'customer_name'=>'Cliente Venta','customer_tax_id'=>'76.123.456-7','issue_date'=>'2026-09-28','due_date'=>'2026-10-28','payment_terms_days'=>30,'payment_terms_text'=>'30 días','currency_code'=>'CLP','net_amount'=>1000,'vat_rate'=>19,'vat_amount'=>190,'exempt_amount'=>0,'total_amount'=>1190,'description'=>'Servicio']; return ['output'=>[['type'=>'message','content'=>[['type'=>'output_text','text'=>json_encode($fields+['warnings'=>[],'confidence'=>array_fill_keys(array_keys($fields),1),'evidence'=>array_fill_keys(array_keys($fields),null)],JSON_THROW_ON_ERROR)]]]]]; }
 }

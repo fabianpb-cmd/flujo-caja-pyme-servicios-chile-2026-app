@@ -265,7 +265,15 @@ class OperationalCrudController extends Controller
             try { $salesPdfImport = $this->salesPdfImports->sessionState((array)$request->session()->get('sales_pdf_imports', []), (string)$validated['sales_pdf_import_token'], (int)$request->user()->company_id, $request->user()); } catch (DomainException $exception) { return back()->withInput()->withErrors(['sales_pdf_import' => $exception->getMessage()]); }
             if (($salesPdfImport['extracted']['currency_code'] ?? null) && strtoupper((string)$salesPdfImport['extracted']['currency_code']) !== 'CLP') return back()->withInput()->withErrors(['sales_pdf_import' => 'La V1 solo permite persistir facturas en CLP.']);
             $matched = $this->salesPdfImports->matchClient((int)$request->user()->company_id, $salesPdfImport['extracted']['customer_tax_id'] ?? null, $salesPdfImport['extracted']['customer_name'] ?? null);
+            if ($matched && (int) ($validated['client_id'] ?? 0) !== (int) $matched->id) {
+                return back()->withInput()->withErrors(['client_id' => 'El cliente seleccionado no coincide con el cliente identificado en la factura PDF.']);
+            }
             if ($matched) $validated['client_id'] = $matched->id;
+            try {
+                $this->assertSalesPdfAssociationIntegrity($request, $validated);
+            } catch (DomainException $exception) {
+                return back()->withInput()->withErrors(['project_id' => $exception->getMessage()]);
+            }
         }
         unset($validated['oc_import_token']);
         unset($validated['expense_pdf_import_token']);
@@ -1017,6 +1025,27 @@ class OperationalCrudController extends Controller
 
         if (in_array($this->billingStrategies->forProject($project), [BillingStrategyService::HOURLY, BillingStrategyService::HOURS_BANK, BillingStrategyService::MONTHLY_RECURRING], true)) {
             throw new DomainException('Este proyecto se factura según HH aprobadas. Genere primero el borrador desde la facturación guiada y luego adjunte la factura PDF emitida.');
+        }
+    }
+
+    private function assertSalesPdfAssociationIntegrity(Request $request, array $data): void
+    {
+        if (! filled($data['project_id'] ?? null)) {
+            if (filled($data['project_billing_milestone_id'] ?? null)) {
+                throw new DomainException('El hito requiere un proyecto.');
+            }
+            return;
+        }
+
+        $project = Project::query()->forCompany((int) $request->user()->company_id)->find((int) $data['project_id']);
+        if (! $project || (int) $project->client_id !== (int) ($data['client_id'] ?? 0)) {
+            throw new DomainException('El proyecto no pertenece al cliente seleccionado.');
+        }
+        if (filled($data['project_billing_milestone_id'] ?? null)) {
+            $milestone = \App\Models\ProjectBillingMilestone::query()->where('company_id', $request->user()->company_id)->where('project_id', $project->id)->find((int) $data['project_billing_milestone_id']);
+            if (! $milestone) {
+                throw new DomainException('El hito no pertenece al proyecto seleccionado.');
+            }
         }
     }
 
