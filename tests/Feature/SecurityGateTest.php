@@ -21,6 +21,8 @@ use App\Http\Middleware\RequireTwoFactor;
 use Illuminate\Database\Eloquent\MassAssignmentException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route;
+use Illuminate\Support\MessageBag;
+use Illuminate\Support\ViewErrorBag;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Fortify\Fortify;
 use Carbon\Carbon;
@@ -837,6 +839,23 @@ class SecurityGateTest extends TestCase
 
         $this->assertArrayNotHasKey('two_factor_secret', $payload);
         $this->assertArrayNotHasKey('two_factor_recovery_codes', $payload);
+    }
+
+    public function test_two_factor_challenge_focuses_the_relevant_input_and_uses_safe_recovery_autocomplete(): void
+    {
+        [$company, $user] = $this->companyWithUser('FOCUS', 'admin');
+        $normal = $this->withSession(['login.id' => $user->id])->get(route('two-factor.login'));
+        $normal->assertOk();
+        $normalHtml = $normal->getContent();
+        $this->assertMatchesRegularExpression('/<input id="code"[^>]*autocomplete="one-time-code"[^>]*autofocus[^>]*>/', $normalHtml);
+        $this->assertSame(1, substr_count($normalHtml, 'autofocus'));
+
+        $errors = (new ViewErrorBag)->put('default', new MessageBag(['recovery_code' => 'Código inválido']));
+        $recoveryHtml = view('auth.two-factor-challenge')->with('errors', $errors)->render();
+        $this->assertMatchesRegularExpression('/<input id="recovery_code"[^>]*autocomplete="off"[^>]*autofocus[^>]*>/', $recoveryHtml);
+        $this->assertDoesNotMatchRegularExpression('/<input id="code"[^>]*autofocus[^>]*>/', $recoveryHtml);
+        $this->assertSame(1, substr_count($recoveryHtml, 'autofocus'));
+        $this->assertStringNotContainsString('id="recovery_code" type="text" name="recovery_code" class="form-control" autocomplete="one-time-code"', $recoveryHtml);
     }
 
     private function bindHttpRouteRequest(): void

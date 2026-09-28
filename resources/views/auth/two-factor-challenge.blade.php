@@ -28,7 +28,7 @@
                             Código de autenticación
                             <x-field-help text="Ingresa el código temporal de 6 dígitos generado por tu aplicación autenticadora." />
                         </label>
-                        <input id="code" type="text" name="code" class="form-control" inputmode="numeric" autocomplete="one-time-code" required>
+                        <input id="code" type="text" name="code" class="form-control" inputmode="numeric" autocomplete="one-time-code" @if (! $authErrors->has('recovery_code')) autofocus @endif required>
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100">Verificar</button>
@@ -41,7 +41,7 @@
                         @csrf
                         <div class="mb-3">
                             <label for="recovery_code" class="form-label">Código de recuperación</label>
-                            <input id="recovery_code" type="text" name="recovery_code" class="form-control" autocomplete="one-time-code">
+                            <input id="recovery_code" type="text" name="recovery_code" class="form-control" autocomplete="off" @if ($authErrors->has('recovery_code')) autofocus @endif>
                         </div>
 
                         <button type="submit" class="btn btn-outline-secondary w-100">Ingresar con código de recuperación</button>
