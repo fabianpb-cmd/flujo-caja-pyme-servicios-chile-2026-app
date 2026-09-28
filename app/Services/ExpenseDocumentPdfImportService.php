@@ -12,6 +12,7 @@ use DomainException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -83,12 +84,15 @@ class ExpenseDocumentPdfImportService
         return $document;
     }
 
-    public function deleteOwnedSources(ExpenseDocument $expense, User $user): void
+    public function deleteOwnedSourceFiles(array $paths, int $expenseId): void
     {
-        $documents = $expense->sourceDocuments()->get(['id', 'storage_path']);
-        $paths = $documents->pluck('storage_path')->filter(fn ($path): bool => is_string($path) && str_starts_with($path, 'expense-source-documents/'))->all();
-        foreach ($documents as $document) { $before = $document->toArray(); $document->delete(); $this->audit->record('expense.source_document.deleted', $document, $user, $before, null); }
-        foreach ($paths as $path) Storage::disk('local')->delete($path);
+        foreach ($paths as $path) {
+            try {
+                Storage::disk('local')->delete($path);
+            } catch (\Throwable) {
+                Log::warning('Expense source document cleanup failed after expense deletion', ['expense_document_id' => $expenseId, 'path_prefix' => 'expense-source-documents/']);
+            }
+        }
     }
 
     private function normalize(array $data): array

@@ -57,6 +57,39 @@ class ExpenseDocumentPdfImportTest extends TestCase
         $this->actingAs($admin)->get(route('expense-documents.from-pdf', ['token' => $token]))->assertSee('solo crea documentos en CLP');
     }
 
+    public function test_delete_rollback_preserves_expense_source_row_and_pdf(): void
+    {
+        [$company, $admin] = $this->fixtures(); Storage::fake('local');
+        $expense = ExpenseDocument::query()->create(['company_id' => $company->id, 'vendor_name' => 'Rollback', 'issue_date' => '2026-09-28', 'net_amount' => 100]);
+        Storage::disk('local')->put('expense-source-documents/rollback.pdf', '%PDF-1.4');
+        $source = ExpenseSourceDocument::query()->forceCreate(['company_id' => $company->id, 'expense_document_id' => $expense->id, 'storage_path' => 'expense-source-documents/rollback.pdf', 'original_filename' => 'rollback.pdf', 'mime_type' => 'application/pdf', 'file_size' => 8, 'sha256' => hash('sha256', 'rollback')]);
+        ExpenseDocument::deleting(fn (): never => throw new \RuntimeException('forced delete failure'));
+        try {
+            $this->withoutExceptionHandling();
+            try {
+                $this->actingAs($admin)->delete(route('operational.destroy', ['expense-documents', $expense->id]));
+                $this->fail('Expected forced delete failure.');
+            } catch (\RuntimeException $exception) {
+                $this->assertSame('forced delete failure', $exception->getMessage());
+            }
+        } finally {
+            ExpenseDocument::flushEventListeners();
+        }
+        $this->assertDatabaseHas('expense_documents', ['id' => $expense->id]);
+        $this->assertDatabaseHas('expense_source_documents', ['id' => $source->id]);
+        Storage::disk('local')->assertExists('expense-source-documents/rollback.pdf');
+    }
+
+    public function test_delete_never_removes_source_path_outside_owned_prefix(): void
+    {
+        [$company, $admin] = $this->fixtures(); Storage::fake('local');
+        $expense = ExpenseDocument::query()->create(['company_id' => $company->id, 'vendor_name' => 'Path safety', 'issue_date' => '2026-09-28', 'net_amount' => 100]);
+        Storage::disk('local')->put('expense-pdf/tmp/not-owned.pdf', '%PDF-1.4');
+        ExpenseSourceDocument::query()->forceCreate(['company_id' => $company->id, 'expense_document_id' => $expense->id, 'storage_path' => 'expense-pdf/tmp/not-owned.pdf', 'original_filename' => 'not-owned.pdf', 'mime_type' => 'application/pdf', 'file_size' => 8, 'sha256' => hash('sha256', 'not-owned')]);
+        $this->actingAs($admin)->delete(route('operational.destroy', ['expense-documents', $expense->id]))->assertRedirect();
+        Storage::disk('local')->assertExists('expense-pdf/tmp/not-owned.pdf');
+    }
+
     private function fixtures(): array
     {
         $company = Company::query()->create(['code' => 'CMP-EXP-PDF', 'name' => 'Empresa gastos PDF', 'status' => 'active']);

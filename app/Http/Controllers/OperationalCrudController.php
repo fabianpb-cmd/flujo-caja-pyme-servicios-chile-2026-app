@@ -830,12 +830,19 @@ class OperationalCrudController extends Controller
         }
 
         if ($item instanceof ExpenseDocument) {
+            $sourceDocuments = $item->sourceDocuments()->get(['id', 'storage_path', 'company_id', 'expense_document_id']);
+            $paths = $sourceDocuments->pluck('storage_path')->filter(fn ($path): bool => is_string($path) && str_starts_with($path, 'expense-source-documents/'))->values()->all();
             $before = $item->toArray();
-            DB::transaction(function () use ($item, $request, $before): void {
-                $this->expensePdfImports->deleteOwnedSources($item, $request->user());
+            DB::transaction(function () use ($item, $sourceDocuments, $request, $before): void {
+                foreach ($sourceDocuments as $sourceDocument) {
+                    $documentBefore = $sourceDocument->toArray();
+                    $sourceDocument->delete();
+                    $this->audit->record('expense.source_document.deleted', $sourceDocument, $request->user(), $documentBefore, null);
+                }
                 $item->delete();
                 $this->audit->record('operational.deleted', $item, $request->user(), $before, null);
             });
+            $this->expensePdfImports->deleteOwnedSourceFiles($paths, (int) $item->id);
             return redirect()->route('operational.index', $resource)->with('status', 'Registro eliminado.');
         }
 
