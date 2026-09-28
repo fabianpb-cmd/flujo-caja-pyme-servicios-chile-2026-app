@@ -32,6 +32,9 @@ class ProjectPurchaseOrderImportTest extends TestCase
         Http::fake(['https://api.openai.com/v1/responses' => Http::response($this->responsePayload(), 200)]);
         $file = UploadedFile::fake()->createWithContent('oc-100.pdf', "%PDF-1.4\nOC QA");
 
+        $landing = $this->actingAs($admin)->get(route('projects.from-purchase-order'));
+        $landing->assertOk()->assertSee('data-oc-analysis-form')->assertSee('data-oc-analysis-progress')->assertSee('data-oc-analysis-submit')->assertSee('Procesando orden de compra');
+
         $analyze = $this->actingAs($admin)->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file]);
 
         $analyze->assertRedirect();
@@ -41,7 +44,7 @@ class ProjectPurchaseOrderImportTest extends TestCase
         $token = (string) (array_key_first($imports) ?? '');
         $this->assertNotSame('', $token);
         $review = $this->actingAs($admin)->get(route('projects.from-purchase-order', ['token' => $token]));
-        $review->assertOk()->assertSee('Cliente OC')->assertSee('OC-100')->assertSee('Crear proyecto y adjuntar OC')->assertSee('En OC')->assertSee('Propuesto por IA');
+        $review->assertOk()->assertSee('Cliente OC')->assertSee('OC-100')->assertSee('Crear proyecto y adjuntar OC')->assertSee('En OC')->assertSee('Propuesto por IA')->assertSee('data-oc-project-form')->assertSee('Creando proyecto');
 
         $this->assertDatabaseCount('projects', 0);
         $create = $this->actingAs($admin)->post(route('operational.store', 'projects'), [

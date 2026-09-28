@@ -20,6 +20,7 @@
 - QA del fix: suite completa verde; deploy sigue pendiente.
 - El extractor Structured Output incluye `billing_milestones` en una sola llamada OpenAI. Cada hito conserva `EXPLICIT` o `SUGGESTED`, evidencia y confianza; el formulario los muestra editables y la confirmación humana sigue siendo obligatoria.
 - Se corrigió la eliminación de proyectos: documentos origen y PDFs privados son artefactos propios y se eliminan tras commit; asignaciones, horas, remuneraciones, ventas, egresos, presupuestos y movimientos de caja siguen bloqueando. Deploy pendiente.
+- El análisis OC ahora muestra feedback visual accesible con progreso indeterminado y evita doble submit; no agrega llamadas OpenAI ni cambia lógica funcional.
 
 ## ESTADO ACTUAL AUTORITATIVO — 2026-09-13
 
