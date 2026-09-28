@@ -130,6 +130,32 @@ class ProjectPurchaseOrderImportTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_milestone_date_metadata_is_resolved_without_inventing_calendar_days(): void
+    {
+        [, $admin] = $this->fixtures();
+        Storage::fake('local');
+        config()->set('assistant.api_key', 'test-key');
+        $milestones = [
+            ['sequence' => 1, 'name' => 'Inicio', 'source' => 'EXPLICIT', 'percentage' => 20, 'amount' => null, 'planned_invoice_date' => null, 'date_kind' => 'EXACT', 'date_text' => '30 de septiembre de 2026', 'date_anchor' => 'NONE', 'relative_value' => null, 'relative_unit' => null, 'relative_to_sequence' => null, 'date_evidence' => '30 de septiembre de 2026', 'date_confidence' => 0.98, 'evidence' => 'Inicio', 'confidence' => 0.98],
+            ['sequence' => 2, 'name' => 'Avance', 'source' => 'EXPLICIT', 'percentage' => 30, 'amount' => null, 'planned_invoice_date' => null, 'date_kind' => 'RELATIVE', 'date_text' => '2 semanas después del hito 1', 'date_anchor' => 'SPECIFIC_MILESTONE', 'relative_value' => 2, 'relative_unit' => 'WEEKS', 'relative_to_sequence' => 1, 'date_evidence' => '2 semanas después del hito 1', 'date_confidence' => 0.9, 'evidence' => 'Avance', 'confidence' => 0.9],
+            ['sequence' => 3, 'name' => 'Cierre', 'source' => 'EXPLICIT', 'percentage' => 50, 'amount' => null, 'planned_invoice_date' => null, 'date_kind' => 'MONTH_YEAR', 'date_text' => 'Octubre 2026', 'date_anchor' => 'NONE', 'relative_value' => null, 'relative_unit' => null, 'relative_to_sequence' => null, 'date_evidence' => 'Octubre 2026', 'date_confidence' => 0.85, 'evidence' => 'Cierre', 'confidence' => 0.85],
+        ];
+        Http::fake(['https://api.openai.com/v1/responses' => Http::response($this->responsePayload($milestones, ['service_start_date' => '2026-09-01', 'service_end_date' => '2026-10-31']), 200)]);
+        $file = UploadedFile::fake()->createWithContent('dates.pdf', "%PDF-1.4\nOC DATES");
+
+        $this->actingAs($admin)->post(route('projects.from-purchase-order.analyze'), ['purchase_order' => $file])->assertRedirect();
+        Http::assertSentCount(1);
+        $state = array_values((array) session('project_oc_imports'))[0]['extracted']['billing_milestones'];
+
+        $this->assertSame('2026-09-30', $state[0]['planned_invoice_date']);
+        $this->assertSame('EXPLICIT', $state[0]['resolved_date_source']);
+        $this->assertSame('2026-10-14', $state[1]['planned_invoice_date']);
+        $this->assertSame('CALCULATED', $state[1]['resolved_date_source']);
+        $this->assertNull($state[2]['planned_invoice_date']);
+        $this->assertSame('Octubre 2026', $state[2]['date_text']);
+        $this->assertSame('UNRESOLVED', $state[2]['resolved_date_source']);
+    }
+
     public function test_source_document_migration_uses_mysql_safe_index_name(): void
     {
         $migration = file_get_contents(database_path('migrations/2026_09_27_000100_create_project_source_documents_table.php'));
@@ -237,10 +263,10 @@ class ProjectPurchaseOrderImportTest extends TestCase
         return [$company, $admin, $client, $currency, $term, $hourly, $status, $billing];
     }
 
-    private function responsePayload(): array
+    private function responsePayload(?array $milestones = null, array $overrides = []): array
     {
-        $fields = ['document_type' => 'PURCHASE_ORDER', 'purchase_order_number' => 'OC-100', 'buyer_name' => 'Cliente OC', 'buyer_tax_id' => '76.123.456-7', 'issue_date' => '2026-09-27', 'service_description' => 'Servicio OC QA', 'currency_code' => 'CLP', 'net_amount' => 125000, 'vat_amount' => 23750, 'total_amount' => 148750, 'payment_terms_days' => 30, 'payment_terms_text' => '30 días', 'service_start_date' => null, 'service_end_date' => null];
-        $milestones = [['sequence' => 1, 'name' => 'Inicio', 'source' => 'EXPLICIT', 'percentage' => 20, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Inicio indicado', 'confidence' => 0.9], ['sequence' => 2, 'name' => 'Entrega', 'source' => 'EXPLICIT', 'percentage' => 60, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Entrega indicada', 'confidence' => 0.9], ['sequence' => 3, 'name' => 'Cierre', 'source' => 'SUGGESTED', 'percentage' => null, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Etapa de cierre', 'confidence' => 0.7]];
+        $fields = array_merge(['document_type' => 'PURCHASE_ORDER', 'purchase_order_number' => 'OC-100', 'buyer_name' => 'Cliente OC', 'buyer_tax_id' => '76.123.456-7', 'issue_date' => '2026-09-27', 'service_description' => 'Servicio OC QA', 'currency_code' => 'CLP', 'net_amount' => 125000, 'vat_amount' => 23750, 'total_amount' => 148750, 'payment_terms_days' => 30, 'payment_terms_text' => '30 días', 'service_start_date' => null, 'service_end_date' => null], $overrides);
+        $milestones ??= [['sequence' => 1, 'name' => 'Inicio', 'source' => 'EXPLICIT', 'percentage' => 20, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Inicio indicado', 'confidence' => 0.9], ['sequence' => 2, 'name' => 'Entrega', 'source' => 'EXPLICIT', 'percentage' => 60, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Entrega indicada', 'confidence' => 0.9], ['sequence' => 3, 'name' => 'Cierre', 'source' => 'SUGGESTED', 'percentage' => null, 'amount' => null, 'planned_invoice_date' => null, 'evidence' => 'Etapa de cierre', 'confidence' => 0.7]];
         return ['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => json_encode($fields + ['billing_milestones' => $milestones, 'warnings' => [], 'confidence' => array_fill_keys(array_keys($fields), 1), 'evidence' => array_fill_keys(array_keys($fields), null)], JSON_THROW_ON_ERROR)]]]]];
     }
 }

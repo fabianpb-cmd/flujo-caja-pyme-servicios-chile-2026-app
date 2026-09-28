@@ -84,7 +84,7 @@ class OpenAiPurchaseOrderExtractor
 
     private function prompt(): string
     {
-        return 'Eres un extractor de órdenes de compra. Extrae únicamente información explícitamente presente en el documento. Identifica hitos de facturación o pago expresamente indicados y también hitos técnicos, entregables o etapas explícitos que puedan servir de base para un plan. Si no hay un plan financiero completo pero hay suficientes etapas, puedes proponer entre 2 y 5 hitos que sumen 100%, priorizando entregables verificables; usa source=SUGGESTED y nunca presentes una propuesta como escrita en la OC. Todo hito realmente indicado por el documento usa source=EXPLICIT. No inventes montos o porcentajes como hechos contractuales. No elijas catálogos internos ni inventes fechas, RUT, monedas, condiciones de pago, tipo de proyecto, tipo de contrato, responsable, tarifa HH ni estados. Si un dato no está presente usa null. Las fechas deben devolverse YYYY-MM-DD únicamente cuando sean inequívocas y las propuestas deben respetar el rango del proyecto cuando exista. Los montos deben devolverse como números sin separadores.';
+        return 'Eres un extractor de órdenes de compra. Extrae únicamente información explícitamente presente en el documento. Identifica hitos de facturación o pago expresamente indicados y también hitos técnicos, entregables o etapas explícitos que puedan servir de base para un plan. Si no hay un plan financiero completo pero hay suficientes etapas, puedes proponer entre 2 y 5 hitos que sumen 100%, priorizando entregables verificables; usa source=SUGGESTED y nunca presentes una propuesta como escrita en la OC. Todo hito realmente indicado por el documento usa source=EXPLICIT. No inventes montos o porcentajes como hechos contractuales. No elijas catálogos internos ni inventes fechas, RUT, monedas, condiciones de pago, tipo de proyecto, tipo de contrato, responsable, tarifa HH ni estados. Analiza cada OC independientemente: las fechas pueden aparecer como calendario, mes/año, período o expresiones relativas. Si existe una fecha calendario inequívoca, normalízala como YYYY-MM-DD en planned_invoice_date, conserva el texto original en date_text y usa date_kind=EXACT. Si existe una expresión relativa o asociada a un evento, conserva la expresión en date_text y clasifícala con date_kind y date_anchor; devuelve la regla estructurada, no la conviertas por tu cuenta a una fecha. No inventes un día cuando el documento solo indica mes, semana, período, evento o condición. Usa date_evidence para el fragmento breve que respalda la extracción y date_confidence para la confianza de la fecha. Si un dato no está presente usa null. Las propuestas deben respetar el rango del proyecto cuando exista. Los montos deben devolverse como números sin separadores.';
     }
 
     private function schema(): array
@@ -103,6 +103,14 @@ class OpenAiPurchaseOrderExtractor
             'percentage' => ['type' => ['number', 'null']],
             'amount' => ['type' => ['number', 'null']],
             'planned_invoice_date' => $nullableString,
+            'date_kind' => ['type' => 'string', 'enum' => ['EXACT', 'RELATIVE', 'MONTH_YEAR', 'MILESTONE_EVENT', 'NONE']],
+            'date_text' => $nullableString,
+            'date_anchor' => ['type' => 'string', 'enum' => ['ISSUE_DATE', 'SERVICE_START_DATE', 'PREVIOUS_MILESTONE', 'SPECIFIC_MILESTONE', 'SERVICE_END_DATE', 'UNKNOWN', 'NONE']],
+            'relative_value' => ['type' => ['number', 'null']],
+            'relative_unit' => ['type' => ['string', 'null'], 'enum' => ['DAYS', 'WEEKS', 'MONTHS', null]],
+            'relative_to_sequence' => ['type' => ['integer', 'null']],
+            'date_evidence' => $nullableString,
+            'date_confidence' => ['type' => 'number'],
             'evidence' => $nullableString,
             'confidence' => ['type' => 'number'],
         ];

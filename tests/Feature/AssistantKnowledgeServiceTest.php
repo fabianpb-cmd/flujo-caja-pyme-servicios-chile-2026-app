@@ -124,4 +124,17 @@ class AssistantKnowledgeServiceTest extends TestCase
         $this->assertContains('PROJECT-SALES-VALUES-001', array_column($service->select('¿Qué significa Venta neta?', $context), 'id'));
         $this->assertContains('PROJECT-PAYMENT-001', array_column($service->select('¿Qué significa condición de pago?', ['resource' => 'projects', 'focused_field' => 'payment_term_id', 'route' => 'operational.create']), 'id'));
     }
+
+    public function test_purchase_order_questions_explain_unresolved_and_relative_milestone_dates(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select(
+            '¿Cómo se interpretan las fechas relativas de los hitos de una OC?',
+            ['resource' => 'projects', 'focused_field' => null, 'route' => 'operational.create'],
+        );
+
+        $rule = collect($rules)->firstWhere('id', 'PROJECT-OC-IMPORT-001');
+        $this->assertNotNull($rule);
+        $this->assertStringContainsString('expresiones relativas', $rule['content']);
+        $this->assertStringContainsString('solicita revisión', $rule['content']);
+    }
 }

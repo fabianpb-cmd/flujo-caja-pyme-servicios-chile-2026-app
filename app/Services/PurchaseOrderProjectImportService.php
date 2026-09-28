@@ -172,26 +172,118 @@ class PurchaseOrderProjectImportService
     private function normalizeMilestones(array $extracted): array
     {
         $netAmount = is_numeric($extracted['net_amount'] ?? null) ? (float) $extracted['net_amount'] : null;
-        $extracted['billing_milestones'] = collect($extracted['billing_milestones'] ?? [])
+        $issueDate = $this->calendarDate($extracted['issue_date'] ?? null);
+        $serviceStart = $this->calendarDate($extracted['service_start_date'] ?? null);
+        $serviceEnd = $this->calendarDate($extracted['service_end_date'] ?? null);
+        $warnings = (array) ($extracted['warnings'] ?? []);
+        $resolvedBySequence = [];
+        $normalized = collect($extracted['billing_milestones'] ?? [])
             ->values()
-            ->map(function (array $milestone, int $index) use ($netAmount): array {
+            ->sortBy(fn (array $milestone, int $index): int => (int) ($milestone['sequence'] ?? ($index + 1)))
+            ->map(function (array $milestone, int $index) use ($netAmount, $issueDate, $serviceStart, $serviceEnd, &$resolvedBySequence, &$warnings): array {
                 $amount = is_numeric($milestone['amount'] ?? null) ? (float) $milestone['amount'] : null;
                 $percentage = is_numeric($milestone['percentage'] ?? null) ? (float) $milestone['percentage'] : null;
                 if ($percentage === null && $amount !== null && $netAmount !== null && $netAmount > 0) {
                     $percentage = round(($amount / $netAmount) * 100, 4);
                 }
+                $sequence = (int) ($milestone['sequence'] ?? ($index + 1));
+                $dateKind = strtoupper((string) ($milestone['date_kind'] ?? 'NONE'));
+                $dateText = filled($milestone['date_text'] ?? null) ? trim((string) $milestone['date_text']) : null;
+                $dateAnchor = strtoupper((string) ($milestone['date_anchor'] ?? 'NONE'));
+                $relativeValue = is_numeric($milestone['relative_value'] ?? null) ? (float) $milestone['relative_value'] : null;
+                $relativeUnit = $milestone['relative_unit'] ?? null;
+                $relativeSequence = is_numeric($milestone['relative_to_sequence'] ?? null) ? (int) $milestone['relative_to_sequence'] : null;
+                $plannedDate = $this->calendarDate($milestone['planned_invoice_date'] ?? null);
+                if ($dateKind === 'EXACT' && ! $plannedDate) {
+                    $plannedDate = $this->calendarDate($dateText);
+                }
+                if ($dateKind === 'NONE' && $plannedDate) {
+                    $dateKind = 'EXACT';
+                }
+                $resolvedSource = $plannedDate ? 'EXPLICIT' : 'UNRESOLVED';
+                if (! $plannedDate && $dateKind === 'RELATIVE') {
+                    $anchorDate = match ($dateAnchor) {
+                        'ISSUE_DATE' => $issueDate,
+                        'SERVICE_START_DATE' => $serviceStart,
+                        'SERVICE_END_DATE' => $serviceEnd,
+                        'PREVIOUS_MILESTONE' => $resolvedBySequence === [] ? null : $resolvedBySequence[array_key_last($resolvedBySequence)],
+                        'SPECIFIC_MILESTONE' => $relativeSequence ? ($resolvedBySequence[$relativeSequence] ?? null) : null,
+                        default => null,
+                    };
+                    if ($anchorDate && $relativeValue !== null && in_array($relativeUnit, ['DAYS', 'WEEKS', 'MONTHS'], true)) {
+                        $plannedDate = match ($relativeUnit) {
+                            'DAYS' => $anchorDate->copy()->addDays((int) $relativeValue),
+                            'WEEKS' => $anchorDate->copy()->addWeeks((int) $relativeValue),
+                            'MONTHS' => $anchorDate->copy()->addMonthsNoOverflow((int) $relativeValue),
+                        };
+                        $resolvedSource = 'CALCULATED';
+                    }
+                }
+                if (($plannedDate && $serviceStart && $plannedDate->lt($serviceStart)) || ($plannedDate && $serviceEnd && $plannedDate->gt($serviceEnd))) {
+                    $warnings[] = "La fecha del hito {$sequence} quedó fuera del rango del proyecto y requiere revisión.";
+                    $plannedDate = null;
+                    $resolvedSource = 'UNRESOLVED';
+                }
+                $previousDate = collect($resolvedBySequence)->filter(fn (Carbon $date, int $knownSequence): bool => $knownSequence < $sequence)->sortKeysDesc()->first();
+                if ($plannedDate && $previousDate && $plannedDate->lt($previousDate)) {
+                    $warnings[] = "La fecha del hito {$sequence} rompe el orden cronológico y requiere revisión.";
+                    $plannedDate = null;
+                    $resolvedSource = 'UNRESOLVED';
+                }
+                if ($plannedDate) {
+                    $resolvedBySequence[$sequence] = $plannedDate;
+                }
                 return [
-                    'sequence' => (int) ($milestone['sequence'] ?? ($index + 1)),
+                    'sequence' => $sequence,
                     'name' => (string) ($milestone['name'] ?? ''),
                     'source' => ($milestone['source'] ?? 'SUGGESTED') === 'EXPLICIT' ? 'EXPLICIT' : 'SUGGESTED',
                     'percentage' => $percentage,
                     'amount' => $amount,
-                    'planned_invoice_date' => $milestone['planned_invoice_date'] ?? null,
+                    'planned_invoice_date' => $plannedDate?->toDateString(),
+                    'date_kind' => in_array($dateKind, ['EXACT', 'RELATIVE', 'MONTH_YEAR', 'MILESTONE_EVENT', 'NONE'], true) ? $dateKind : 'NONE',
+                    'date_text' => $dateText,
+                    'date_anchor' => in_array($dateAnchor, ['ISSUE_DATE', 'SERVICE_START_DATE', 'PREVIOUS_MILESTONE', 'SPECIFIC_MILESTONE', 'SERVICE_END_DATE', 'UNKNOWN', 'NONE'], true) ? $dateAnchor : 'NONE',
+                    'relative_value' => $relativeValue,
+                    'relative_unit' => in_array($relativeUnit, ['DAYS', 'WEEKS', 'MONTHS'], true) ? $relativeUnit : null,
+                    'relative_to_sequence' => $relativeSequence,
+                    'date_evidence' => $milestone['date_evidence'] ?? null,
+                    'date_confidence' => (float) ($milestone['date_confidence'] ?? $milestone['confidence'] ?? 0),
+                    'resolved_date_source' => $resolvedSource,
                     'evidence' => $milestone['evidence'] ?? null,
                     'confidence' => (float) ($milestone['confidence'] ?? 0),
                 ];
-            })->all();
+            })->sortBy('sequence')->values()->all();
+        $extracted['billing_milestones'] = $normalized;
+        $extracted['warnings'] = array_values(array_unique($warnings));
         return $extracted;
+    }
+
+    private function calendarDate(mixed $value): ?Carbon
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+        $value = trim($value);
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y'] as $format) {
+            try {
+                $date = Carbon::createFromFormat($format, $value);
+                if ($date && $date->format($format) === $value) {
+                    return $date->startOfDay();
+                }
+            } catch (\Throwable) {
+            }
+        }
+        if (preg_match('/^(\d{1,2})\s+de\s+([[:alpha:]]+)\s+de\s+(\d{4})$/iu', $value, $matches)) {
+            $months = ['enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4, 'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8, 'septiembre' => 9, 'setiembre' => 9, 'octubre' => 10, 'noviembre' => 11, 'diciembre' => 12];
+            $month = $months[mb_strtolower($matches[2])] ?? null;
+            if ($month) {
+                try {
+                    return Carbon::create((int) $matches[3], $month, (int) $matches[1])->startOfDay();
+                } catch (\Throwable) {
+                }
+            }
+        }
+        return null;
     }
 
     private function validatePdf(UploadedFile $file): void
