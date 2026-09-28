@@ -28,13 +28,15 @@ class ExpenseDocumentPdfImportTest extends TestCase
         Http::assertSentCount(1);
         $token = array_key_first((array) session('expense_pdf_imports'));
         $review = $this->actingAs($admin)->get(route('expense-documents.from-pdf', ['token' => $token]));
-        $review->assertOk()->assertSee('Crear Gasto desde PDF')->assertSee('Proveedor PDF')->assertSee('Importes consistentes');
+        $review->assertOk()->assertSee('Crear Gasto desde PDF')->assertSee('Proveedor PDF')->assertSee('Importes consistentes')->assertSee('name="document_number"', false)->assertSee('value="F-100"', false);
 
-        $create = $this->actingAs($admin)->post(route('operational.store', 'expense-documents'), ['expense_pdf_import_token' => $token, 'vendor_name' => 'Proveedor PDF', 'issue_date' => '2026-09-28', 'due_date' => '2026-10-28', 'net_amount' => 100000, 'deductible_vat' => '0']);
+        $create = $this->actingAs($admin)->post(route('operational.store', 'expense-documents'), ['expense_pdf_import_token' => $token, 'vendor_name' => 'Proveedor PDF', 'document_number' => 'F-101', 'issue_date' => '2026-09-28', 'due_date' => '2026-10-28', 'net_amount' => 100000, 'deductible_vat' => '0']);
         $create->assertRedirect(route('operational.index', 'expense-documents'));
         $expense = ExpenseDocument::query()->where('company_id', $company->id)->sole();
         $source = ExpenseSourceDocument::query()->where('expense_document_id', $expense->id)->sole();
         $this->assertSame('Pendiente', $expense->payment_status);
+        $this->assertSame('F-101', $expense->document_number);
+        $this->assertSame('F-100', $source->document_number);
         Storage::disk('local')->assertExists($source->storage_path);
         $this->actingAs($admin)->get(route('expense-documents.source-documents.download', [$expense, $source]))->assertOk();
     }
