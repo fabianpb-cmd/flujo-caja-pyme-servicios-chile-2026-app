@@ -80,6 +80,8 @@ class CrudResourceRequest extends FormRequest
         }
         if ($resource === 'sales-documents') {
             $rules['sales_pdf_import_token'] = ['nullable', 'string', 'max:128'];
+            $rules['project_id'] = ['nullable', 'integer', Rule::exists('projects', 'id')->where(fn ($query) => $query->where('company_id', $this->user()->company_id)->where('client_id', $this->input('client_id')))];
+            $rules['project_billing_milestone_id'] = ['nullable', 'integer', Rule::exists('project_billing_milestones', 'id')->where(fn ($query) => $query->where('company_id', $this->user()->company_id)->where('project_id', $this->input('project_id')))];
         }
 
         if ($resource === 'time-entries') {

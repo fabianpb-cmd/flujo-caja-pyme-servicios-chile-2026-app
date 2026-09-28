@@ -275,6 +275,35 @@ class OperationalCrudController extends Controller
         } catch (DomainException $exception) {
             return back()->withInput()->withErrors(['billing_source' => $exception->getMessage()]);
         }
+
+        if ($resource === 'sales-documents' && $salesPdfImport !== null && filled($validated['project_billing_milestone_id'] ?? null)) {
+            try {
+                $model = DB::transaction(function () use ($validated, $salesPdfImport, $request): SalesDocument {
+                    $milestone = \App\Models\ProjectBillingMilestone::query()
+                        ->where('company_id', $request->user()->company_id)
+                        ->where('project_id', $validated['project_id'])
+                        ->findOrFail((int) $validated['project_billing_milestone_id']);
+                    $document = app(\App\Services\ProjectBillingMilestoneService::class)->issue($milestone, $validated['issue_date']);
+                    if (! $this->salesPdfImports->compare($salesPdfImport, $document)['ok']) {
+                        throw new DomainException('La factura PDF no coincide con el cálculo del hito seleccionado. Revise el proyecto, hito y documento antes de continuar.');
+                    }
+                    $document = $this->salesDocuments->confirm($document, $request->user(), $validated['document_number'] ?? null);
+                    $this->salesPdfImports->attach($salesPdfImport, $document, $request->user());
+
+                    return $document;
+                });
+            } catch (DomainException $exception) {
+                return back()->withInput()->withErrors(['billing_source' => $exception->getMessage()]);
+            }
+
+            $this->refreshDerivedState($model);
+            $this->audit->record('operational.created', $model->refresh(), $request->user());
+            $imports = (array) $request->session()->get('sales_pdf_imports', []);
+            unset($imports[$salesPdfImport['token']]);
+            $request->session()->put('sales_pdf_imports', $imports);
+
+            return redirect()->route('operational.index', $resource)->with('status', 'Registro creado.');
+        }
         try {
             $this->financialDocuments->assertCreateAllowed($resource, (int) $request->user()->company_id, $validated);
         } catch (DomainException $exception) {
@@ -971,11 +1000,23 @@ class OperationalCrudController extends Controller
             ->findOrFail((int) $data['project_id']);
 
         if ($this->billingStrategies->forProject($project) === BillingStrategyService::CLOSED_PROJECT) {
-            throw new DomainException('Este proyecto se factura mediante su plan de hitos. Seleccione un hito pendiente.');
+            $milestoneId = $data['project_billing_milestone_id'] ?? null;
+            if (! filled($milestoneId)) {
+                throw new DomainException('Este proyecto se factura mediante su plan de hitos. Seleccione un hito pendiente.');
+            }
+            $milestone = \App\Models\ProjectBillingMilestone::query()->where('company_id', $project->company_id)->where('project_id', $project->id)->findOrFail((int) $milestoneId);
+            if (app(\App\Services\ProjectBillingMilestoneService::class)->isInvoiced($milestone)) {
+                throw new DomainException('Este hito ya posee una factura activa.');
+            }
+            return;
+        }
+
+        if (filled($data['project_billing_milestone_id'] ?? null)) {
+            throw new DomainException('Los hitos solo pueden asociarse a proyectos cerrados.');
         }
 
         if (in_array($this->billingStrategies->forProject($project), [BillingStrategyService::HOURLY, BillingStrategyService::HOURS_BANK, BillingStrategyService::MONTHLY_RECURRING], true)) {
-            throw new DomainException('Este proyecto se factura según HH aprobadas aún no facturadas. Use la facturación por horas.');
+            throw new DomainException('Este proyecto se factura según HH aprobadas. Genere primero el borrador desde la facturación guiada y luego adjunte la factura PDF emitida.');
         }
     }
 

@@ -1,5 +1,11 @@
 # HANDOFF — Flujo Caja PyME Servicios Chile 2026
 
+## Facturas PDF con proyecto e hito opcionales
+
+- La revisión PDF permite Cliente → Proyecto opcional → Hito opcional, con filtros tenant-scoped en navegador y validación server-side de empresa, cliente, proyecto e hito.
+- Un proyecto cerrado requiere un hito pendiente: `ProjectBillingMilestoneService` genera el borrador contractual, se compara contra el PDF, se confirma con el número revisado y se adjunta el origen en una transacción.
+- Proyectos por HH, bolsa de horas y mensual recurrente siguen usando la facturación guiada; el PDF no crea cobros ni movimientos de caja. Sin migraciones ni SQL; deploy pendiente.
+
 Última actualización: 2026-09-07.
 
 ## Importación de proyectos desde OC PDF — hardening pre-deploy
