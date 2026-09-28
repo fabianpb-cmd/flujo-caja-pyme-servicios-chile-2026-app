@@ -28,6 +28,9 @@
         @if ($resource === 'projects')
             <a class="btn btn-outline-primary" href="{{ route('projects.from-purchase-order') }}">Crear desde OC</a>
         @endif
+        @if ($resource === 'expense-documents')
+            <a class="btn btn-outline-primary" href="{{ route('expense-documents.from-pdf') }}">Crear desde PDF</a>
+        @endif
         <a class="btn btn-primary" href="{{ route('operational.create', $resource) }}">Nuevo</a>
     </div>
 </div>

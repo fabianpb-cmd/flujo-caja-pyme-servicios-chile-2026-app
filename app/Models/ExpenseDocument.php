@@ -7,6 +7,7 @@ use App\Models\Concerns\GuardsSensitiveAttributes;
 use App\Models\Concerns\HasFunctionalCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ExpenseDocument extends Model
 {
@@ -52,5 +53,10 @@ class ExpenseDocument extends Model
     public function expenseType(): BelongsTo
     {
         return $this->belongsTo(ExpenseType::class);
+    }
+
+    public function sourceDocuments(): HasMany
+    {
+        return $this->hasMany(ExpenseSourceDocument::class);
     }
 }

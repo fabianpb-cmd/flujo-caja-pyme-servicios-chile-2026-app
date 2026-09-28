@@ -33,6 +33,7 @@ use App\Services\ProjectCommitmentService;
 use App\Services\ProjectFinancialCockpitService;
 use App\Services\ProjectHoursCapacityService;
 use App\Services\PurchaseOrderProjectImportService;
+use App\Services\ExpenseDocumentPdfImportService;
 use App\Services\SalesPrefacturationService;
 use App\Services\SalesDocumentService;
 use App\Services\ReceivablesService;
@@ -79,6 +80,7 @@ class OperationalCrudController extends Controller
         private readonly SalesDocumentService $salesDocuments,
         private readonly UfCsvImportService $ufImports,
         private readonly PurchaseOrderProjectImportService $purchaseOrderImports,
+        private readonly ExpenseDocumentPdfImportService $expensePdfImports,
     ) {
     }
 
@@ -233,6 +235,7 @@ class OperationalCrudController extends Controller
 
         $validated = $request->validated();
         $ocImport = null;
+        $expensePdfImport = null;
         if ($resource === 'projects' && filled($validated['oc_import_token'] ?? null)) {
             try {
                 $ocImport = $this->purchaseOrderImports->sessionState(
@@ -245,7 +248,18 @@ class OperationalCrudController extends Controller
                 return back()->withInput()->withErrors(['oc_import' => $exception->getMessage()]);
             }
         }
+        if ($resource === 'expense-documents' && filled($validated['expense_pdf_import_token'] ?? null)) {
+            try {
+                $expensePdfImport = $this->expensePdfImports->sessionState((array) $request->session()->get('expense_pdf_imports', []), (string) $validated['expense_pdf_import_token'], (int) $request->user()->company_id, $request->user());
+            } catch (DomainException $exception) {
+                return back()->withInput()->withErrors(['expense_pdf_import' => $exception->getMessage()]);
+            }
+            if (strtoupper((string) ($expensePdfImport['extracted']['currency_code'] ?? 'CLP')) !== 'CLP') {
+                return back()->withInput()->withErrors(['expense_pdf_import' => 'La V1 solo permite crear gastos en CLP. Resuelva la moneda manualmente antes de continuar.']);
+            }
+        }
         unset($validated['oc_import_token']);
+        unset($validated['expense_pdf_import_token']);
         try {
             $this->assertManualSalesDocumentAllowed($request, $resource, $validated);
         } catch (DomainException $exception) {
@@ -271,7 +285,7 @@ class OperationalCrudController extends Controller
         } else {
             try {
                 $billingRows = $resource === 'projects' ? $request->input('billing_milestones', []) : [];
-                $model = DB::transaction(function () use ($config, $data, $billingRows, $ocImport, $request) {
+                $model = DB::transaction(function () use ($config, $data, $billingRows, $ocImport, $expensePdfImport, $request) {
                     $model = MassAssignment::create($config['model'], $data);
 
                     if ($model instanceof Project) {
@@ -288,13 +302,23 @@ class OperationalCrudController extends Controller
                     if ($model instanceof PayrollRecord) {
                         $this->payroll->syncHourlyTimeEntryTrace($model->refresh());
                     }
+                    if ($model instanceof ExpenseDocument && $expensePdfImport !== null) {
+                        $expected = $this->payables->amountsWithVat((int) $model->company_id, $data['net_amount'], $data['issue_date'], (bool) ($data['deductible_vat'] ?? false));
+                        $source = $expensePdfImport['extracted'];
+                        foreach (['net_amount' => 'net_amount', 'vat_amount' => 'vat_amount', 'total_amount' => 'gross_amount'] as $sourceField => $modelField) {
+                            if (is_numeric($source[$sourceField] ?? null) && abs((float) $source[$sourceField] - (float) $expected[$modelField]) > 0.01) {
+                                throw new DomainException('Los montos del PDF no coinciden con el cálculo vigente de TDAT. Revise el documento y los datos antes de continuar.');
+                            }
+                        }
+                        $this->expensePdfImports->attach($expensePdfImport, $model, $request->user());
+                    }
 
                     return $model;
                 });
             } catch (DomainException $exception) {
                 $errorKey = $resource === 'projects'
                     ? (str_contains($exception->getMessage(), 'OC') || str_contains($exception->getMessage(), 'documento fuente') ? 'oc_import' : 'project_billing_plan')
-                    : 'payroll';
+                    : ($resource === 'expense-documents' ? 'expense_pdf_import' : 'payroll');
                 return back()->withInput()->withErrors([$errorKey => $exception->getMessage()]);
             }
 
@@ -304,6 +328,11 @@ class OperationalCrudController extends Controller
                 $imports = (array) $request->session()->get('project_oc_imports', []);
                 unset($imports[$ocImport['token']]);
                 $request->session()->put('project_oc_imports', $imports);
+            }
+            if ($expensePdfImport !== null) {
+                $imports = (array) $request->session()->get('expense_pdf_imports', []);
+                unset($imports[$expensePdfImport['token']]);
+                $request->session()->put('expense_pdf_imports', $imports);
             }
         }
 
@@ -365,6 +394,36 @@ class OperationalCrudController extends Controller
         return redirect()->route('projects.from-purchase-order', ['token' => $state['token']]);
     }
 
+    public function createExpenseFromPdf(Request $request): View
+    {
+        $config = $this->config('expense-documents');
+        $this->authorizeResource($request, $config, 'create');
+        $token = (string) $request->input('token'); $state = null; $item = new ExpenseDocument();
+        if ($token !== '') {
+            try { $state = $this->expensePdfImports->sessionState((array) $request->session()->get('expense_pdf_imports', []), $token, (int) $request->user()->company_id, $request->user()); }
+            catch (DomainException $exception) { return view('operational.expense-pdf', compact('config', 'item', 'token', 'state'))->withErrors(['expense_pdf_import' => $exception->getMessage()]); }
+        }
+        return view('operational.expense-pdf', compact('config', 'item', 'token', 'state'));
+    }
+
+    public function analyzeExpensePdf(Request $request): RedirectResponse
+    {
+        $config = $this->config('expense-documents'); $this->authorizeResource($request, $config, 'create');
+        $request->validate(['expense_pdf' => ['required', 'file', 'max:10240']]);
+        try { $state = $this->expensePdfImports->analyze((int) $request->user()->company_id, $request->user(), $request->file('expense_pdf')); }
+        catch (DomainException $exception) { return back()->withErrors(['expense_pdf' => $exception->getMessage()]); }
+        $imports = (array) $request->session()->get('expense_pdf_imports', []); $imports[$state['token']] = $state; $request->session()->put('expense_pdf_imports', $imports);
+        return redirect()->route('expense-documents.from-pdf', ['token' => $state['token']]);
+    }
+
+    public function downloadExpenseSourceDocument(Request $request, ExpenseDocument $expenseDocument, \App\Models\ExpenseSourceDocument $sourceDocument)
+    {
+        $config = $this->config('expense-documents'); $this->authorizeResource($request, $config, 'view', $expenseDocument);
+        abort_unless((int) $expenseDocument->company_id === (int) $request->user()->company_id && (int) $sourceDocument->company_id === (int) $expenseDocument->company_id && (int) $sourceDocument->expense_document_id === (int) $expenseDocument->id, 404);
+        abort_unless(Storage::disk('local')->exists($sourceDocument->storage_path), 404);
+        return Storage::disk('local')->download($sourceDocument->storage_path, $sourceDocument->original_filename, ['Content-Type' => $sourceDocument->mime_type]);
+    }
+
     public function downloadProjectSourceDocument(Request $request, Project $project, ProjectSourceDocument $sourceDocument)
     {
         $config = $this->config('projects');
@@ -381,6 +440,9 @@ class OperationalCrudController extends Controller
         $item = $config['model']::query()->with($this->relationNames($config))->findOrFail($record);
         $this->authorizeResource($request, $config, 'view', $item);
         if ($resource === 'projects' && $item instanceof Project) {
+            $item->loadMissing('sourceDocuments');
+        }
+        if ($resource === 'expense-documents' && $item instanceof ExpenseDocument) {
             $item->loadMissing('sourceDocuments');
         }
 
@@ -765,6 +827,16 @@ class OperationalCrudController extends Controller
 
         if ($item instanceof Project) {
             return $this->deleteProjectWithOwnedArtifacts($item, $request->user());
+        }
+
+        if ($item instanceof ExpenseDocument) {
+            $before = $item->toArray();
+            DB::transaction(function () use ($item, $request, $before): void {
+                $this->expensePdfImports->deleteOwnedSources($item, $request->user());
+                $item->delete();
+                $this->audit->record('operational.deleted', $item, $request->user(), $before, null);
+            });
+            return redirect()->route('operational.index', $resource)->with('status', 'Registro eliminado.');
         }
 
         $before = $item->toArray();

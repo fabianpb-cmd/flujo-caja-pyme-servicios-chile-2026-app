@@ -235,6 +235,17 @@
         </div>
     @endif
 
+    @if ($resource === 'expense-documents' && $item instanceof \App\Models\ExpenseDocument)
+        <div class="app-panel p-3 mb-4" id="source-documents">
+            <div class="section-title mb-2">Documento origen</div>
+            @forelse ($item->sourceDocuments as $sourceDocument)
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom py-2"><div><div class="fw-semibold">{{ $sourceDocument->document_type ?: 'Documento de gasto' }}</div><div class="small text-muted">Número: {{ $sourceDocument->document_number ?: 'No informado' }} · Proveedor: {{ $sourceDocument->supplier_tax_id ?: 'No informado' }} · Archivo: {{ $sourceDocument->original_filename }} · Fecha: {{ $sourceDocument->created_at?->format('d-m-Y H:i') }}</div></div><a class="btn btn-sm btn-outline-primary" href="{{ route('expense-documents.source-documents.download', [$item, $sourceDocument]) }}">Descargar PDF</a></div>
+            @empty
+                <div class="small text-muted">No hay documentos origen asociados.</div>
+            @endforelse
+        </div>
+    @endif
+
     @if ($resource === 'projects' && ($billingStrategy ?? null) === \App\Services\BillingStrategyService::CLOSED_PROJECT && ! empty($billingPlan))
         @php($billingCurrency = $item->salesCurrency ?: 'CLP')
         @php($billingPlanComplete = collect($billingPlan['milestones'])->isNotEmpty() && collect($billingPlan['milestones'])->every(fn ($row) => $row['invoiced']))

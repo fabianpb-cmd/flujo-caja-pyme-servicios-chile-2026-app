@@ -115,6 +115,9 @@ Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->group(fu
     Route::get('/gastos/cuentas-por-pagar', function (Request $request, OperationalCrudController $controller) {
         return $controller->index($request, 'expense-documents');
     })->name('payables.index');
+    Route::get('/gastos/egresos/crear-desde-pdf', [OperationalCrudController::class, 'createExpenseFromPdf'])->name('expense-documents.from-pdf');
+    Route::post('/gastos/egresos/crear-desde-pdf/analizar', [OperationalCrudController::class, 'analyzeExpensePdf'])->name('expense-documents.from-pdf.analyze');
+    Route::get('/operacion/expense-documents/{expenseDocument}/documentos-origen/{sourceDocument}/descargar', [OperationalCrudController::class, 'downloadExpenseSourceDocument'])->name('expense-documents.source-documents.download');
 });
 
 Route::middleware(['auth', 'absolute.session', 'two.factor.required'])->prefix('operacion/{resource}')->name('operational.')->controller(OperationalCrudController::class)->group(function (): void {

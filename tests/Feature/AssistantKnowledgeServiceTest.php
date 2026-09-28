@@ -137,4 +137,10 @@ class AssistantKnowledgeServiceTest extends TestCase
         $this->assertStringContainsString('expresiones relativas', $rule['content']);
         $this->assertStringContainsString('solicita revisión', $rule['content']);
     }
+
+    public function test_expense_pdf_questions_retrieve_import_rule(): void
+    {
+        $rules = app(AssistantKnowledgeService::class)->select('¿Cómo creo un gasto desde un PDF y qué pasa con el IVA recuperable?', ['resource' => 'expense-documents', 'focused_field' => null, 'route' => 'expense-documents.from-pdf']);
+        $this->assertContains('EXPENSE-PDF-IMPORT-001', array_column($rules, 'id'));
+    }
 }
